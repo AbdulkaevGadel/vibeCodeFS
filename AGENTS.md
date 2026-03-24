@@ -297,6 +297,32 @@ When making decisions:
 
 ---
 
+## 20. MCP / Serena Usage (Optional)
+
+Use MCP (Serena) ONLY when necessary.
+
+✅ Allowed:
+
+* navigating large codebase
+* finding usages across files
+* understanding complex dependencies
+
+❌ Do NOT use MCP:
+
+* for simple questions
+* for learning basics
+* when codebase is small and clear
+
+Rule:
+If the problem can be understood without MCP → do NOT use it.
+
+Goal:
+
+* preserve learning process
+* avoid over-reliance on tools
+
+---
+
 # 🔥 TL;DR
 
 - не пиши код без "go"
