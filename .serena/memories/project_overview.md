@@ -1,1 +1,0 @@
-Learning fullstack project on Windows. Purpose: build a simple vertical slice Telegram Bot -> Supabase Edge Function -> Supabase DB -> Next.js admin panel. Fixed architecture; prioritize simplicity, clarity, and learning value. Current visible repo state is minimal, with AGENTS.md and IDE metadata only.

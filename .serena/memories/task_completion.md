@@ -1,1 +1,0 @@
-When finishing a task, verify changes locally where possible. In this repository snapshot there are no discoverable test/lint/format commands yet, so completion should mention that verification is limited until project files are added.
