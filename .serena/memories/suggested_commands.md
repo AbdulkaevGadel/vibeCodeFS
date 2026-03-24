@@ -1,0 +1,1 @@
+Windows environment. Useful commands currently confirmed: `Get-ChildItem -Force` to inspect root, `Get-Content -Raw AGENTS.md` to read project instructions. Git commands are not yet usable because the workspace is not initialized as a git repository. Additional run/test/lint commands are not discoverable yet from the current repo contents.
