@@ -22,6 +22,7 @@ type TelegramUpdate = {
 }
 
 const telegramApiBaseUrl = "https://api.telegram.org"
+let cachedBotUsername: string | null = null
 
 function createSuccessResponse() {
   return new Response(JSON.stringify({ ok: true }), {
@@ -44,7 +45,30 @@ function getSupabaseUrl() {
   return Deno.env.get("SUPABASE_URL") ?? Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")
 }
 
-async function saveIncomingMessage(message: TelegramMessage) {
+async function getBotUsername(botToken: string) {
+  if (cachedBotUsername) {
+    return cachedBotUsername
+  }
+
+  const response = await fetch(`${telegramApiBaseUrl}/bot${botToken}/getMe`)
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Telegram getMe error ${response.status}: ${errorText}`)
+  }
+
+  const data = await response.json() as {
+    ok?: boolean
+    result?: {
+      username?: string
+    }
+  }
+
+  cachedBotUsername = data.result?.username ?? null
+  return cachedBotUsername
+}
+
+async function saveIncomingMessage(message: TelegramMessage, botUsername: string | null) {
   const supabaseUrl = getSupabaseUrl()
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
   const chatId = message.chat?.id
@@ -70,6 +94,7 @@ async function saveIncomingMessage(message: TelegramMessage) {
       Prefer: "return=minimal",
     },
     body: JSON.stringify({
+      bot_username: botUsername,
       chat_id: chatId,
       user_id: userId,
       username: message.from?.username ?? null,
@@ -138,7 +163,8 @@ Deno.serve(async (request) => {
     }
 
     if (message) {
-      await saveIncomingMessage(message)
+      const botUsername = await getBotUsername(botToken)
+      await saveIncomingMessage(message, botUsername)
     }
 
     const replyText = getReplyText(messageText)
