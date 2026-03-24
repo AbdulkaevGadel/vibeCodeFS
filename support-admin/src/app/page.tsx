@@ -1,5 +1,6 @@
 import { createSupabaseClient } from "@/lib/supabase";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
+import { RefreshButton } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -225,7 +226,7 @@ export default async function Home({ searchParams }: PageProps) {
         .filter((message) => message.chat_id === selectedChat.chatId)
         .sort(
           (left, right) =>
-            new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+            new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
         )
     : [];
   const statusMessage = getStatusMessage(statusParam);
@@ -249,18 +250,24 @@ export default async function Home({ searchParams }: PageProps) {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-white">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/60">Бот</p>
-                <p className="mt-2 text-lg font-semibold">{headerBotLabel}</p>
+            <div className="flex flex-col gap-3">
+              <div className="flex justify-start xl:justify-end">
+                <RefreshButton />
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Сообщений</p>
-                <p className="mt-2 text-2xl font-semibold">{botFilteredMessages.length}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Чатов</p>
-                <p className="mt-2 text-2xl font-semibold">{chatSummaries.length}</p>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-white">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">Бот</p>
+                  <p className="mt-2 text-lg font-semibold">{headerBotLabel}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Сообщений</p>
+                  <p className="mt-2 text-2xl font-semibold">{botFilteredMessages.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Чатов</p>
+                  <p className="mt-2 text-2xl font-semibold">{chatSummaries.length}</p>
+                </div>
               </div>
             </div>
           </div>
