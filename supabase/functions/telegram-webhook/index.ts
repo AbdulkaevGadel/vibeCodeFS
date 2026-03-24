@@ -4,9 +4,17 @@ type TelegramChat = {
   id?: number
 }
 
+type TelegramUser = {
+  id?: number
+  username?: string
+  first_name?: string
+  last_name?: string
+}
+
 type TelegramMessage = {
   text?: string
   chat?: TelegramChat
+  from?: TelegramUser
 }
 
 type TelegramUpdate = {
@@ -30,6 +38,51 @@ function getReplyText(messageText: string) {
   }
 
   return `I got your message: "${normalizedText}". I hear you.`
+}
+
+function getSupabaseUrl() {
+  return Deno.env.get("SUPABASE_URL") ?? Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")
+}
+
+async function saveIncomingMessage(message: TelegramMessage) {
+  const supabaseUrl = getSupabaseUrl()
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+  const chatId = message.chat?.id
+  const userId = message.from?.id
+  const text = message.text?.trim()
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("Supabase env is not configured for message persistence")
+    return
+  }
+
+  if (!chatId || !userId || !text) {
+    console.error("Message is missing required fields for database insert")
+    return
+  }
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      user_id: userId,
+      username: message.from?.username ?? null,
+      first_name: message.from?.first_name ?? null,
+      last_name: message.from?.last_name ?? null,
+      text,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Supabase insert error ${response.status}: ${errorText}`)
+  }
 }
 
 async function sendTelegramMessage(
@@ -73,14 +126,19 @@ Deno.serve(async (request) => {
     }
 
     const update = (await request.json()) as TelegramUpdate
-    const chatId = update.message?.chat?.id
-    const messageText = update.message?.text ?? ""
+    const message = update.message
+    const chatId = message?.chat?.id
+    const messageText = message?.text ?? ""
 
     console.log("Incoming Telegram update:", JSON.stringify(update))
 
     if (!chatId) {
       console.error("Missing chat id in Telegram update")
       return createSuccessResponse()
+    }
+
+    if (message) {
+      await saveIncomingMessage(message)
     }
 
     const replyText = getReplyText(messageText)
