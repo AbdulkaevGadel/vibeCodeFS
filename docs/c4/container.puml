@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров SupportBot
+
+Person(telegramUser, "Пользователь Telegram")
+Person(admin, "Администратор поддержки")
+System_Ext(telegramApi, "Telegram Bot API", "Внешняя платформа обмена сообщениями")
+System_Ext(vercel, "Vercel", "Платформа хостинга frontend")
+
+System_Boundary(system, "Система SupportBot") {
+  Container(edgeFn, "telegram-webhook Edge Function", "Supabase Edge Functions / Deno", "Принимает webhook-запросы от Telegram, валидирует update, сохраняет сообщения и отправляет ответы")
+  ContainerDb(db, "Хранилище messages", "Supabase Postgres / REST", "Хранит входящие сообщения")
+  Container(webApp, "support-admin web app", "Next.js / React / Tailwind CSS", "Показывает сообщения, сгруппированные по ботам и чатам")
+  Container(routeHandlers, "Admin mutation endpoints", "Next.js Route Handlers", "Удаляет отдельные сообщения или целые чаты")
+}
+
+Rel(telegramUser, telegramApi, "Пишет боту")
+Rel(telegramApi, edgeFn, "POST webhook")
+Rel(edgeFn, telegramApi, "sendMessage")
+Rel(edgeFn, db, "Вставляет сообщение")
+Rel(admin, webApp, "Использует в браузере")
+Rel(webApp, db, "Читает сообщения")
+Rel(webApp, routeHandlers, "Отправляет действия на удаление")
+Rel(routeHandlers, db, "Удаляет сообщение/чат")
+Rel(webApp, vercel, "Размещается на")
+
+@enduml

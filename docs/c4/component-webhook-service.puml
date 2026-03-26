@@ -1,0 +1,38 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Компоненты telegram-webhook Edge Function
+
+Container_Boundary(edgeFn, "telegram-webhook Edge Function") {
+  Component(entry, "HTTP Entry Point", "index.ts", "Принимает POST-запрос и оркестрирует полный сценарий")
+  Component(types, "Telegram Types", "types/telegram.ts", "Описывает форму payload от Telegram")
+  Component(parser, "Update Parser", "lib/parse-update.ts", "Извлекает message, chatId и messageText")
+  Component(validation, "Message Validation", "lib/validate-message.ts", "Проверяет условия для ответа и для сохранения")
+  Component(env, "Environment Access", "lib/env.ts", "Читает runtime env-переменные")
+  Component(constants, "Constants", "lib/constants.ts", "Содержит общие инфраструктурные константы")
+  Component(botResolver, "Bot Username Resolver", "lib/get-bot-username.ts", "Получает и кеширует username бота")
+  Component(replyBuilder, "Reply Builder", "lib/get-reply-text.ts", "Формирует текст ответа")
+  Component(persistence, "Message Persistence", "lib/save-incoming-message.ts", "Вставляет запись в messages")
+  Component(sender, "Telegram Sender", "lib/send-telegram-message.ts", "Вызывает Telegram sendMessage")
+  Component(success, "Success Response Builder", "lib/create-success-response.ts", "Возвращает стандартный HTTP 200 ответ")
+}
+
+ContainerDb(db, "Хранилище messages", "Supabase Postgres / REST")
+System_Ext(telegramApi, "Telegram Bot API")
+
+Rel(entry, parser, "Парсит update")
+Rel(entry, validation, "Валидирует сообщение")
+Rel(entry, env, "Читает env")
+Rel(entry, botResolver, "Получает username бота")
+Rel(entry, replyBuilder, "Строит ответ")
+Rel(entry, persistence, "Сохраняет сообщение")
+Rel(entry, sender, "Отправляет ответ")
+Rel(entry, success, "Возвращает 200")
+Rel(parser, types, "Использует типы payload")
+Rel(botResolver, constants, "Использует API base URL")
+Rel(sender, constants, "Использует API base URL")
+Rel(botResolver, telegramApi, "Вызывает getMe")
+Rel(sender, telegramApi, "Вызывает sendMessage")
+Rel(persistence, db, "Вставляет в messages")
+
+@enduml

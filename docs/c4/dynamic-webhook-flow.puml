@@ -1,0 +1,42 @@
+@startuml
+title Динамическая диаграмма - Поток webhook
+
+actor "Telegram Bot API" as Telegram
+participant "telegram-webhook\nindex.ts" as Entry
+participant "parse-update.ts" as Parser
+participant "validate-message.ts" as Validation
+participant "get-bot-username.ts" as BotResolver
+participant "save-incoming-message.ts" as Persistence
+database "messages\nSupabase Postgres" as Db
+participant "get-reply-text.ts" as ReplyBuilder
+participant "send-telegram-message.ts" as Sender
+
+Telegram -> Entry: POST webhook update
+Entry -> Parser: parseUpdate(update)
+Parser --> Entry: message, chatId, messageText
+Entry -> Validation: canReplyToMessage(message)
+Validation --> Entry: true/false
+
+alt chatId отсутствует
+  Entry --> Telegram: HTTP 200
+else chatId присутствует
+  Entry -> Validation: canPersistMessage(message)
+  Validation --> Entry: true/false
+
+  alt сообщение можно сохранять
+    Entry -> BotResolver: getBotUsername(botToken)
+    BotResolver --> Entry: botUsername
+    Entry -> Persistence: saveIncomingMessage(message, botUsername)
+    Persistence -> Db: insert row into messages
+    Db --> Persistence: результат insert
+    Persistence --> Entry: done
+  end
+
+  Entry -> ReplyBuilder: getReplyText(messageText)
+  ReplyBuilder --> Entry: replyText
+  Entry -> Sender: sendTelegramMessage(botToken, chatId, replyText)
+  Sender --> Telegram: sendMessage
+  Entry --> Telegram: HTTP 200
+end
+
+@enduml

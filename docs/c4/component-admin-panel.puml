@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Компоненты support-admin
+
+Container_Boundary(webApp, "support-admin web app") {
+  Component(homePage, "Home Page", "src/app/page.tsx", "Загружает сообщения, строит фильтры, группирует чаты и рендерит выбранный чат")
+  Component(readClient, "Supabase Read Client", "src/lib/supabase.ts", "Создает Supabase-клиент с anon key")
+  Component(adminClient, "Supabase Admin Client", "src/lib/supabase-admin.ts", "Создает Supabase-клиент с service role key")
+  Component(refreshButton, "RefreshButton", "src/app/refresh-button.tsx", "Обновляет состояние страницы")
+  Component(confirmButton, "ConfirmSubmitButton", "src/app/confirm-submit-button.tsx", "Подтверждает действия удаления")
+  Component(deleteMessageRoute, "Delete Message Route", "src/app/api/messages/delete/route.ts", "Удаляет одно сообщение по id")
+  Component(deleteChatRoute, "Delete Chat Route", "src/app/api/chats/delete/route.ts", "Удаляет все сообщения выбранного чата")
+}
+
+ContainerDb(db, "Хранилище messages", "Supabase Postgres")
+
+Rel(homePage, readClient, "Создает клиент")
+Rel(homePage, db, "Читает сообщения")
+Rel(refreshButton, homePage, "Обновляет")
+Rel(confirmButton, deleteMessageRoute, "Отправляет удаление сообщения")
+Rel(confirmButton, deleteChatRoute, "Отправляет удаление чата")
+Rel(deleteMessageRoute, adminClient, "Создает admin client")
+Rel(deleteChatRoute, adminClient, "Создает admin client")
+Rel(adminClient, db, "Удаляет данные")
+
+@enduml
