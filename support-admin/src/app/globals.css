@@ -3,6 +3,36 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --support-page-bg: radial-gradient(circle at top left, rgba(244, 114, 182, 0.16), transparent 28%),
+    linear-gradient(180deg, #fffdf8 0%, #f6efe7 100%);
+  --support-surface: rgba(255, 255, 255, 0.88);
+  --support-surface-strong: rgba(255, 255, 255, 0.8);
+  --support-surface-muted: #f8fafc;
+  --support-card-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(248, 250, 252, 0.96)
+  );
+  --support-text-primary: #0f172a;
+  --support-text-secondary: #475569;
+  --support-text-muted: #94a3b8;
+  --support-border-soft: rgba(255, 255, 255, 0.7);
+  --support-border-neutral: #e2e8f0;
+  --support-border-strong: #0f172a;
+  --support-accent: #0f172a;
+  --support-accent-contrast: #ffffff;
+  --support-surface-accent-soft: rgba(255, 255, 255, 0.12);
+  --support-shadow-panel: 0 24px 80px rgba(148, 163, 184, 0.14);
+  --support-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --support-radius-panel: 28px;
+  --support-radius-card: 24px;
+  --support-backdrop-blur: blur(20px);
+  --support-success-bg: #ecfdf5;
+  --support-success-border: #bbf7d0;
+  --support-success-text: #047857;
+  --support-danger-bg: #fef2f2;
+  --support-danger-border: #fecaca;
+  --support-danger-text: #b91c1c;
 }
 
 @theme inline {
@@ -12,15 +42,133 @@
   --font-mono: "Courier New", Courier, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Surface */
+.support-panel {
+  border: 1px solid var(--support-border-soft);
+  border-radius: var(--support-radius-panel);
+  background: var(--support-surface);
+  box-shadow: var(--support-shadow-panel);
+  backdrop-filter: var(--support-backdrop-blur);
+}
+
+.support-panel-strong {
+  border: 1px solid var(--support-border-soft);
+  border-radius: var(--support-radius-panel);
+  background: var(--support-surface-strong);
+  box-shadow: var(--support-shadow-panel);
+  backdrop-filter: var(--support-backdrop-blur);
+}
+
+.support-card {
+  border: 1px solid var(--support-border-neutral);
+  border-radius: var(--support-radius-card);
+  background: var(--support-card-bg);
+  box-shadow: var(--support-shadow-card);
+}
+
+.support-surface-accent {
+  border: 1px solid var(--support-accent);
+  background: var(--support-accent);
+  color: var(--support-accent-contrast);
+}
+
+.support-surface-default {
+  border: 1px solid var(--support-border-neutral);
+  background: var(--support-surface);
+}
+
+.support-surface-muted {
+  background: var(--support-surface-muted);
+}
+
+/* Text */
+.support-text-primary {
+  color: var(--support-text-primary);
+}
+
+.support-text-secondary {
+  color: var(--support-text-secondary);
+}
+
+.support-text-muted {
+  color: var(--support-text-muted);
+}
+
+/* Alert */
+.support-alert-success {
+  border: 1px solid var(--support-success-border);
+  background: var(--support-success-bg);
+  color: var(--support-success-text);
+}
+
+.support-alert-danger {
+  border: 1px solid var(--support-danger-border);
+  background: var(--support-danger-bg);
+  color: var(--support-danger-text);
+}
+
+/* Button */
+.support-button-danger {
+  border: 1px solid var(--support-danger-border);
+  background: var(--support-danger-bg);
+  color: var(--support-danger-text);
+}
+
+.support-button-danger:hover {
+  border-color: var(--support-danger-text);
+  background: #fee2e2;
+}
+
+.support-button-secondary {
+  border: 1px solid var(--support-border-neutral);
+  color: var(--support-text-secondary);
+}
+
+.support-button-secondary:hover {
+  border-color: var(--support-danger-border);
+  background: var(--support-danger-bg);
+  color: var(--support-danger-text);
+}
+
+/* Chip */
+.support-chip {
+  background: var(--support-surface-muted);
+}
+
+@keyframes support-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes support-toast-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.98);
+  }
+}
+
+.support-toast-enter {
+  animation: support-toast-enter 180ms ease-out forwards;
+}
+
+.support-toast-exit {
+  animation: support-toast-exit 160ms ease-in forwards;
 }

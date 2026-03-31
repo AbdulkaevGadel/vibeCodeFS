@@ -1,18 +1,25 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { FlashStatus, flashCookieName } from "@/app/_lib/flash-cookie";
 
 const unknownBotKey = "__unknown_bot__";
 
-function redirectWithStatus(request: NextRequest, status: string, bot?: string) {
+function redirectWithStatus(request: NextRequest, status: FlashStatus, bot?: string) {
   const url = new URL("/", request.url);
 
   if (bot) {
     url.searchParams.set("bot", bot);
   }
 
-  url.searchParams.set("status", status);
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(url);
+  response.cookies.set(flashCookieName, status, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+  });
+
+  return response;
 }
 
 export async function POST(request: NextRequest) {

@@ -1,8 +1,30 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { FlashStatus, flashCookieName } from "@/app/_lib/flash-cookie";
+import { getStatusMessage } from "@/app/_lib/page-utils";
 
-function redirectWithStatus(request: NextRequest, status: string, bot?: string, chat?: string) {
+function isFetchRequest(request: NextRequest) {
+  return request.headers.get("x-requested-with") === "fetch";
+}
+
+function jsonStatus(status: FlashStatus, statusCode = 200) {
+  return NextResponse.json(
+    {
+      ok: status !== "delete-error",
+      status,
+      message: getStatusMessage(status),
+    },
+    { status: statusCode },
+  );
+}
+
+function redirectWithStatus(
+  request: NextRequest,
+  status: FlashStatus,
+  bot?: string,
+  chat?: string,
+) {
   const url = new URL("/", request.url);
 
   if (bot) {
@@ -13,8 +35,14 @@ function redirectWithStatus(request: NextRequest, status: string, bot?: string, 
     url.searchParams.set("chat", chat);
   }
 
-  url.searchParams.set("status", status);
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(url);
+  response.cookies.set(flashCookieName, status, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+  });
+
+  return response;
 }
 
 export async function POST(request: NextRequest) {
@@ -24,6 +52,9 @@ export async function POST(request: NextRequest) {
   const chat = formData.get("chat")?.toString();
 
   if (!messageId) {
+    if (isFetchRequest(request)) {
+      return jsonStatus("delete-error", 400);
+    }
     return redirectWithStatus(request, "delete-error", bot, chat);
   }
 
@@ -33,13 +64,22 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error(error);
+      if (isFetchRequest(request)) {
+        return jsonStatus("delete-error", 500);
+      }
       return redirectWithStatus(request, "delete-error", bot, chat);
     }
 
     revalidatePath("/");
+    if (isFetchRequest(request)) {
+      return jsonStatus("message-deleted");
+    }
     return redirectWithStatus(request, "message-deleted", bot, chat);
   } catch (error) {
     console.error(error);
+    if (isFetchRequest(request)) {
+      return jsonStatus("delete-error", 500);
+    }
     return redirectWithStatus(request, "delete-error", bot, chat);
   }
 }

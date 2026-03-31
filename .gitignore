@@ -84,4 +84,5 @@ temp/
 *.key
 
 .serena
+.INFO.MD
 

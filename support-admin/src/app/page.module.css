@@ -1,0 +1,23 @@
+.pageMain {
+  min-height: 100vh;
+  padding: 1.5rem;
+  color: var(--support-text-primary);
+  background: var(--support-page-bg);
+}
+
+.pageContent {
+  margin: 0 auto;
+  max-width: 80rem;
+}
+
+.pageGrid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 1280px) {
+  .pageGrid {
+    grid-template-columns: 340px minmax(0, 1fr);
+  }
+}
