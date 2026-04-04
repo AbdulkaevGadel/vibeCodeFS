@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "./login-form";
+import { LoginTestAccount } from "./login-test-account";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function LoginPage() {
         </div>
 
         <LoginForm />
+        <LoginTestAccount />
       </section>
     </main>
   );
