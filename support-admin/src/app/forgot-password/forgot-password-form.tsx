@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { submitLoginFormAction, type LoginFormState } from "./actions";
+import {
+  submitForgotPasswordFormAction,
+  type ForgotPasswordFormState,
+} from "./actions";
 
-const initialState: LoginFormState = {
+const initialState: ForgotPasswordFormState = {
+  message: null,
   error: null,
 };
 
-export function LoginForm() {
+export function ForgotPasswordForm() {
   const [state, formAction, isPending] = useActionState(
-    submitLoginFormAction,
+    submitForgotPasswordFormAction,
     initialState,
   );
 
@@ -28,16 +32,11 @@ export function LoginForm() {
         />
       </label>
 
-      <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-        Пароль
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-        />
-      </label>
+      {state.message ? (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {state.message}
+        </p>
+      ) : null}
 
       {state.error ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -50,14 +49,14 @@ export function LoginForm() {
         disabled={isPending}
         className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500"
       >
-        {isPending ? "Входим..." : "Войти"}
+        {isPending ? "Отправляем..." : "Отправить письмо"}
       </button>
 
       <Link
-        href="/forgot-password"
-        className="text-center text-sm text-slate-600 underline underline-offset-4 transition hover:text-slate-900"
+        href="/login"
+        className="w-fit self-center text-sm text-slate-600 underline underline-offset-4 transition hover:text-slate-900"
       >
-        Забыли пароль?
+        Вернуться ко входу
       </Link>
     </form>
   );
