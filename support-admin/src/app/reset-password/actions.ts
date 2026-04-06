@@ -6,10 +6,12 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 export type ResetPasswordActionResult = {
   success: boolean;
   error: string | null;
+  debugReason: string | null;
 };
 
 export type ResetPasswordFormState = {
   error: string | null;
+  debugReason: string | null;
 };
 
 const minimumPasswordLength = 8;
@@ -18,6 +20,7 @@ function createErrorResult(error: string): ResetPasswordActionResult {
   return {
     success: false,
     error,
+    debugReason: null,
   };
 }
 
@@ -58,7 +61,11 @@ export async function resetPasswordAction(
   const validationError = validatePassword(newPassword);
 
   if (validationError) {
-    return createErrorResult(validationError);
+    return {
+      success: false,
+      error: validationError,
+      debugReason: "validation_failed",
+    };
   }
 
   try {
@@ -68,7 +75,22 @@ export async function resetPasswordAction(
     });
 
     if (error) {
-      return createErrorResult(mapResetPasswordError(error.message));
+      const normalizedMessage = error.message?.toLowerCase() ?? "";
+      const debugReason =
+        normalizedMessage.includes("auth session missing") ||
+        normalizedMessage.includes("session not found") ||
+        normalizedMessage.includes("invalid claim") ||
+        normalizedMessage.includes("jwt")
+          ? "update_user_session_missing"
+          : normalizedMessage.includes("password")
+            ? "update_user_password_rejected"
+            : "update_user_failed";
+
+      return {
+        success: false,
+        error: mapResetPasswordError(error.message),
+        debugReason,
+      };
     }
 
     redirect("/login");
@@ -98,5 +120,6 @@ export async function submitResetPasswordFormAction(
 
   return {
     error: result.error,
+    debugReason: result.debugReason,
   };
 }
