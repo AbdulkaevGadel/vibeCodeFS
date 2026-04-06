@@ -26,21 +26,46 @@ function createRedirectUrl(request: NextRequest, pathname: string, error?: strin
   return redirectUrl;
 }
 
+function createDebugRedirectUrl(
+  request: NextRequest,
+  pathname: string,
+  debugStage: string,
+  error?: string,
+) {
+  const redirectUrl = createRedirectUrl(request, pathname, error);
+
+  redirectUrl.searchParams.set("debug", debugStage);
+
+  return redirectUrl;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const nextPath = getSafeNextPath(searchParams.get("next"));
 
-  const successRedirectUrl = createRedirectUrl(request, nextPath);
-  const errorRedirectUrl = createRedirectUrl(
+  const successRedirectUrl = createDebugRedirectUrl(
+    request,
+    nextPath,
+    "confirm_verified",
+  );
+  const errorRedirectUrl = createDebugRedirectUrl(
     request,
     defaultNextPath,
+    "confirm_failed",
     "recovery_invalid",
   );
 
   if (!tokenHash || !type) {
-    return NextResponse.redirect(errorRedirectUrl);
+    return NextResponse.redirect(
+      createDebugRedirectUrl(
+        request,
+        defaultNextPath,
+        "confirm_missing_token",
+        "recovery_invalid",
+      ),
+    );
   }
 
   const supabase = await createSupabaseServerClient();

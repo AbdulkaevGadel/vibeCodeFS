@@ -9,6 +9,7 @@ import {
 
 const initialState: ResetPasswordFormState = {
   error: null,
+  debugReason: null,
 };
 
 type ResetPasswordFormProps = {
@@ -44,9 +45,15 @@ export function ResetPasswordForm({ hasUserSession }: ResetPasswordFormProps) {
       </label>
 
       {state.error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {state.error}
-        </p>
+        <div className="space-y-2">
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {state.error}
+          </p>
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p>debug.update: {state.debugReason ?? "none"}</p>
+            <p>debug.session: {hasUserSession ? "present" : "missing"}</p>
+          </div>
+        </div>
       ) : null}
 
       <button
