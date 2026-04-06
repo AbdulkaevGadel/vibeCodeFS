@@ -140,8 +140,6 @@ export async function resetPasswordAction(
       hasUser: Boolean(userData.user),
       userId: userData.user?.id ?? "none",
     });
-
-    redirect("/login");
   } catch (error) {
     const errorDetails =
       error instanceof Error
@@ -171,6 +169,8 @@ export async function resetPasswordAction(
       ],
     };
   }
+
+  redirect("/login");
 }
 
 export async function submitResetPasswordFormAction(
