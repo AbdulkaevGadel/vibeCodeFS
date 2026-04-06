@@ -45,6 +45,12 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type") as EmailOtpType | null;
   const nextPath = getSafeNextPath(searchParams.get("next"));
 
+  console.info("Recovery confirm request received", {
+    hasTokenHash: Boolean(tokenHash),
+    type: type ?? "none",
+    nextPath,
+  });
+
   const successRedirectUrl = createDebugRedirectUrl(
     request,
     nextPath,
@@ -58,6 +64,11 @@ export async function GET(request: NextRequest) {
   );
 
   if (!tokenHash || !type) {
+    console.warn("Recovery confirm request missing token or type", {
+      hasTokenHash: Boolean(tokenHash),
+      type: type ?? "none",
+    });
+
     return NextResponse.redirect(
       createDebugRedirectUrl(
         request,
@@ -75,8 +86,21 @@ export async function GET(request: NextRequest) {
   });
 
   if (error) {
+    console.error("Recovery verifyOtp failed", {
+      message: error.message ?? "none",
+      status: "status" in error ? String(error.status ?? "none") : "none",
+      code: "code" in error ? String(error.code ?? "none") : "none",
+      type,
+      nextPath,
+    });
+
     return NextResponse.redirect(errorRedirectUrl);
   }
+
+  console.info("Recovery verifyOtp succeeded", {
+    type,
+    nextPath,
+  });
 
   return NextResponse.redirect(successRedirectUrl);
 }

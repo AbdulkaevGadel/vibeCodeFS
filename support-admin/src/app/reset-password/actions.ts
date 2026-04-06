@@ -61,9 +61,19 @@ function mapResetPasswordError(message?: string) {
 export async function resetPasswordAction(
   newPassword: string,
 ): Promise<ResetPasswordActionResult> {
+  console.info("Reset password action started", {
+    passwordLength: newPassword.length,
+    hasTrimmedPassword: Boolean(newPassword.trim()),
+  });
+
   const validationError = validatePassword(newPassword);
 
   if (validationError) {
+    console.warn("Reset password validation failed", {
+      passwordLength: newPassword.length,
+      validationError,
+    });
+
     return {
       success: false,
       error: validationError,
@@ -74,6 +84,23 @@ export async function resetPasswordAction(
 
   try {
     const supabase = await createSupabaseServerClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    console.info("Reset password action session snapshot", {
+      hasUser: Boolean(userData.user),
+      userId: userData.user?.id ?? "none",
+      userEmail: userData.user?.email ?? "none",
+      userErrorMessage: userError?.message ?? "none",
+      userErrorStatus:
+        userError && "status" in userError
+          ? String(userError.status ?? "none")
+          : "none",
+      userErrorCode:
+        userError && "code" in userError
+          ? String(userError.code ?? "none")
+          : "none",
+    });
+
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
@@ -90,6 +117,13 @@ export async function resetPasswordAction(
             ? "update_user_password_rejected"
             : "update_user_failed";
 
+      console.error("Reset password updateUser returned error", {
+        message: error.message ?? "none",
+        status: "status" in error ? String(error.status ?? "none") : "none",
+        code: "code" in error ? String(error.code ?? "none") : "none",
+        debugReason,
+      });
+
       return {
         success: false,
         error: mapResetPasswordError(error.message),
@@ -102,19 +136,40 @@ export async function resetPasswordAction(
       };
     }
 
-    redirect("/login");
-  } catch (error) {
-    console.error("Reset password action failed", {
-      error:
-        error instanceof Error
-          ? {
-              message: error.message,
-              name: error.name,
-            }
-          : "Unknown error",
+    console.info("Reset password updateUser succeeded", {
+      hasUser: Boolean(userData.user),
+      userId: userData.user?.id ?? "none",
     });
 
-    return createErrorResult("Не удалось обновить пароль. Попробуйте позже.");
+    redirect("/login");
+  } catch (error) {
+    const errorDetails =
+      error instanceof Error
+        ? {
+            message: error.message,
+            name: error.name,
+            stack: error.stack ?? "none",
+          }
+        : {
+            message: String(error),
+            name: "Unknown error",
+            stack: "none",
+          };
+
+    console.error("Reset password action failed", {
+      error: errorDetails,
+    });
+
+    return {
+      success: false,
+      error: "Не удалось обновить пароль. Попробуйте позже.",
+      debugReason: "unexpected_exception",
+      debugDetails: [
+        `catch.name=${errorDetails.name}`,
+        `catch.message=${errorDetails.message}`,
+        `catch.stack=${errorDetails.stack}`,
+      ],
+    };
   }
 }
 

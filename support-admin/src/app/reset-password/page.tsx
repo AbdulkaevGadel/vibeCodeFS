@@ -14,7 +14,7 @@ export default async function ResetPasswordPage({
   searchParams,
 }: ResetPasswordPageProps) {
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
   const params = await searchParams;
   const hasRecoveryError =
     (typeof params.error === "string" && params.error.length > 0) ||
@@ -22,6 +22,19 @@ export default async function ResetPasswordPage({
   const confirmDebug = Array.isArray(params.debug)
     ? params.debug.join(",")
     : params.debug ?? null;
+
+  console.info("Reset password page rendered", {
+    confirmDebug: confirmDebug ?? "none",
+    hasRecoveryError,
+    hasUser: Boolean(data.user),
+    userId: data.user?.id ?? "none",
+    userEmail: data.user?.email ?? "none",
+    getUserErrorMessage: error?.message ?? "none",
+    getUserErrorStatus:
+      error && "status" in error ? String(error.status ?? "none") : "none",
+    getUserErrorCode:
+      error && "code" in error ? String(error.code ?? "none") : "none",
+  });
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-12">
