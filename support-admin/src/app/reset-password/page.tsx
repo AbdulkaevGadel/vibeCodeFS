@@ -42,6 +42,8 @@ export default async function ResetPasswordPage({
         <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <p>debug.confirm: {confirmDebug ?? "none"}</p>
           <p>debug.user: {data.user ? "present" : "missing"}</p>
+          <p>debug.userId: {data.user?.id ?? "none"}</p>
+          <p>debug.userEmail: {data.user?.email ?? "none"}</p>
         </div>
 
         <ResetPasswordForm hasUserSession={Boolean(data.user)} />

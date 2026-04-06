@@ -10,6 +10,7 @@ import {
 const initialState: ResetPasswordFormState = {
   error: null,
   debugReason: null,
+  debugDetails: [],
 };
 
 type ResetPasswordFormProps = {
@@ -52,6 +53,9 @@ export function ResetPasswordForm({ hasUserSession }: ResetPasswordFormProps) {
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
             <p>debug.update: {state.debugReason ?? "none"}</p>
             <p>debug.session: {hasUserSession ? "present" : "missing"}</p>
+            {state.debugDetails.map((detail) => (
+              <p key={detail}>{detail}</p>
+            ))}
           </div>
         </div>
       ) : null}

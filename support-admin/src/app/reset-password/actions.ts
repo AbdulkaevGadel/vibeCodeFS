@@ -7,11 +7,13 @@ export type ResetPasswordActionResult = {
   success: boolean;
   error: string | null;
   debugReason: string | null;
+  debugDetails: string[];
 };
 
 export type ResetPasswordFormState = {
   error: string | null;
   debugReason: string | null;
+  debugDetails: string[];
 };
 
 const minimumPasswordLength = 8;
@@ -21,6 +23,7 @@ function createErrorResult(error: string): ResetPasswordActionResult {
     success: false,
     error,
     debugReason: null,
+    debugDetails: [],
   };
 }
 
@@ -65,6 +68,7 @@ export async function resetPasswordAction(
       success: false,
       error: validationError,
       debugReason: "validation_failed",
+      debugDetails: [],
     };
   }
 
@@ -90,6 +94,11 @@ export async function resetPasswordAction(
         success: false,
         error: mapResetPasswordError(error.message),
         debugReason,
+        debugDetails: [
+          `error.message=${error.message ?? "none"}`,
+          `error.status=${"status" in error ? String(error.status ?? "none") : "none"}`,
+          `error.code=${"code" in error ? String(error.code ?? "none") : "none"}`,
+        ],
       };
     }
 
@@ -121,5 +130,6 @@ export async function submitResetPasswordFormAction(
   return {
     error: result.error,
     debugReason: result.debugReason,
+    debugDetails: result.debugDetails,
   };
 }
