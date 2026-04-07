@@ -26,40 +26,15 @@ function createRedirectUrl(request: NextRequest, pathname: string, error?: strin
   return redirectUrl;
 }
 
-function createDebugRedirectUrl(
-  request: NextRequest,
-  pathname: string,
-  debugStage: string,
-  error?: string,
-) {
-  const redirectUrl = createRedirectUrl(request, pathname, error);
-
-  redirectUrl.searchParams.set("debug", debugStage);
-
-  return redirectUrl;
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const nextPath = getSafeNextPath(searchParams.get("next"));
-
-  console.info("Recovery confirm request received", {
-    hasTokenHash: Boolean(tokenHash),
-    type: type ?? "none",
-    nextPath,
-  });
-
-  const successRedirectUrl = createDebugRedirectUrl(
-    request,
-    nextPath,
-    "confirm_verified",
-  );
-  const errorRedirectUrl = createDebugRedirectUrl(
+  const successRedirectUrl = createRedirectUrl(request, nextPath);
+  const errorRedirectUrl = createRedirectUrl(
     request,
     defaultNextPath,
-    "confirm_failed",
     "recovery_invalid",
   );
 
@@ -70,12 +45,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.redirect(
-      createDebugRedirectUrl(
-        request,
-        defaultNextPath,
-        "confirm_missing_token",
-        "recovery_invalid",
-      ),
+      createRedirectUrl(request, defaultNextPath, "recovery_invalid"),
     );
   }
 
@@ -96,11 +66,5 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.redirect(errorRedirectUrl);
   }
-
-  console.info("Recovery verifyOtp succeeded", {
-    type,
-    nextPath,
-  });
-
   return NextResponse.redirect(successRedirectUrl);
 }

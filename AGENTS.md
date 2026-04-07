@@ -194,6 +194,30 @@ Reason:
 - data already lives in Supabase
 - project is simple
 
+### Frontend Structure Rules
+
+Scope:
+- Global rules apply to the entire repository.
+- Feature-specific rules must live inside the feature or app they belong to.
+- Do not promote feature patterns to global rules without clear cross-feature reuse.
+
+MUST:
+- In Next.js App Router, `page.tsx` must act as an orchestration/composition layer.
+- `page.tsx` is responsible for data fetching, guards, redirects, params, and composition.
+- Repeated layout or view structure across pages must be extracted from `page.tsx`.
+- Use local `_components` and `_lib` when code belongs only to one page or one route branch.
+- Move code higher only after real reuse across multiple scenarios.
+- Do not move code into `shared` prematurely. `shared` is only for truly cross-domain primitives.
+- Naming conventions must be consistent:
+  - UI components: `PascalCase`
+  - helpers/actions/utils: `camelCase`
+  - folders and files: `kebab-case`
+
+SHOULD:
+- Extract a UI pattern only when it repeats with the same role, not only because classes look similar.
+- Before creating a shared component, verify that the duplication is structural and repeated at least 2-3 times.
+- Keep route-local code close to the route until there is a clear reuse case.
+
 ---
 
 ## 13. Project Structure (Light FSD)

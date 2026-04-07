@@ -1,8 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import { submitLoginFormAction, type LoginFormState } from "./actions";
+import { AuthAlert } from "@/app/auth/_components/auth-alert";
+import { AuthInputField } from "@/app/auth/_components/auth-input-field";
+import { AuthSecondaryLink } from "@/app/auth/_components/auth-secondary-link";
+import { AuthSubmitButton } from "@/app/auth/_components/auth-submit-button";
 
 const initialState: LoginFormState = {
   error: null,
@@ -16,49 +19,34 @@ export function LoginForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-        Email
-        <input
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          autoFocus
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-        />
-      </label>
+      <AuthInputField
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        required
+        autoFocus
+      />
 
-      <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-        Пароль
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-        />
-      </label>
+      <AuthInputField
+        label="Пароль"
+        name="password"
+        type="password"
+        autoComplete="current-password"
+        required
+      />
 
       {state.error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {state.error}
-        </p>
+        <AuthAlert variant="danger">{state.error}</AuthAlert>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500"
-      >
+      <AuthSubmitButton disabled={isPending}>
         {isPending ? "Входим..." : "Войти"}
-      </button>
+      </AuthSubmitButton>
 
-      <Link
-        href="/forgot-password"
-        className="text-center text-sm text-slate-600 underline underline-offset-4 transition hover:text-slate-900"
-      >
+      <AuthSecondaryLink href="/forgot-password" align="center">
         Забыли пароль?
-      </Link>
+      </AuthSecondaryLink>
     </form>
   );
 }
