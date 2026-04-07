@@ -6,26 +6,13 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 export type ResetPasswordActionResult = {
   success: boolean;
   error: string | null;
-  debugReason: string | null;
-  debugDetails: string[];
 };
 
 export type ResetPasswordFormState = {
   error: string | null;
-  debugReason: string | null;
-  debugDetails: string[];
 };
 
 const minimumPasswordLength = 8;
-
-function createErrorResult(error: string): ResetPasswordActionResult {
-  return {
-    success: false,
-    error,
-    debugReason: null,
-    debugDetails: [],
-  };
-}
 
 function validatePassword(password: string) {
   if (!password.trim()) {
@@ -61,85 +48,33 @@ function mapResetPasswordError(message?: string) {
 export async function resetPasswordAction(
   newPassword: string,
 ): Promise<ResetPasswordActionResult> {
-  console.info("Reset password action started", {
-    passwordLength: newPassword.length,
-    hasTrimmedPassword: Boolean(newPassword.trim()),
-  });
-
   const validationError = validatePassword(newPassword);
 
   if (validationError) {
-    console.warn("Reset password validation failed", {
-      passwordLength: newPassword.length,
-      validationError,
-    });
-
     return {
       success: false,
       error: validationError,
-      debugReason: "validation_failed",
-      debugDetails: [],
     };
   }
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    console.info("Reset password action session snapshot", {
-      hasUser: Boolean(userData.user),
-      userId: userData.user?.id ?? "none",
-      userEmail: userData.user?.email ?? "none",
-      userErrorMessage: userError?.message ?? "none",
-      userErrorStatus:
-        userError && "status" in userError
-          ? String(userError.status ?? "none")
-          : "none",
-      userErrorCode:
-        userError && "code" in userError
-          ? String(userError.code ?? "none")
-          : "none",
-    });
-
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
 
     if (error) {
-      const normalizedMessage = error.message?.toLowerCase() ?? "";
-      const debugReason =
-        normalizedMessage.includes("auth session missing") ||
-        normalizedMessage.includes("session not found") ||
-        normalizedMessage.includes("invalid claim") ||
-        normalizedMessage.includes("jwt")
-          ? "update_user_session_missing"
-          : normalizedMessage.includes("password")
-            ? "update_user_password_rejected"
-            : "update_user_failed";
-
       console.error("Reset password updateUser returned error", {
         message: error.message ?? "none",
         status: "status" in error ? String(error.status ?? "none") : "none",
         code: "code" in error ? String(error.code ?? "none") : "none",
-        debugReason,
       });
 
       return {
         success: false,
         error: mapResetPasswordError(error.message),
-        debugReason,
-        debugDetails: [
-          `error.message=${error.message ?? "none"}`,
-          `error.status=${"status" in error ? String(error.status ?? "none") : "none"}`,
-          `error.code=${"code" in error ? String(error.code ?? "none") : "none"}`,
-        ],
       };
     }
-
-    console.info("Reset password updateUser succeeded", {
-      hasUser: Boolean(userData.user),
-      userId: userData.user?.id ?? "none",
-    });
   } catch (error) {
     const errorDetails =
       error instanceof Error
@@ -161,12 +96,6 @@ export async function resetPasswordAction(
     return {
       success: false,
       error: "Не удалось обновить пароль. Попробуйте позже.",
-      debugReason: "unexpected_exception",
-      debugDetails: [
-        `catch.name=${errorDetails.name}`,
-        `catch.message=${errorDetails.message}`,
-        `catch.stack=${errorDetails.stack}`,
-      ],
     };
   }
 
@@ -184,7 +113,5 @@ export async function submitResetPasswordFormAction(
 
   return {
     error: result.error,
-    debugReason: result.debugReason,
-    debugDetails: result.debugDetails,
   };
 }
