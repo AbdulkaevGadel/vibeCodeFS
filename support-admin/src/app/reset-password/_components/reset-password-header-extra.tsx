@@ -1,5 +1,6 @@
 import { isDebugEnabled } from "@/shared/config/debug";
 import { DebugPanel } from "@/shared/ui/debug-panel";
+import { AuthAlert } from "@/app/auth/_components/auth-alert";
 
 type ResetPasswordHeaderExtraProps = {
   hasRecoveryError: boolean;
@@ -13,10 +14,10 @@ export function ResetPasswordHeaderExtra({
   return (
     <>
       {hasRecoveryError ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <AuthAlert variant="danger">
           Ссылка для сброса пароля недействительна или устарела. Запросите
           новую.
-        </p>
+        </AuthAlert>
       ) : null}
 
       {isDebugEnabled ? (
