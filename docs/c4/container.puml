@@ -6,23 +6,27 @@ title Диаграмма контейнеров SupportBot
 Person(telegramUser, "Пользователь Telegram")
 Person(admin, "Администратор поддержки")
 System_Ext(telegramApi, "Telegram Bot API", "Внешняя платформа обмена сообщениями")
+System_Ext(supabase, "Supabase", "Платформа Postgres, REST API и Auth")
 System_Ext(vercel, "Vercel", "Платформа хостинга frontend")
 
 System_Boundary(system, "Система SupportBot") {
   Container(edgeFn, "telegram-webhook Edge Function", "Supabase Edge Functions / Deno", "Принимает webhook-запросы от Telegram, валидирует update, сохраняет сообщения и отправляет ответы")
-  ContainerDb(db, "Хранилище messages", "Supabase Postgres / REST", "Хранит входящие сообщения")
-  Container(webApp, "support-admin web app", "Next.js / React / Tailwind CSS", "Показывает сообщения, сгруппированные по ботам и чатам")
-  Container(routeHandlers, "Admin mutation endpoints", "Next.js Route Handlers", "Удаляет отдельные сообщения или целые чаты")
+  ContainerDb(db, "messages storage", "Supabase Postgres / REST API", "Хранит входящие сообщения поддержки")
+  Container(webApp, "support-admin web app", "Next.js App Router / React / Tailwind CSS / @supabase/ssr", "Отдает auth-страницы и защищенную админку, показывает сообщения и чаты")
+  Container(routeHandlers, "admin mutation endpoints", "Next.js Route Handlers", "Удаляет отдельные сообщения или целые чаты через service role key")
+  Container(authFlow, "auth actions and routes", "Next.js Server Actions / Route Handlers / Supabase Auth", "Выполняет login, logout, recovery и reset password flow")
 }
 
 Rel(telegramUser, telegramApi, "Пишет боту")
 Rel(telegramApi, edgeFn, "POST webhook")
 Rel(edgeFn, telegramApi, "sendMessage")
-Rel(edgeFn, db, "Вставляет сообщение")
+Rel(edgeFn, db, "Вставляет сообщение через REST API")
 Rel(admin, webApp, "Использует в браузере")
-Rel(webApp, db, "Читает сообщения")
+Rel(webApp, authFlow, "Выполняет login, logout и recovery flow")
+Rel(authFlow, supabase, "Работает с Auth и сессией")
+Rel(webApp, db, "Читает сообщения через anon key")
 Rel(webApp, routeHandlers, "Отправляет действия на удаление")
-Rel(routeHandlers, db, "Удаляет сообщение/чат")
+Rel(routeHandlers, db, "Удаляет сообщение/чат через service role key")
 Rel(webApp, vercel, "Размещается на")
 
 @enduml

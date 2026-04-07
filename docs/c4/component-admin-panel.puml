@@ -4,24 +4,34 @@
 title Компоненты support-admin
 
 Container_Boundary(webApp, "support-admin web app") {
-  Component(homePage, "Home Page", "src/app/page.tsx", "Загружает сообщения, строит фильтры, группирует чаты и рендерит выбранный чат")
+  Component(protectedLayout, "Protected Layout Guard", "src/app/(protected)/layout.tsx", "Проверяет сессию через Supabase Auth и защищает админку")
+  Component(homePage, "Protected Home Page", "src/app/(protected)/page.tsx", "Читает flash status, собирает экран админки и рендерит список чатов и сообщения")
+  Component(pageData, "Support Admin Page Data", "src/app/_lib/get-support-admin-page-data.ts", "Загружает сообщения, строит фильтры по ботам и выбирает активный чат")
+  Component(adminUi, "Admin UI Components", "src/app/_components/*", "Рендерят header, chat list, chat details и статусы")
   Component(readClient, "Supabase Read Client", "src/lib/supabase.ts", "Создает Supabase-клиент с anon key")
+  Component(serverClient, "Supabase Server Client", "src/lib/supabase-server.ts", "Создает server-side Supabase-клиент с cookie-backed session")
   Component(adminClient, "Supabase Admin Client", "src/lib/supabase-admin.ts", "Создает Supabase-клиент с service role key")
-  Component(refreshButton, "RefreshButton", "src/app/refresh-button.tsx", "Обновляет состояние страницы")
-  Component(confirmButton, "ConfirmSubmitButton", "src/app/confirm-submit-button.tsx", "Подтверждает действия удаления")
+  Component(authFlow, "Auth Pages and Actions", "src/app/login/*, forgot-password/*, reset-password/*, _actions/logout.ts", "Выполняют login, logout, recovery и reset password flow")
+  Component(confirmRoute, "Recovery Confirm Route", "src/app/auth/confirm/route.ts", "Подтверждает recovery token через Supabase Auth")
   Component(deleteMessageRoute, "Delete Message Route", "src/app/api/messages/delete/route.ts", "Удаляет одно сообщение по id")
   Component(deleteChatRoute, "Delete Chat Route", "src/app/api/chats/delete/route.ts", "Удаляет все сообщения выбранного чата")
 }
 
-ContainerDb(db, "Хранилище messages", "Supabase Postgres")
+ContainerDb(db, "messages storage", "Supabase Postgres")
+System_Ext(supabaseAuth, "Supabase Auth")
 
-Rel(homePage, readClient, "Создает клиент")
-Rel(homePage, db, "Читает сообщения")
-Rel(refreshButton, homePage, "Обновляет")
-Rel(confirmButton, deleteMessageRoute, "Отправляет удаление сообщения")
-Rel(confirmButton, deleteChatRoute, "Отправляет удаление чата")
+Rel(protectedLayout, serverClient, "Проверяет текущего пользователя")
+Rel(homePage, pageData, "Запрашивает данные страницы")
+Rel(pageData, readClient, "Создает read client")
+Rel(pageData, db, "Читает сообщения")
+Rel(homePage, adminUi, "Собирает UI")
+Rel(adminUi, deleteMessageRoute, "Отправляет удаление сообщения")
+Rel(adminUi, deleteChatRoute, "Отправляет удаление чата")
 Rel(deleteMessageRoute, adminClient, "Создает admin client")
 Rel(deleteChatRoute, adminClient, "Создает admin client")
 Rel(adminClient, db, "Удаляет данные")
+Rel(authFlow, serverClient, "Работает с сессией")
+Rel(confirmRoute, serverClient, "Проверяет recovery token")
+Rel(serverClient, supabaseAuth, "Читает и обновляет auth session")
 
 @enduml
