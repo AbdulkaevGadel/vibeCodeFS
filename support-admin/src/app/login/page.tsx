@@ -1,18 +1,12 @@
-import { redirect } from "next/navigation";
 import { LoginForm } from "./login-form";
 import { LoginTestAccount } from "./login-test-account";
 import { AuthShell } from "@/app/auth/_components/auth-shell";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { redirectAuthenticatedUser } from "@/app/auth/_lib/redirect-authenticated-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
-
-  if (data.user) {
-    redirect("/");
-  }
+  await redirectAuthenticatedUser();
 
   return (
     <AuthShell
