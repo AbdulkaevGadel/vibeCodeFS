@@ -7,15 +7,21 @@ export type PageProps = {
   }>;
 };
 
-export type Message = {
-  id: number;
-  bot_username: string | null;
-  chat_id: number;
+export type ClientSnapshot = {
+  telegramUserId: number;
   username: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  text: string | null;
-  created_at: string;
+  firstName: string | null;
+  lastName: string | null;
+};
+
+export type ChatMessage = {
+  id: string;
+  chatId: string;
+  senderType: "client" | "manager";
+  managerId: string | null;
+  text: string;
+  legacyMessageId: number | null;
+  createdAt: string;
 };
 
 export type BotOption = {
@@ -25,22 +31,29 @@ export type BotOption = {
 };
 
 export type ChatSummary = {
-  chatId: number;
+  id: string;
+  telegramChatId: number;
+  botUsername: string;
+  status: string;
   title: string;
   fullName: string | null;
   subtitle: string;
   username: string | null;
+  telegramUserId: number;
   lastMessageAt: string;
   messageCount: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SupportAdminPageData = {
   botOptions: BotOption[];
   selectedBot: BotOption | null;
-  botFilteredMessages: Message[];
+  botFilteredChats: ChatSummary[];
+  botFilteredMessageCount: number;
   chatSummaries: ChatSummary[];
   selectedChat: ChatSummary | null;
-  selectedChatMessages: Message[];
+  selectedChatMessages: ChatMessage[];
   statusMessage: string | null;
   statusVariant: "success" | "error" | null;
   errorMessage: string | null;

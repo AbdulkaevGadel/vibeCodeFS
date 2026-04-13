@@ -43,8 +43,8 @@ export function AdminHeader({
           <p className={sectionTitleClassName}>SupportBot Admin</p>
           <h1 className={headerTitleClassName}>{headerBotLabel}</h1>
           <p className={headerDescriptionClassName}>
-            Одна страница для просмотра сообщений, выбора чатов и безопасного удаления через
-            серверную сторону.
+            Relational read-only экран для просмотра чатов, клиентского контекста и истории
+            сообщений по выбранному боту.
           </p>
         </div>
 
