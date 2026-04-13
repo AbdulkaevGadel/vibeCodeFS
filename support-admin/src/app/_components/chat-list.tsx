@@ -11,7 +11,7 @@ const itemsWrapperClassName = "space-y-3";
 
 type ChatListProps = {
   chatSummaries: ChatSummary[];
-  selectedChatId: number | null;
+  selectedChatId: string | null;
   selectedBotKey: string | null;
 };
 
@@ -29,9 +29,9 @@ export function ChatList({ chatSummaries, selectedChatId, selectedBotKey }: Chat
         <div className={itemsWrapperClassName}>
           {chatSummaries.map((chat) => (
             <ChatListItem
-              key={chat.chatId}
+              key={chat.id}
               chat={chat}
-              isActive={selectedChatId === chat.chatId}
+              isActive={selectedChatId === chat.id}
               selectedBotKey={selectedBotKey}
             />
           ))}

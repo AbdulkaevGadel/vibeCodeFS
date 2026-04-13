@@ -1,4 +1,4 @@
-import { ChatSummary, Message } from "../_lib/page-types";
+import { ChatMessage, ChatSummary } from "../_lib/page-types";
 import { ChatDetailsClient } from "./chat-details-client";
 
 const detailsSectionClassName = "support-panel p-5";
@@ -7,7 +7,7 @@ const emptyStateClassName =
 
 type ChatDetailsProps = {
   selectedChat: ChatSummary | null;
-  selectedChatMessages: Message[];
+  selectedChatMessages: ChatMessage[];
   selectedBotKey: string | null;
 };
 
