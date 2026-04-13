@@ -1,0 +1,97 @@
+@startuml
+
+hide circle
+hide methods
+skinparam linetype ortho
+
+entity "clients" as clients {
+  * id : uuid <<PK>>
+  --
+  telegram_user_id : bigint <<UK>>
+  username : varchar
+  first_name : varchar
+  last_name : varchar
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity "managers" as managers {
+  * id : uuid <<PK>>
+  --
+  auth_user_id : uuid <<UK, FK>>
+  email : varchar
+  display_name : varchar
+  role : varchar
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity "chats" as chats {
+  * id : uuid <<PK>>
+  --
+  telegram_chat_id : bigint
+  client_id : uuid <<FK>>
+  bot_username : varchar
+  status : varchar
+  subject : varchar
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity "messages" as messages {
+  * id : uuid <<PK>>
+  --
+  chat_id : uuid <<FK>>
+  sender_type : varchar
+  manager_id : uuid <<FK, nullable>>
+  text : text
+  telegram_message_id : bigint <<nullable>>
+  legacy_message_id : bigint <<nullable>>
+  created_at : timestamptz
+}
+
+entity "chat_assignments" as chat_assignments {
+  * chat_id : uuid <<PK, FK>>
+  --
+  current_manager_id : uuid <<FK>>
+  assigned_by_manager_id : uuid <<FK, nullable>>
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity "assignment_history" as assignment_history {
+  * id : uuid <<PK>>
+  --
+  chat_id : uuid <<FK>>
+  from_manager_id : uuid <<FK, nullable>>
+  to_manager_id : uuid <<FK>>
+  assigned_by_manager_id : uuid <<FK, nullable>>
+  created_at : timestamptz
+}
+
+clients ||--o{ chats
+chats ||--o{ messages
+chats ||--|| chat_assignments
+chats ||--o{ assignment_history
+managers ||--o{ messages
+managers ||--o{ chat_assignments : current_manager
+managers ||--o{ chat_assignments : assigned_by
+managers ||--o{ assignment_history : from_manager
+managers ||--o{ assignment_history : to_manager
+managers ||--o{ assignment_history : assigned_by
+
+note right of chats
+  chat is the central support-processing entity
+  bot_username is immutable per chat
+  status is the workflow state
+end note
+
+note right of chat_assignments
+  stores only the current assignment state
+end note
+
+note right of assignment_history
+  stores every assignment change event
+end note
+
+@enduml
