@@ -1,6 +1,8 @@
 "use client";
 
+import { useTransition } from "react";
 import { ChatMessage, ChatSummary } from "../_lib/page-types";
+import { takeChatIntoWorkAction } from "../(protected)/_actions/chat-actions";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
@@ -21,6 +23,7 @@ const messageDateClassName = "support-text-muted mt-1 text-xs";
 const messageBadgeClassName =
   "support-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em]";
 const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap text-[15px] leading-7";
+const primaryButtonClassName = "rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -28,16 +31,26 @@ type ChatDetailsClientProps = {
   selectedBotKey: string | null;
 };
 
-function getSenderLabel(message: ChatMessage) {
+function getSenderLabel(message: ChatMessage, chatTitle: string) {
   if (message.senderType === "manager") {
     return "Менеджер";
   }
 
-  return "Клиент";
+  return chatTitle;
 }
 
 export function ChatDetailsClient({ selectedChat, initialMessages }: ChatDetailsClientProps) {
+  const [isPending, startTransition] = useTransition();
   const visibleMessages = initialMessages;
+
+  const handleTakeIntoWork = () => {
+    startTransition(async () => {
+      const result = await takeChatIntoWorkAction(selectedChat.id);
+      if (!result.success) {
+        alert("Ошибка: " + result.error);
+      }
+    });
+  };
 
   return (
     <>
@@ -49,16 +62,38 @@ export function ChatDetailsClient({ selectedChat, initialMessages }: ChatDetails
             <p className={detailsFullNameClassName}>{selectedChat.fullName}</p>
           ) : null}
           <div className={detailsMetaListClassName}>
-            <span className={detailsMetaItemClassName}>
+            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
               chat_id: {selectedChat.telegramChatId}
             </span>
-            <span className={detailsMetaItemClassName}>status: {selectedChat.status}</span>
-            <span className={detailsMetaItemClassName}>
+            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
+              <span className={`h-1.5 w-1.5 rounded-full ${selectedChat.status === "open" ? "bg-emerald-500" : "bg-blue-500"}`}></span>
+              status: {selectedChat.status}
+            </span>
+            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
               client_id: {selectedChat.telegramUserId}
             </span>
-            <span className={detailsMetaItemClassName}>сообщений: {visibleMessages.length}</span>
+            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
+              сообщений: {visibleMessages.length}
+            </span>
+            {selectedChat.assignedManagerName && (
+              <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                ответственный: {selectedChat.assignedManagerName}
+              </span>
+            )}
           </div>
         </div>
+
+        {selectedChat.status === "open" && (
+          <button
+            onClick={handleTakeIntoWork}
+            disabled={isPending}
+            className={primaryButtonClassName}
+          >
+            {isPending ? "Обработка..." : "Взять в работу"}
+          </button>
+        )}
       </div>
 
       <div className={messagesWrapperClassName}>
@@ -68,7 +103,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages }: ChatDetails
               <div className={messageAuthorClassName}>
                 <span className={messageIndexClassName}>{index + 1}</span>
                 <div>
-                  <p className={messageAuthorNameClassName}>{getSenderLabel(message)}</p>
+                  <p className={messageAuthorNameClassName}>{getSenderLabel(message, selectedChat.title)}</p>
                   <p className={messageDateClassName}>
                     {new Date(message.createdAt).toLocaleString("ru-RU")}
                   </p>

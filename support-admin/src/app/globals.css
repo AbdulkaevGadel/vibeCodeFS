@@ -137,8 +137,15 @@ body {
 }
 
 /* Chip */
+/* Chip */
 .support-chip {
   background: var(--support-surface-muted);
+  color: var(--support-text-secondary);
+}
+
+.support-chip-accent {
+  background: var(--support-accent);
+  color: var(--support-accent-contrast);
 }
 
 @keyframes support-toast-enter {

@@ -1,4 +1,4 @@
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { FlashStatus } from "./flash-cookie";
 import { ChatMessage, ChatSummary, PageProps, SupportAdminPageData } from "./page-types";
 import {
@@ -26,6 +26,14 @@ type ChatRow = {
     first_name: string | null;
     last_name: string | null;
   } | null;
+  assigned_manager_name: string | null;
+};
+
+type ClientResponse = {
+  telegram_user_id: number;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
 };
 
 type ChatRowResponse = {
@@ -35,12 +43,8 @@ type ChatRowResponse = {
   status: string;
   created_at: string;
   updated_at: string;
-  clients: Array<{
-    telegram_user_id: number;
-    username: string | null;
-    first_name: string | null;
-    last_name: string | null;
-  }> | null;
+  clients: ClientResponse[] | ClientResponse | null;
+  chat_assignments: Array<{ current_manager_id: string }> | { current_manager_id: string } | null;
 };
 
 type ChatMessageRow = {
@@ -88,6 +92,7 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
         }),
         subtitle: getMessagePreview(latestMessage?.text ?? null),
         username: client?.username ?? null,
+        assignedManagerName: chat.assigned_manager_name,
         telegramUserId: client?.telegram_user_id ?? 0,
         lastMessageAt: latestMessage?.createdAt ?? chat.updated_at,
         messageCount: messages.length,
@@ -106,16 +111,28 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
     });
 }
 
-function normalizeChatRows(rows: ChatRowResponse[]) {
-  return rows.map<ChatRow>((row) => ({
-    id: row.id,
-    telegram_chat_id: row.telegram_chat_id,
-    bot_username: row.bot_username,
-    status: row.status,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    clients: row.clients?.[0] ?? null,
-  }));
+function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, string>) {
+  return rows.map<ChatRow>((row) => {
+    // Безопасное извлечение назначения
+    const rawAssignment = row.chat_assignments;
+    const assignment = Array.isArray(rawAssignment) ? rawAssignment[0] : rawAssignment;
+    const mgrId = assignment?.current_manager_id;
+    
+    // Безопасное извлечение клиента
+    const rawClient = row.clients;
+    const client = Array.isArray(rawClient) ? rawClient[0] : rawClient;
+    
+    return {
+      id: row.id,
+      telegram_chat_id: row.telegram_chat_id,
+      bot_username: row.bot_username,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      clients: (client as ClientResponse) || null,
+      assigned_manager_name: mgrId && managersMap[mgrId] ? managersMap[mgrId] : null,
+    };
+  });
 }
 
 export async function getSupportAdminPageData(
@@ -131,7 +148,7 @@ export async function getSupportAdminPageData(
   let errorMessage: string | null = null;
 
   try {
-    const supabase = createSupabaseClient();
+    const supabase = await createSupabaseServerClient();
     const { data: chatsData, error: chatsError } = await supabase
       .from("chats")
       .select(
@@ -147,6 +164,9 @@ export async function getSupportAdminPageData(
             username,
             first_name,
             last_name
+          ),
+          chat_assignments(
+            current_manager_id
           )
         `,
       )
@@ -156,7 +176,32 @@ export async function getSupportAdminPageData(
       errorMessage = "Не удалось загрузить чаты из relational модели.";
       console.error(chatsError);
     } else {
-      chats = normalizeChatRows((chatsData ?? []) as ChatRowResponse[]);
+      const chatRows = (chatsData ?? []) as ChatRowResponse[];
+      
+      const managerIds = new Set<string>();
+      chatRows.forEach((row) => {
+        const rawAsgn = row.chat_assignments;
+        const asgn = Array.isArray(rawAsgn) ? rawAsgn[0] : rawAsgn;
+        const mgrId = asgn?.current_manager_id;
+        if (mgrId) managerIds.add(mgrId);
+      });
+
+      let managersMap: Record<string, string> = {};
+      if (managerIds.size > 0) {
+        const { data: managersData, error: managersError } = await supabase
+          .from("managers")
+          .select("id, display_name")
+          .in("id", Array.from(managerIds));
+
+        if (!managersError && managersData) {
+          managersMap = managersData.reduce((acc, mgr) => {
+            acc[mgr.id] = mgr.display_name;
+            return acc;
+          }, {} as Record<string, string>);
+        }
+      }
+
+      chats = normalizeChatRows(chatRows, managersMap);
     }
 
     if (!errorMessage && chats.length > 0) {
