@@ -4,19 +4,19 @@
 title Контекст системы SupportBot
 
 Person(telegramUser, "Пользователь Telegram", "Пишет сообщение боту")
-Person(admin, "Администратор поддержки", "Читает сообщения и управляет ими в админке")
+Person(admin, "Администратор поддержки", "Входит в защищенную админку, читает сообщения и управляет ими")
 
-System(system, "Система SupportBot", "Принимает сообщения из Telegram, сохраняет их, автоматически отвечает и показывает их в админке")
+System(system, "Система SupportBot", "Принимает сообщения из Telegram, сохраняет их, автоматически отвечает и показывает их в защищенной админке")
 
 System_Ext(telegramApi, "Telegram Bot API", "Внешняя платформа Telegram")
-System_Ext(supabase, "Supabase", "Платформа Edge Functions и Postgres")
+System_Ext(supabase, "Supabase", "Платформа Edge Functions, Postgres, REST API и Auth")
 System_Ext(vercel, "Vercel", "Платформа хостинга админки")
 
 Rel(telegramUser, telegramApi, "Отправляет сообщение")
 Rel(telegramApi, system, "Отправляет webhook update")
 Rel(system, telegramApi, "Отправляет ответ бота")
-Rel(admin, system, "Читает и управляет сообщениями поддержки")
-Rel(system, supabase, "Сохраняет и читает сообщения")
+Rel(admin, system, "Входит в админку и работает с сообщениями")
+Rel(system, supabase, "Сохраняет сообщения, читает их и проверяет сессии")
 Rel(system, vercel, "Размещает UI админки")
 
 @enduml

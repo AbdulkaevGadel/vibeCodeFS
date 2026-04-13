@@ -79,6 +79,9 @@ temp/
 *.bak
 *.orig
 
+# Local planning docs
+docs/plan/
+
 # Local secrets / keys
 *.pem
 *.key
