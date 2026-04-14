@@ -6,12 +6,9 @@ import { revalidatePath } from "next/cache";
 
 export async function takeChatIntoWorkAction(chatId: string) {
   try {
-    const managerId = await getCurrentManagerId();
     const supabase = await createSupabaseServerClient();
-
     const { error } = await supabase.rpc("take_chat_into_work", {
       p_chat_id: chatId,
-      p_manager_id: managerId,
     });
 
     if (error) {

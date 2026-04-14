@@ -10,6 +10,7 @@ export type TelegramUser = {
 }
 
 export type TelegramMessage = {
+  message_id: number
   text?: string
   chat?: TelegramChat
   from?: TelegramUser

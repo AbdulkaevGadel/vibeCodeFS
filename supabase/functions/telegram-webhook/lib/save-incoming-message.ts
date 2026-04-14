@@ -21,22 +21,22 @@ export async function saveIncomingMessage(
     return
   }
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/messages`, {
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/process_incoming_telegram_message`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
-      Prefer: "return=minimal",
     },
     body: JSON.stringify({
-      bot_username: botUsername,
-      chat_id: chatId,
-      user_id: userId,
-      username: message.from?.username ?? null,
-      first_name: message.from?.first_name ?? null,
-      last_name: message.from?.last_name ?? null,
-      text,
+      p_telegram_user_id: userId,
+      p_username: message.from?.username ?? null,
+      p_first_name: message.from?.first_name ?? null,
+      p_last_name: message.from?.last_name ?? null,
+      p_telegram_chat_id: chatId,
+      p_bot_username: botUsername,
+      p_telegram_message_id: message.message_id,
+      p_text: text,
     }),
   })
 
