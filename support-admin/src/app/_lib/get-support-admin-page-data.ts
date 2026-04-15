@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentManager } from "./manager-utils";
 import { FlashStatus } from "./flash-cookie";
-import { ChatMessage, ChatSummary, PageProps, SupportAdminPageData } from "./page-types";
+import { ChatMessage, ChatSummary, Manager, PageProps, SupportAdminPageData } from "./page-types";
 import {
   buildBotOptions,
   buildChatMessagesByChatId,
