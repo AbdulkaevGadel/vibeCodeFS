@@ -1,16 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
-import * as dotenv from "dotenv";
 
-dotenv.config({ path: ".env.local" });
+// Запускать локально: npx ts-node --esm scripts/check-db.ts
+// Переменные окружения берутся из .env.local вручную или через shell export
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || "" // Use service role if available for full visibility, or anon
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
 async function checkDbState() {
   console.log("Checking chats and assignments...");
-  
+
   const { data: chats, error: chatsError } = await supabase
     .from("chats")
     .select(`
@@ -33,10 +33,10 @@ async function checkDbState() {
     .select("id, display_name");
 
   if (mgrError) {
-     console.error("Managers error:", mgrError);
+    console.error("Managers error:", mgrError);
   } else {
-     console.log("Managers found:", managers?.length);
-     console.log("Manager names:", managers?.map(m => m.display_name));
+    console.log("Managers found:", managers?.length);
+    console.log("Manager names:", managers?.map((m) => m.display_name));
   }
 }
 
