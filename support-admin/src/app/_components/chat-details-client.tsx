@@ -358,7 +358,12 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
       </div>
 
       {!isResolved && (
-        <ChatMessageInput chatId={selectedChat.id} />
+          <ChatMessageInput
+              chatId={selectedChat.id}
+              onLocalMessage={(msg) => {
+                setMessages(prev => [...prev, msg]);
+              }}
+          />
       )}
       
       {isResolved && (
