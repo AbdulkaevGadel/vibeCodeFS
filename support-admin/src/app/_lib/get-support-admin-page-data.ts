@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getCurrentManager } from "./manager-utils";
 import { FlashStatus } from "./flash-cookie";
 import { ChatMessage, ChatSummary, PageProps, SupportAdminPageData } from "./page-types";
 import {
@@ -53,6 +54,9 @@ type ChatMessageRow = {
   sender_type: "client" | "manager";
   manager_id: string | null;
   text: string;
+  delivery_status: "pending" | "sent" | "failed" | null;
+  delivery_error: string | null;
+  client_message_id: string | null;
   legacy_message_id: number | null;
   created_at: string;
 };
@@ -146,9 +150,35 @@ export async function getSupportAdminPageData(
   let chats: ChatRow[] = [];
   let chatMessages: ChatMessage[] = [];
   let errorMessage: string | null = null;
+  let allManagers: Manager[] = [];
+  let currentManager: Manager | null = null;
 
   try {
     const supabase = await createSupabaseServerClient();
+    
+    // 0. Fetch current manager
+    try {
+      currentManager = await getCurrentManager();
+    } catch (e: any) {
+      console.warn("Could not fetch current manager:", e);
+      errorMessage = "Ошибка авторизации: не удалось загрузить профиль менеджера. " + e.message;
+    }
+
+    // 1. Fetch ALL managers
+    const { data: managersAllData, error: managersAllError } = await supabase
+      .from("managers")
+      .select("id, display_name, role")
+      .order("display_name");
+
+    if (!managersAllError && managersAllData) {
+      allManagers = managersAllData.map(m => ({
+        id: m.id,
+        displayName: m.display_name,
+        role: m.role
+      }));
+    }
+
+    // 2. Fetch chats
     const { data: chatsData, error: chatsError } = await supabase
       .from("chats")
       .select(
@@ -208,9 +238,9 @@ export async function getSupportAdminPageData(
       const chatIds = chats.map((chat) => chat.id);
       const { data: chatMessagesData, error: chatMessagesError } = await supabase
         .from("chat_messages")
-        .select("id, chat_id, sender_type, manager_id, text, legacy_message_id, created_at")
+        .select("id, chat_id, sender_type, manager_id, text, delivery_status, delivery_error, client_message_id, legacy_message_id, created_at")
         .in("chat_id", chatIds)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (chatMessagesError) {
         errorMessage = "Не удалось загрузить сообщения из relational модели.";
@@ -222,13 +252,16 @@ export async function getSupportAdminPageData(
           senderType: message.sender_type,
           managerId: message.manager_id,
           text: message.text,
+          deliveryStatus: message.delivery_status,
+          deliveryError: message.delivery_error,
+          clientMessageId: message.client_message_id,
           legacyMessageId: message.legacy_message_id,
           createdAt: message.created_at,
         }));
       }
     }
   } catch (error) {
-    errorMessage = "Проверь NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_ANON_KEY.";
+    errorMessage = "Ошибка при загрузке данных.";
     console.error(error);
   }
 
@@ -258,6 +291,8 @@ export async function getSupportAdminPageData(
     chatSummaries: botFilteredChats,
     selectedChat,
     selectedChatMessages,
+    allManagers,
+    currentManager,
     statusMessage: getStatusMessage(flashStatus),
     statusVariant: getStatusVariant(flashStatus),
     errorMessage,

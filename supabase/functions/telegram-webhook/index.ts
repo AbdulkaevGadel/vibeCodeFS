@@ -41,9 +41,6 @@ Deno.serve(async (request) => {
       await saveIncomingMessage(message, botUsername)
     }
 
-    const replyText = getReplyText(messageText)
-    await sendTelegramMessage(botToken, chatId, replyText)
-
     return createSuccessResponse()
   } catch (error) {
     console.error("telegram-webhook error:", error)

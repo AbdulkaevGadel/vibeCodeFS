@@ -1,4 +1,4 @@
-import { ChatMessage, ChatSummary } from "../_lib/page-types";
+import { ChatMessage, ChatSummary, Manager } from "../_lib/page-types";
 import { ChatDetailsClient } from "./chat-details-client";
 
 const detailsSectionClassName = "support-panel p-5";
@@ -9,12 +9,16 @@ type ChatDetailsProps = {
   selectedChat: ChatSummary | null;
   selectedChatMessages: ChatMessage[];
   selectedBotKey: string | null;
+  allManagers: Manager[];
+  currentManager: Manager | null;
 };
 
 export function ChatDetails({
   selectedChat,
   selectedChatMessages,
   selectedBotKey,
+  allManagers,
+  currentManager,
 }: ChatDetailsProps) {
   return (
     <section className={detailsSectionClassName}>
@@ -23,6 +27,8 @@ export function ChatDetails({
           selectedChat={selectedChat}
           initialMessages={selectedChatMessages}
           selectedBotKey={selectedBotKey}
+          allManagers={allManagers}
+          currentManager={currentManager}
         />
       ) : (
         <div className={emptyStateClassName}>

@@ -20,6 +20,9 @@ export type ChatMessage = {
   senderType: "client" | "manager";
   managerId: string | null;
   text: string;
+  deliveryStatus: "pending" | "sent" | "failed" | null;
+  deliveryError: string | null;
+  clientMessageId: string | null;
   legacyMessageId: number | null;
   createdAt: string;
 };
@@ -47,6 +50,12 @@ export type ChatSummary = {
   updatedAt: string;
 };
 
+export type Manager = {
+  id: string;
+  displayName: string;
+  role: string;
+};
+
 export type SupportAdminPageData = {
   botOptions: BotOption[];
   selectedBot: BotOption | null;
@@ -55,6 +64,8 @@ export type SupportAdminPageData = {
   chatSummaries: ChatSummary[];
   selectedChat: ChatSummary | null;
   selectedChatMessages: ChatMessage[];
+  allManagers: Manager[];
+  currentManager: Manager | null;
   statusMessage: string | null;
   statusVariant: "success" | "error" | null;
   errorMessage: string | null;

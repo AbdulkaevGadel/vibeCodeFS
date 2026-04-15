@@ -48,6 +48,8 @@ export default async function Home({ searchParams }: PageProps) {
               selectedChat={pageData.selectedChat}
               selectedChatMessages={pageData.selectedChatMessages}
               selectedBotKey={pageData.selectedBot?.key ?? null}
+              allManagers={pageData.allManagers}
+              currentManager={pageData.currentManager}
             />
           </section>
         )}
