@@ -5,25 +5,43 @@ import { sendManagerMessageAction } from "../(protected)/_actions/chat-actions";
 
 type ChatMessageInputProps = {
   chatId: string;
+  onLocalMessage?: (msg: any) => void;
 };
 
-export function ChatMessageInput({ chatId }: ChatMessageInputProps) {
+export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProps) {
   const [text, setText] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const handleSend = () => {
     if (!text.trim() || isPending) return;
 
+    const clientMessageId = crypto.randomUUID();
+
+
+    onLocalMessage?.({
+      id: "temp-" + clientMessageId,
+      chatId,
+      senderType: "manager",
+      managerId: null,
+      text,
+      deliveryStatus: "pending",
+      deliveryError: null,
+      clientMessageId,
+      createdAt: new Date().toISOString(),
+    });
+
+    setText("");
+
     startTransition(async () => {
-      const clientMessageId = crypto.randomUUID();
       const result = await sendManagerMessageAction(chatId, text, clientMessageId);
-      if (result.success) {
-        setText("");
-      } else {
+
+      if (!result.success) {
         alert("Ошибка при отправке: " + result.error);
       }
     });
   };
+
+
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
