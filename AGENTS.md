@@ -228,6 +228,7 @@ Before creating any migration, the agent MUST explicitly say:
 Rules:
 - one migration = one clear purpose
 - no silent schema changes
+- **IMMUTABLE MIGRATIONS:** Once a migration is pushed to the database, do NOT modify its file. Any further changes or fixes must be created as a NEW migration file (Incremental approach).
 - no direct manual table editing without matching migration intent
 
 ---
@@ -249,6 +250,11 @@ The agent must clearly label:
 - `Code Step`
 - `Decision Required`
 - `Verification`
+
+### SQL Editor Restrictions
+- **READ-ONLY:** Use SQL Editor primarily for the `SELECT` query to inspect data or verify results.
+- **NO SCHEMA CHANGES:** Do NOT use SQL Editor to create or alter tables, functions, or triggers manually. All schema changes must go through migrations.
+- **SECRET EXCEPTION:** The only allowed mutation in SQL Editor is the initialization or update of sensitive secrets (e.g., `system_settings` or `internal_secret`) that should not be committed to Git.
 
 ---
 
