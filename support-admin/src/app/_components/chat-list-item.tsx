@@ -39,6 +39,7 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
       <div className={itemContentClassName}>
         <div className={itemBodyClassName}>
           <p className={itemTitleClassName}>{chat.title}</p>
+
           {chat.fullName ? (
             <p className={isActive ? activeFullNameClassName : inactiveFullNameClassName}>
               {chat.fullName}
@@ -48,6 +49,11 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
             {chat.subtitle}
           </p>
         </div>
+        {chat.isUnread && (
+            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded ml-2">
+    New
+  </span>
+        )}
         <span className={isActive ? activeCountClassName : inactiveCountClassName}>
           {chat.messageCount}
         </span>

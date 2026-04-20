@@ -50,12 +50,17 @@ function isMatchingBot(
   return getBotKey(row.bot_username) === selectedBotKey;
 }
 
-function updateChatFromRealtime(chat: ChatSummary, row: RealtimeChatRow): ChatSummary {
+function updateChatFromRealtime(
+    chat: ChatSummary,
+    row: RealtimeChatRow,
+    isUnread: boolean
+): ChatSummary {
   return {
     ...chat,
     status: row.status,
     lastMessageAt: row.last_message_at,
     updatedAt: row.updated_at,
+    isUnread,
   };
 }
 
@@ -146,7 +151,13 @@ export function ChatList({
 
                   const next = sortChatsByActivity(
                       chatsRef.current.map((c) =>
-                          c.id === updated.id ? updateChatFromRealtime(c, updated) : c,
+                          c.id === updated.id
+                              ? updateChatFromRealtime(
+                                  c,
+                                  updated,
+                                  updated.id !== selectedChatIdRef.current
+                              )
+                              : c
                       ),
                   );
 
@@ -179,6 +190,19 @@ export function ChatList({
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedChatId) return;
+
+    const next = chatsRef.current.map((chat) =>
+        chat.id === selectedChatId
+            ? { ...chat, isUnread: false }
+            : chat
+    );
+
+    chatsRef.current = next;
+    setChats(next);
+  }, [selectedChatId]);
 
   return (
       <aside className="support-panel p-4">
