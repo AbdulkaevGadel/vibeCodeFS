@@ -40,12 +40,16 @@ function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Ma
   if (message.senderType === "manager") {
     if (message.managerId) {
       const mgr = allManagers.find(m => m.id === message.managerId);
-      if (mgr) return mgr.displayName;
+      if (mgr) return getManagerFullName(mgr);
     }
     return "Менеджер";
   }
 
   return chatTitle;
+}
+
+function getManagerFullName(manager: Manager) {
+  return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
 }
 
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
@@ -210,7 +214,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           <div className="flex items-center gap-3">
             <h2 className={detailsTitleClassName}>{selectedChat.title}</h2>
             {selectedChat.assignedManagerName && (() => {
-              const assignedMgr = allManagers.find(m => m.displayName === selectedChat.assignedManagerName);
+              const assignedMgr = allManagers.find(m => m.id === selectedChat.assignedManagerId);
               const roleLabel = assignedMgr?.role?.toUpperCase() ?? "Менеджер";
               return (
                 <span className="mt-2 flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 ring-1 ring-inset ring-indigo-500/20">
@@ -267,7 +271,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                             onClick={() => handleTransfer(mgr.id)}
                             className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50 transition"
                           >
-                            {mgr.displayName} <span className="text-[10px] text-slate-400">({mgr.role})</span>
+                            {getManagerFullName(mgr)} <span className="text-[10px] text-slate-400">({mgr.role})</span>
                           </button>
                         ))}
                       </div>

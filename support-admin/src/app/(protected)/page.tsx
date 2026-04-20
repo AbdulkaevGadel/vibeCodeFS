@@ -26,6 +26,8 @@ export default async function Home({ searchParams }: PageProps) {
           chatCount={pageData.chatSummaries.length}
           botOptions={pageData.botOptions}
           selectedBotKey={pageData.selectedBot?.key ?? null}
+          allManagers={pageData.allManagers}
+          currentManager={pageData.currentManager}
         />
 
         {pageData.statusMessage && pageData.statusVariant ? (

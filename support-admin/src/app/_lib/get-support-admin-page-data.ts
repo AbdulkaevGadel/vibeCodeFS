@@ -27,6 +27,7 @@ type ChatRow = {
     first_name: string | null;
     last_name: string | null;
   } | null;
+  assigned_manager_id: string | null;
   assigned_manager_name: string | null;
 };
 
@@ -73,6 +74,10 @@ function getStatusVariant(status?: FlashStatus) {
   return null;
 }
 
+function getManagerLabel(manager: Pick<Manager, "displayName" | "lastName">) {
+  return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
+}
+
 function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, ChatMessage[]>) {
   return chats
     .map<ChatSummary>((chat) => {
@@ -96,6 +101,7 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
         }),
         subtitle: getMessagePreview(latestMessage?.text ?? null),
         username: client?.username ?? null,
+        assignedManagerId: chat.assigned_manager_id,
         assignedManagerName: chat.assigned_manager_name,
         telegramUserId: client?.telegram_user_id ?? 0,
         lastMessageAt: latestMessage?.createdAt ?? chat.updated_at,
@@ -115,7 +121,7 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
     });
 }
 
-function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, string>) {
+function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, Manager>) {
   return rows.map<ChatRow>((row) => {
     // Безопасное извлечение назначения
     const rawAssignment = row.chat_assignments;
@@ -134,7 +140,8 @@ function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, 
       created_at: row.created_at,
       updated_at: row.updated_at,
       clients: (client as ClientResponse) || null,
-      assigned_manager_name: mgrId && managersMap[mgrId] ? managersMap[mgrId] : null,
+      assigned_manager_id: mgrId ?? null,
+      assigned_manager_name: mgrId && managersMap[mgrId] ? getManagerLabel(managersMap[mgrId]) : null,
     };
   });
 }
@@ -167,13 +174,15 @@ export async function getSupportAdminPageData(
     // 1. Fetch ALL managers
     const { data: managersAllData, error: managersAllError } = await supabase
       .from("managers")
-      .select("id, display_name, role")
+      .select("id, email, display_name, last_name, role")
       .order("display_name");
 
     if (!managersAllError && managersAllData) {
       allManagers = managersAllData.map(m => ({
         id: m.id,
+        email: m.email,
         displayName: m.display_name,
+        lastName: m.last_name,
         role: m.role
       }));
     }
@@ -216,18 +225,24 @@ export async function getSupportAdminPageData(
         if (mgrId) managerIds.add(mgrId);
       });
 
-      let managersMap: Record<string, string> = {};
+      let managersMap: Record<string, Manager> = {};
       if (managerIds.size > 0) {
         const { data: managersData, error: managersError } = await supabase
           .from("managers")
-          .select("id, display_name")
+          .select("id, email, display_name, last_name, role")
           .in("id", Array.from(managerIds));
 
         if (!managersError && managersData) {
           managersMap = managersData.reduce((acc, mgr) => {
-            acc[mgr.id] = mgr.display_name;
+            acc[mgr.id] = {
+              id: mgr.id,
+              email: mgr.email,
+              displayName: mgr.display_name,
+              lastName: mgr.last_name,
+              role: mgr.role,
+            };
             return acc;
-          }, {} as Record<string, string>);
+          }, {} as Record<string, Manager>);
         }
       }
 

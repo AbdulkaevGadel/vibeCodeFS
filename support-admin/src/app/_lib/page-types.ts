@@ -42,6 +42,7 @@ export type ChatSummary = {
   fullName: string | null;
   subtitle: string;
   username: string | null;
+  assignedManagerId: string | null;
   assignedManagerName: string | null;
   telegramUserId: number;
   lastMessageAt: string;
@@ -52,7 +53,9 @@ export type ChatSummary = {
 
 export type Manager = {
   id: string;
+  email: string | null;
   displayName: string;
+  lastName: string | null;
   role: string;
 };
 

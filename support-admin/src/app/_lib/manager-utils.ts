@@ -18,7 +18,7 @@ export async function getCurrentManager(): Promise<Manager> {
 
   const { data: manager, error: managerError } = await supabase
     .from("managers")
-    .select("id, display_name, role")
+    .select("id, email, display_name, last_name, role")
     .eq("auth_user_id", user.id)
     .single();
 
@@ -29,7 +29,9 @@ export async function getCurrentManager(): Promise<Manager> {
 
   return {
     id: manager.id,
+    email: manager.email,
     displayName: manager.display_name,
+    lastName: manager.last_name,
     role: manager.role as any,
   };
 }
