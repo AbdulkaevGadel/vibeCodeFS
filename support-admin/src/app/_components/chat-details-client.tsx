@@ -52,6 +52,12 @@ function getManagerFullName(manager: Manager) {
   return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
 }
 
+function sortMessagesByCreatedAt(messages: ChatMessage[]) {
+  return [...messages].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+}
+
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -81,8 +87,6 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           if (payload.eventType === "INSERT") {
             const newMessage = payload.new as any;
             setMessages((prev) => {
-              if (prev.some(m => m.id === newMessage.id)) return prev;
-              
               const formatted: ChatMessage = {
                 id: newMessage.id,
                 chatId: newMessage.chat_id,
@@ -95,15 +99,25 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                 legacyMessageId: newMessage.legacy_message_id,
                 createdAt: newMessage.created_at,
               };
-              return [...prev, formatted];
+
+              if (prev.some((message) => message.id === formatted.id)) {
+                return prev;
+              }
+
+              const withoutOptimisticDuplicate = formatted.clientMessageId
+                ? prev.filter((message) => message.clientMessageId !== formatted.clientMessageId)
+                : prev;
+
+              return sortMessagesByCreatedAt([...withoutOptimisticDuplicate, formatted]);
             });
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as any;
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === updated.id
+                m.id === updated.id || m.clientMessageId === updated.client_message_id
                   ? {
                       ...m,
+                      id: updated.id,
                       deliveryStatus: updated.delivery_status,
                       deliveryError: updated.delivery_error,
                     }
@@ -365,7 +379,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           <ChatMessageInput
               chatId={selectedChat.id}
               onLocalMessage={(msg) => {
-                setMessages(prev => [...prev, msg]);
+                setMessages(prev => sortMessagesByCreatedAt([...prev, msg]));
               }}
           />
       )}

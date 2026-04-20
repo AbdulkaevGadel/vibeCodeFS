@@ -27,6 +27,10 @@ type ChatListItemProps = {
 };
 
 export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemProps) {
+  const lastActivityLabel = chat.lastMessageAt
+    ? new Date(chat.lastMessageAt).toLocaleDateString("ru-RU")
+    : "нет сообщений";
+
   return (
     <a
       href={getQueryString(selectedBotKey, chat.id)}
@@ -51,7 +55,7 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
 
       <div className={isActive ? activeMetaClassName : inactiveMetaClassName}>
         <span>chat_id: {chat.telegramChatId}</span>
-        <span>{new Date(chat.lastMessageAt).toLocaleDateString("ru-RU")}</span>
+        <span>{lastActivityLabel}</span>
       </div>
     </a>
   );
