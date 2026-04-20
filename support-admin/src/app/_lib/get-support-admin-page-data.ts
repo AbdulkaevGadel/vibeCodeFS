@@ -19,6 +19,7 @@ type ChatRow = {
   telegram_chat_id: number;
   bot_username: string;
   status: string;
+  last_message_at: string | null;
   created_at: string;
   updated_at: string;
   clients: {
@@ -43,6 +44,7 @@ type ChatRowResponse = {
   telegram_chat_id: number;
   bot_username: string;
   status: string;
+  last_message_at: string | null;
   created_at: string;
   updated_at: string;
   clients: ClientResponse[] | ClientResponse | null;
@@ -104,13 +106,30 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
         assignedManagerId: chat.assigned_manager_id,
         assignedManagerName: chat.assigned_manager_name,
         telegramUserId: client?.telegram_user_id ?? 0,
-        lastMessageAt: latestMessage?.createdAt ?? chat.updated_at,
+        lastMessageAt: chat.last_message_at,
         messageCount: messages.length,
         createdAt: chat.created_at,
         updatedAt: chat.updated_at,
       };
     })
     .sort((left, right) => {
+      if (left.lastMessageAt && right.lastMessageAt) {
+        const timeCompare =
+          new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime();
+
+        if (timeCompare !== 0) {
+          return timeCompare;
+        }
+      }
+
+      if (left.lastMessageAt && !right.lastMessageAt) {
+        return -1;
+      }
+
+      if (!left.lastMessageAt && right.lastMessageAt) {
+        return 1;
+      }
+
       const titleCompare = left.title.localeCompare(right.title, "ru", { sensitivity: "base" });
 
       if (titleCompare !== 0) {
@@ -137,6 +156,7 @@ function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, 
       telegram_chat_id: row.telegram_chat_id,
       bot_username: row.bot_username,
       status: row.status,
+      last_message_at: row.last_message_at,
       created_at: row.created_at,
       updated_at: row.updated_at,
       clients: (client as ClientResponse) || null,
@@ -196,6 +216,7 @@ export async function getSupportAdminPageData(
           telegram_chat_id,
           bot_username,
           status,
+          last_message_at,
           created_at,
           updated_at,
           clients!inner(
@@ -209,7 +230,8 @@ export async function getSupportAdminPageData(
           )
         `,
       )
-      .order("updated_at", { ascending: false });
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
 
     if (chatsError) {
       errorMessage = "Не удалось загрузить чаты из relational модели.";

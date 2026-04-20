@@ -27,6 +27,7 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
       deliveryStatus: "pending",
       deliveryError: null,
       clientMessageId,
+      legacyMessageId: null,
       createdAt: new Date().toISOString(),
     });
 
