@@ -49,6 +49,7 @@ export type ChatSummary = {
   messageCount: number;
   createdAt: string;
   updatedAt: string;
+  isUnread?: boolean;
 };
 
 export type Manager = {
