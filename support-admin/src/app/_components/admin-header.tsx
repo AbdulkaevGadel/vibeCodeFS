@@ -1,7 +1,8 @@
 import { RefreshButton } from "../refresh-button";
-import { BotOption } from "../_lib/page-types";
+import { BotOption, Manager } from "../_lib/page-types";
 import { logoutAction } from "../_actions/logout";
 import { BotTabs } from "./bot-tabs";
+import { ManagersAdminModal } from "./managers-admin-modal";
 
 const headerClassName = "support-panel-strong p-6";
 const headerLayoutClassName =
@@ -27,6 +28,8 @@ type AdminHeaderProps = {
   chatCount: number;
   botOptions: BotOption[];
   selectedBotKey: string | null;
+  allManagers: Manager[];
+  currentManager: Manager | null;
 };
 
 export function AdminHeader({
@@ -35,6 +38,8 @@ export function AdminHeader({
   chatCount,
   botOptions,
   selectedBotKey,
+  allManagers,
+  currentManager,
 }: AdminHeaderProps) {
   return (
     <header className={headerClassName}>
@@ -51,6 +56,9 @@ export function AdminHeader({
         <div className={statsWrapperClassName}>
           <div className={actionsWrapperClassName}>
             <RefreshButton />
+            {currentManager?.role === "admin" ? (
+              <ManagersAdminModal managers={allManagers} />
+            ) : null}
             <form action={logoutAction}>
               <button type="submit" className={logoutButtonClassName}>
                 Выйти

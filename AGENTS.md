@@ -448,6 +448,20 @@ Goal:
 
 ---
 
+## 25. Task History Rule
+
+После каждой завершённой implementation-задачи агент должен создать один файл истории в `docs/plan/history/`.
+
+Rules:
+- one completed task = one history file
+- filename format: `YYYY-MM-DD-short-task-name.md`
+- language: Russian
+- include: goal, decisions, migrations, code steps, manual steps, verification, result
+- `docs/plan/plan.md` remains the active roadmap
+- `docs/plan/history/` is a completed-task journal, not a replacement for the roadmap
+
+---
+
 # 🔥 TL;DR
 
 - не пиши код без `go`
