@@ -90,11 +90,12 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error("telegram-outcoming error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
     
     // В теории здесь можно попытаться пометить сообщение как failed 
     // если мы знаем message_id, но если упало на парсинге JSON — мы его не знаем.
     
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     })

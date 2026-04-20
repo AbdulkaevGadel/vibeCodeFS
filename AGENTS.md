@@ -160,6 +160,23 @@ Edge Functions run on Deno, NOT Node.js.
 
 If Node.js patterns are used → this is a mistake
 
+### Local Deno Typing Rule
+
+For Supabase Edge Functions, local IDE/TypeScript support is configured once at the shared functions level:
+
+- `supabase/functions/tsconfig.json`
+- `supabase/functions/deno-shim.d.ts`
+
+Rules:
+- do NOT copy `tsconfig.json` or `deno-shim.d.ts` into every Edge Function
+- new Edge Functions must live inside `supabase/functions` so they are covered by the shared config
+- if WebStorm/TypeScript shows `TS2304: Cannot find name 'Deno'`, first check the shared `tsconfig.json` and `deno-shim.d.ts`
+- do NOT fix Deno typing problems with Node.js dependencies such as `@types/node`
+- do NOT use `npm install` as a solution for Deno runtime typing
+
+Verification:
+- `node support-admin/node_modules/typescript/bin/tsc -p supabase/functions/tsconfig.json`
+
 ---
 
 ## 11. Supabase Rules
