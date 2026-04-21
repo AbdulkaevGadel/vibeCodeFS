@@ -18,7 +18,7 @@ export async function getKnowledgeBaseData(
 ): Promise<KnowledgeBasePageData> {
   let articles: KnowledgeArticle[] = [];
   let selectedArticle: KnowledgeArticle | null = null;
-  let history: KnowledgeArticleHistory[];
+  let history: KnowledgeArticleHistory[] = [];
   let currentManager: Manager | null = null;
   let totalCount = 0;
   let publishedCount = 0;
