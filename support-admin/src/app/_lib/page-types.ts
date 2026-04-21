@@ -4,6 +4,8 @@ export type PageProps = {
   searchParams?: Promise<{
     bot?: SearchParamValue;
     chat?: SearchParamValue;
+    article?: SearchParamValue;
+    search?: SearchParamValue;
   }>;
 };
 
