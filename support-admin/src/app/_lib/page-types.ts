@@ -4,6 +4,8 @@ export type PageProps = {
   searchParams?: Promise<{
     bot?: SearchParamValue;
     chat?: SearchParamValue;
+    article?: SearchParamValue;
+    search?: SearchParamValue;
   }>;
 };
 
@@ -76,4 +78,32 @@ export type SupportAdminPageData = {
   statusVariant: "success" | "error" | null;
   errorMessage: string | null;
   headerBotLabel: string;
+};
+
+export type ArticleStatus = "draft" | "published" | "archived";
+
+export type KnowledgeArticle = {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  status: ArticleStatus;
+  version: number;
+  createdById: string | null;
+  updatedById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  archivedById: string | null;
+};
+
+export type KnowledgeArticleHistory = {
+  id: string;
+  articleId: string;
+  title: string;
+  content: string;
+  version: number;
+  changeType: "create" | "update" | "publish" | "unpublish" | "archive" | "restore";
+  changedById: string | null;
+  changedAt: string;
 };

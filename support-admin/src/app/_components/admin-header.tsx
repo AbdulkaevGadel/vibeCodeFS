@@ -1,5 +1,9 @@
+"use client";
+
 import { RefreshButton } from "../refresh-button";
 import { BotOption, Manager } from "../_lib/page-types";
+import { usePathname } from "next/navigation";
+import { Button } from "./ui/button";
 import { logoutAction } from "../_actions/logout";
 import { BotTabs } from "./bot-tabs";
 import { ManagersAdminModal } from "./managers-admin-modal";
@@ -19,8 +23,6 @@ const statLabelOnDarkClassName = "text-xs uppercase tracking-[0.24em] text-white
 const statLabelClassName = "support-text-muted text-xs uppercase tracking-[0.24em]";
 const darkStatValueClassName = "mt-2 text-lg font-semibold";
 const statValueClassName = "support-text-primary mt-2 text-2xl font-semibold";
-const logoutButtonClassName =
-  "rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800";
 
 type AdminHeaderProps = {
   headerBotLabel: string;
@@ -30,6 +32,8 @@ type AdminHeaderProps = {
   selectedBotKey: string | null;
   allManagers: Manager[];
   currentManager: Manager | null;
+  kbTotalCount?: number;
+  kbPublishedCount?: number;
 };
 
 export function AdminHeader({
@@ -40,12 +44,17 @@ export function AdminHeader({
   selectedBotKey,
   allManagers,
   currentManager,
+  kbTotalCount = 0,
+  kbPublishedCount = 0,
 }: AdminHeaderProps) {
+  const pathname = usePathname();
+  const isKnowledgeBase = pathname?.startsWith("/knowledge-base");
+
   return (
     <header className={headerClassName}>
       <div className={headerLayoutClassName}>
         <div>
-          <p className={sectionTitleClassName}>SupportBot Admin</p>
+          <p className={sectionTitleClassName}>VibeCode Support</p>
           <h1 className={headerTitleClassName}>{headerBotLabel}</h1>
           <p className={headerDescriptionClassName}>
             Relational read-only экран для просмотра чатов, клиентского контекста и истории
@@ -56,34 +65,59 @@ export function AdminHeader({
         <div className={statsWrapperClassName}>
           <div className={actionsWrapperClassName}>
             <RefreshButton />
+            
+            <Button 
+              href={isKnowledgeBase ? "/" : "/knowledge-base"} 
+              variant="secondary"
+            >
+              {isKnowledgeBase ? "← Вернуться к чатам" : "База знаний"}
+            </Button>
+
             {currentManager?.role === "admin" ? (
               <ManagersAdminModal managers={allManagers} />
             ) : null}
+            
             <form action={logoutAction}>
-              <button type="submit" className={logoutButtonClassName}>
+              <Button 
+                type="submit" 
+                variant="secondary"
+              >
+                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
                 Выйти
-              </button>
+              </Button>
             </form>
           </div>
 
           <div className={statsGridClassName}>
-            <div className={darkStatCardClassName}>
-              <p className={statLabelOnDarkClassName}>Бот</p>
-              <p className={darkStatValueClassName}>{headerBotLabel}</p>
+            {!isKnowledgeBase && (
+              <div className={darkStatCardClassName}>
+                <p className={statLabelOnDarkClassName}>Бот</p>
+                <p className={darkStatValueClassName}>{headerBotLabel}</p>
+              </div>
+            )}
+            <div className={lightStatCardClassName}>
+              <p className={statLabelClassName}>
+                {isKnowledgeBase ? "Всего статей" : "Сообщений"}
+              </p>
+              <p className={statValueClassName}>
+                {isKnowledgeBase ? kbTotalCount : messageCount}
+              </p>
             </div>
             <div className={lightStatCardClassName}>
-              <p className={statLabelClassName}>Сообщений</p>
-              <p className={statValueClassName}>{messageCount}</p>
-            </div>
-            <div className={lightStatCardClassName}>
-              <p className={statLabelClassName}>Чатов</p>
-              <p className={statValueClassName}>{chatCount}</p>
+              <p className={statLabelClassName}>
+                {isKnowledgeBase ? "Опубликовано" : "Чатов"}
+              </p>
+              <p className={statValueClassName}>
+                {isKnowledgeBase ? kbPublishedCount : chatCount}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      <BotTabs botOptions={botOptions} selectedBotKey={selectedBotKey} />
+      {!isKnowledgeBase && <BotTabs botOptions={botOptions} selectedBotKey={selectedBotKey} />}
     </header>
   );
 }

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useTransition, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { ChatMessage, ChatSummary, Manager } from "../_lib/page-types";
 import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatMessageInput } from "./chat-message-input";
+import { Button } from "./ui/button";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
-const detailsEyebrowClassName = "support-text-muted text-xs uppercase tracking-[0.3em]";
+const detailsEyebrowClassName = "support-text-muted text-xs uppercase tracking-[0.35em]";
 const detailsTitleClassName = "support-text-primary mt-2 text-2xl font-semibold";
 const detailsFullNameClassName = "support-text-secondary mt-2 text-sm";
 const detailsMetaListClassName = "support-text-secondary mt-3 flex wrap gap-2 text-xs";
@@ -24,9 +26,6 @@ const messageDateClassName = "support-text-muted mt-1 text-xs";
 const messageBadgeClassName =
   "support-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em]";
 const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
-const primaryButtonClassName = "rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2";
-const secondaryButtonClassName = "rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2";
-const dangerButtonClassName = "rounded-xl border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 flex items-center gap-2";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -59,6 +58,7 @@ function sortMessagesByCreatedAt(messages: ChatMessage[]) {
 }
 
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [showTransfer, setShowTransfer] = useState(false);
@@ -83,7 +83,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     const supabase = createSupabaseClient();
     
     const channel = supabase
-      .channel(`chat_messages:${selectedChat.id}`)
+      .channel(`chat_details:${selectedChat.id}`)
       .on(
         "postgres_changes",
         {
@@ -136,6 +136,20 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chats",
+          filter: `id=eq.${selectedChat.id}`,
+        },
+        () => {
+          // Metadata (status, assigned manager) changed.
+          // Trigger SSR refresh to get new props.
+          router.refresh();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -154,7 +168,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
 
   const handleTransfer = (targetManagerId: string) => {
     startTransition(async () => {
-      const result = await transferChatAction(selectedChat.id, targetManagerId);
+      const result = await transferChatAction(selectedChat.id, targetManagerId, selectedChat.assignedManagerId);
       if (!result.success) {
         alert("Ошибка: " + result.error);
       } else {
@@ -178,7 +192,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     startTransition(async () => {
       // Подгружаем новый экшен динамически, чтобы не раздувать импорты в начале (условно)
       const { updateChatStatusAction } = await import("../(protected)/_actions/chat-actions");
-      const result = await updateChatStatusAction(selectedChat.id, newStatus);
+      const result = await updateChatStatusAction(selectedChat.id, newStatus, selectedChat.status);
       if (!result.success) {
         alert("Ошибка: " + result.error);
       }
@@ -264,38 +278,40 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {selectedChat.status === "open" && (
-            <button
+            <Button
               onClick={handleTakeIntoWork}
-              disabled={isPending}
-              className={primaryButtonClassName}
+              isLoading={isPending}
+              variant="primary"
             >
               {isPending ? "Обработка..." : "Взять в работу"}
-            </button>
+            </Button>
           )}
 
           {selectedChat.status !== "open" && (
             <>
               {!isResolved && (
                 <div className="relative">
-                  <button
+                  <Button
                     onClick={() => setShowTransfer(!showTransfer)}
-                    disabled={isPending}
-                    className={secondaryButtonClassName}
+                    isLoading={isPending}
+                    variant="secondary"
                   >
                     Передать
-                  </button>
+                  </Button>
                   {showTransfer && (
                     <div className="absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5">
                       <p className="mb-2 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Выберите менеджера</p>
                       <div className="max-h-48 overflow-y-auto">
                         {allManagers.map(mgr => (
-                          <button
+                          <Button
                             key={mgr.id}
                             onClick={() => handleTransfer(mgr.id)}
-                            className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50 transition"
+                            variant="ghost"
+                            className="w-full justify-start rounded-lg px-3 py-2 text-left"
+                            size="sm"
                           >
-                            {getManagerFullName(mgr)} <span className="text-[10px] text-slate-400">({mgr.role})</span>
-                          </button>
+                            {getManagerFullName(mgr)} <span className="ml-1 text-[10px] text-slate-400">({mgr.role})</span>
+                          </Button>
                         ))}
                       </div>
                     </div>
@@ -322,14 +338,14 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           )}
 
           {isAdmin && (
-            <button
+            <Button
               onClick={handleDeleteChat}
-              disabled={isPending}
-              className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 flex items-center gap-2"
+              isLoading={isPending}
+              variant="danger"
               title="Удалить весь чат (только admin)"
             >
               🗑️ Удалить чат
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -341,14 +357,15 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         {messages.map((message, index) => (
           <article key={message.id} className={`relative max-w-[80%] ${messageCardClassName} transition hover:shadow-md ${message.senderType === 'manager' ? 'ml-auto border-l-4 border-l-slate-900 bg-white' : 'mr-auto bg-slate-50'}`}>
             {isAdmin && (
-              <button
+              <Button
                 onClick={() => handleDeleteMessage(message.id)}
-                disabled={isPending}
-                className="absolute bottom-2 right-2 rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                isLoading={isPending}
+                variant="ghost"
+                className="absolute bottom-2 right-2 !p-1.5 text-red-400 hover:text-red-700"
                 title="Удалить сообщение"
               >
                 🗑️
-              </button>
+              </Button>
             )}
             <div className={messageHeaderClassName}>
               <div className={messageAuthorClassName}>

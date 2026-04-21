@@ -3,22 +3,22 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
+import { Button } from "./_components/ui/button";
+
 export function RefreshButton() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   return (
-    <button
-      type="button"
+    <Button
       onClick={() => {
         startTransition(() => {
           router.refresh();
         });
       }}
-      className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-950 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-      disabled={isPending}
+      isLoading={isPending}
     >
       {isPending ? "Обновляю..." : "Обновить"}
-    </button>
+    </Button>
   );
 }

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Manager } from "../_lib/page-types";
+import { Button } from "./ui/button";
 import {
   addManagerAction,
   createAuthUserAction,
@@ -33,10 +34,6 @@ const inputClassName =
   "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const selectClassName =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
-const primaryButtonClassName =
-  "rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50";
-const secondaryButtonClassName =
-  "rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50";
 const tableHeaderClassName = "text-left text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400";
 const tableCellClassName = "border-t border-slate-100 py-3 pr-3 text-sm text-slate-700";
 
@@ -182,9 +179,9 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                       />
                     </label>
                     <div className="md:col-span-2">
-                      <button type="submit" disabled={isPending} className={primaryButtonClassName}>
+                      <Button type="submit" isLoading={isPending} variant="primary">
                         Создать пользователя
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 </section>
@@ -213,9 +210,9 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                       <input name="lastName" className={`${inputClassName} mt-1`} />
                     </label>
                     <div className="md:col-span-2">
-                      <button type="submit" disabled={isPending} className={primaryButtonClassName}>
+                      <Button type="submit" isLoading={isPending} variant="primary">
                         Добавить менеджера
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 </section>
@@ -240,13 +237,13 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                           <td className={tableCellClassName}>{manager.email ?? "-"}</td>
                           <td className={tableCellClassName}>{manager.role}</td>
                           <td className={tableCellClassName}>
-                            <button
-                              type="button"
-                              className={secondaryButtonClassName}
+                            <Button
+                              variant="secondary"
+                              size="sm"
                               onClick={() => setEditingManager(manager)}
                             >
                               Редактировать
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -285,17 +282,17 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                       </select>
                     </label>
                     <div className="flex items-end gap-3">
-                      <button type="submit" disabled={isPending} className={primaryButtonClassName}>
+                      <Button type="submit" isLoading={isPending} variant="primary">
                         Сохранить
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        disabled={isPending}
-                        className={secondaryButtonClassName}
+                        isLoading={isPending}
+                        variant="ghost"
                         onClick={() => setEditingManager(null)}
                       >
                         Отмена
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 </section>
@@ -307,9 +304,9 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
 
   return (
     <>
-      <button type="button" className={secondaryButtonClassName} onClick={() => setIsOpen(true)}>
+      <Button onClick={() => setIsOpen(true)}>
         Менеджеры
-      </button>
+      </Button>
 
       {isMounted ? createPortal(modal, document.body) : null}
     </>

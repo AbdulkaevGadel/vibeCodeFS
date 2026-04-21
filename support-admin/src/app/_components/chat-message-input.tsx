@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { sendManagerMessageAction } from "../(protected)/_actions/chat-actions";
+import { Button } from "./ui/button";
 
 type ChatMessageInputProps = {
   chatId: string;
@@ -66,13 +67,15 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
           <p className="support-text-muted text-[11px] uppercase tracking-wider">
             Ответ будет отправлен в Telegram
           </p>
-          <button
+          <Button
             onClick={handleSend}
-            disabled={!text.trim() || isPending}
-            className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-40"
+            disabled={!text.trim()}
+            isLoading={isPending}
+            variant="primary"
+            size="sm"
           >
-            {isPending ? "Отправка..." : "Отправить"}
-          </button>
+            Отправить
+          </Button>
         </div>
       </div>
     </div>
