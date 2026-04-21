@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, transitionRef, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { KnowledgeArticle, KnowledgeArticleHistory, Manager } from "../../_lib/page-types";
 import { upsertArticleAction, setArticleStatusAction } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
