@@ -4,6 +4,7 @@ import { useState, transitionRef, useTransition } from "react";
 import { KnowledgeArticle, KnowledgeArticleHistory, Manager } from "../../_lib/page-types";
 import { upsertArticleAction, setArticleStatusAction } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
+import { Button } from "../ui/button";
 
 type KnowledgeDetailsProps = {
   selectedArticle: KnowledgeArticle | null;
@@ -90,23 +91,23 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager }: K
         
         <div className="flex items-center gap-3 ml-6">
            {selectedArticle && (
-             <button 
+             <Button 
                 onClick={() => {
                   setShowHistory(!showHistory);
                   setIsEditing(false);
                 }}
-                className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
-                  showHistory ? "support-surface-accent shadow-lg" : "bg-white/50 support-text-secondary border border-black/5 hover:bg-white"
-                }`}
+                variant="secondary"
+                active={showHistory}
+                size="sm"
              >
                История
-             </button>
+             </Button>
            )}
 
            {canEdit && !showHistory && (
              isEditing ? (
                <div className="flex items-center gap-2">
-                  <button 
+                  <Button 
                     onClick={() => {
                         if (selectedArticle) {
                             setIsEditing(false);
@@ -117,25 +118,28 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager }: K
                             router.push('/knowledge-base');
                         }
                     }}
-                    className="px-4 py-2 rounded-2xl text-sm font-bold support-text-muted hover:support-text-primary transition-colors"
+                    variant="secondary"
+                    size="sm"
                   >
                     Отмена
-                  </button>
-                  <button 
+                  </Button>
+                  <Button 
                     onClick={handleSave}
-                    disabled={isPending}
-                    className="px-6 py-2.5 rounded-2xl support-surface-accent text-sm font-black hover:scale-[1.02] active:scale-100 disabled:opacity-50 transition-all shadow-xl shadow-black/10"
+                    isLoading={isPending}
+                    variant="secondary"
+                    size="sm"
                   >
-                    {isPending ? "..." : "Сохранить"}
-                  </button>
+                    Сохранить
+                  </Button>
                </div>
              ) : (
-               <button 
+               <Button 
                  onClick={() => setIsEditing(true)}
-                 className="px-5 py-2.5 rounded-2xl bg-white/50 border border-black/10 text-sm font-bold support-text-primary hover:bg-white transition-all shadow-sm"
+                 variant="secondary"
+                 size="sm"
                >
                  Редактировать
-               </button>
+               </Button>
              )
            )}
         </div>
@@ -233,16 +237,13 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager }: K
 
                 {isAdmin && selectedArticle && (
                   <div className="mt-16 pt-10 border-t border-black/5 flex justify-end">
-                     <button 
+                     <Button 
                        onClick={() => handleStatusChange(selectedArticle.status === 'archived' ? 'draft' : 'archived')}
-                       className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
-                         selectedArticle.status === 'archived' 
-                         ? "bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100" 
-                         : "bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100"
-                       }`}
+                       isLoading={isPending}
+                       variant={selectedArticle.status === 'archived' ? 'secondary' : 'danger'}
                      >
                        {selectedArticle.status === 'archived' ? "Восстановить" : "Архивировать"}
-                     </button>
+                     </Button>
                   </div>
                 )}
             </div>

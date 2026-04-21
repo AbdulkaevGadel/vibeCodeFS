@@ -26,11 +26,13 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
         <AdminHeader
           headerBotLabel="База знаний"
           messageCount={0}
-          chatCount={pageData.articles.length}
+          chatCount={0}
           botOptions={[]}
           selectedBotKey={null}
-          allManagers={[]} // В KB нам не нужен список всех менеджеров в шапке
+          allManagers={[]} 
           currentManager={pageData.currentManager}
+          kbTotalCount={pageData.totalCount}
+          kbPublishedCount={pageData.publishedCount}
         />
 
         {pageData.errorMessage ? (

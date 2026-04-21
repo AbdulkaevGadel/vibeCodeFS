@@ -7,6 +7,8 @@ export type KnowledgeBasePageData = {
   selectedArticle: KnowledgeArticle | null;
   history: KnowledgeArticleHistory[];
   currentManager: Manager | null;
+  totalCount: number;
+  publishedCount: number;
   errorMessage: string | null;
 };
 
@@ -16,8 +18,10 @@ export async function getKnowledgeBaseData(
 ): Promise<KnowledgeBasePageData> {
   let articles: KnowledgeArticle[] = [];
   let selectedArticle: KnowledgeArticle | null = null;
-  let history: KnowledgeArticleHistory[] = [];
+  let history: KnowledgeArticleHistory[];
   let currentManager: Manager | null = null;
+  let totalCount = 0;
+  let publishedCount = 0;
   let errorMessage: string | null = null;
 
   try {
@@ -72,6 +76,8 @@ export async function getKnowledgeBaseData(
     selectedArticle,
     history,
     currentManager,
+    totalCount: articles.length,
+    publishedCount: articles.filter(a => a.status === "published").length,
     errorMessage,
   };
 }

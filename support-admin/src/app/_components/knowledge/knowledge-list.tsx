@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "../ui/button";
 import { KnowledgeArticle } from "../../_lib/page-types";
 import styles from "../../page.module.css";
 
@@ -86,13 +87,15 @@ export function KnowledgeList({ articles, selectedId }: KnowledgeListProps) {
         </div>
       </div>
       
-      <div className="p-4 border-t border-white/5">
-        <Link 
+
+      <div className="p-4 border-t border-black/5">
+        <Button 
           href="/knowledge-base"
-          className="flex items-center justify-center gap-2 w-full p-3 rounded-2xl bg-white/50 border border-white/20 text-xs font-bold support-text-primary hover:bg-white transition-all shadow-sm"
+          variant="primary"
+          className="w-full"
         >
-          <span>Создать статью</span>
-        </Link>
+          Создать статью
+        </Button>
       </div>
     </div>
   );
