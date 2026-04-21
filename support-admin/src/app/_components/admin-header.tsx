@@ -1,5 +1,6 @@
 import { RefreshButton } from "../refresh-button";
 import { BotOption, Manager } from "../_lib/page-types";
+import Link from "next/link";
 import { logoutAction } from "../_actions/logout";
 import { BotTabs } from "./bot-tabs";
 import { ManagersAdminModal } from "./managers-admin-modal";
@@ -56,6 +57,12 @@ export function AdminHeader({
         <div className={statsWrapperClassName}>
           <div className={actionsWrapperClassName}>
             <RefreshButton />
+            <Link 
+              href="/knowledge-base" 
+              className="rounded-xl px-4 py-2 text-sm font-bold support-surface-accent transition hover:scale-[1.02] active:scale-100 shadow-lg shadow-black/5"
+            >
+              База знаний
+            </Link>
             {currentManager?.role === "admin" ? (
               <ManagersAdminModal managers={allManagers} />
             ) : null}
