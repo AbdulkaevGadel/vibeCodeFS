@@ -46,6 +46,8 @@ export type ChatSummary = {
   assignedManagerName: string | null;
   telegramUserId: number;
   lastMessageAt: string | null;
+  lastReadAt: string | null;
+  unreadCount: number;
   messageCount: number;
   createdAt: string;
   updatedAt: string;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useRef } from "react";
 import { ChatMessage, ChatSummary, Manager } from "../_lib/page-types";
-import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction } from "../(protected)/_actions/chat-actions";
+import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatMessageInput } from "./chat-message-input";
 
@@ -62,12 +62,21 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [showTransfer, setShowTransfer] = useState(false);
+  const lastMarkedReadRef = useRef<string | null>(null);
 
-  // Синхронизация при смене чата
+  // Синхронизация при смене чата + сброс прочитанности
   useEffect(() => {
     setMessages(initialMessages);
     setShowTransfer(false);
-  }, [initialMessages, selectedChat.id]);
+
+    // Сброс прочитанности в базе при выборе чата (guard: только если есть непрочитанные и мы еще не помечали этот чат в текущей сессии)
+    if (selectedChat.id && selectedChat.unreadCount > 0 && lastMarkedReadRef.current !== selectedChat.id) {
+      lastMarkedReadRef.current = selectedChat.id;
+      markChatAsReadAction(selectedChat.id).catch(err => 
+        console.warn("Failed to mark chat as read:", err)
+      );
+    }
+  }, [initialMessages, selectedChat.id, selectedChat.unreadCount]);
 
   // Realtime подписка
   useEffect(() => {

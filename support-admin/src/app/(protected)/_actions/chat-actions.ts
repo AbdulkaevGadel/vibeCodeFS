@@ -148,3 +148,25 @@ export async function deleteChatAction(chatId: string) {
     return { success: false, error: err.message || "Unknown error occurred" };
   }
 }
+
+export async function markChatAsReadAction(chatId: string) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.rpc("mark_chat_as_read", {
+      p_chat_id: chatId,
+    });
+
+    if (error) {
+      console.error("Error in markChatAsReadAction:", error);
+      return { success: false, error: error.message };
+    }
+
+    // No revalidatePath needed here to avoid extra list refreshes, 
+    // unless we want to force a server recount.
+    // However, the realtime UPDATE on 'chats' will handle the UI reset.
+    return { success: true };
+  } catch (err: any) {
+    console.error("Failed to mark chat as read:", err);
+    return { success: false, error: err.message || "Unknown error occurred" };
+  }
+}
