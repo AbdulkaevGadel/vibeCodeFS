@@ -49,14 +49,16 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
             {chat.subtitle}
           </p>
         </div>
-        {chat.isUnread && (
-            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded ml-2">
-    New
-  </span>
+        {chat.unreadCount > 0 && (
+          <div className="flex flex-col items-end gap-1 pt-1">
+            <span className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">New</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-white/10 animate-in zoom-in duration-300">
+                {chat.unreadCount}
+              </span>
+            </span>
+          </div>
         )}
-        <span className={isActive ? activeCountClassName : inactiveCountClassName}>
-          {chat.messageCount}
-        </span>
       </div>
 
       <div className={isActive ? activeMetaClassName : inactiveMetaClassName}>

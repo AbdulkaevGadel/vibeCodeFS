@@ -18,8 +18,17 @@ type RealtimeChatRow = {
   bot_username: string | null;
   status: string;
   last_message_at: string | null;
+  last_read_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type RealtimeMessageRow = {
+  id: string;
+  chat_id: string;
+  sender_type: "client" | "manager";
+  text: string;
+  created_at: string;
 };
 
 function compareNullableDatesDesc(left: string | null, right: string | null) {
@@ -48,20 +57,6 @@ function isMatchingBot(
 ) {
   if (!selectedBotKey) return true;
   return getBotKey(row.bot_username) === selectedBotKey;
-}
-
-function updateChatFromRealtime(
-    chat: ChatSummary,
-    row: RealtimeChatRow,
-    isUnread: boolean
-): ChatSummary {
-  return {
-    ...chat,
-    status: row.status,
-    lastMessageAt: row.last_message_at,
-    updatedAt: row.updated_at,
-    isUnread,
-  };
 }
 
 export function ChatList({
@@ -110,7 +105,7 @@ export function ChatList({
     const supabase = supabaseRef.current!;
 
     const channel = supabase
-        .channel("chats:list:main") // уникальное имя
+        .channel("support:chat-list:patching") 
         .on(
             "postgres_changes",
             {
@@ -122,18 +117,15 @@ export function ChatList({
               switch (payload.eventType) {
                 case "INSERT": {
                   const inserted = payload.new as RealtimeChatRow;
-
-                  console.log("INSERT payload", inserted);
-
                   if (isMatchingBot(inserted, selectedBotKeyRef.current)) {
-                    router.refresh();
+                    router.refresh(); // Recovery through SSR
                   }
-
                   break;
                 }
 
                 case "UPDATE": {
                   const updated = payload.new as RealtimeChatRow;
+                  const old = payload.old as Partial<RealtimeChatRow>;
 
                   if (!isMatchingBot(updated, selectedBotKeyRef.current)) {
                     const next = chatsRef.current.filter((c) => c.id !== updated.id);
@@ -143,32 +135,37 @@ export function ChatList({
                   }
 
                   const exists = chatsRef.current.find((c) => c.id === updated.id);
-
                   if (!exists) {
                     router.refresh();
                     return;
                   }
 
                   const next = sortChatsByActivity(
-                      chatsRef.current.map((c) =>
-                          c.id === updated.id
-                              ? updateChatFromRealtime(
-                                  c,
-                                  updated,
-                                  updated.id !== selectedChatIdRef.current
-                              )
-                              : c
-                      ),
+                      chatsRef.current.map((c) => {
+                        if (c.id !== updated.id) return c;
+                        
+                        return {
+                          ...c,
+                          status: updated.status,
+                          lastMessageAt: updated.last_message_at || c.lastMessageAt,
+                          lastReadAt: updated.last_read_at,
+                          // Important: Do NOT reset unreadCount to 0 here based on partial payloads.
+                          // Realtime updates often lack 'old' data, making diffing unreliable.
+                          // unreadCount is managed by ChatDetailsClient (marking as read)
+                          // and ChatList's own message-insert handler.
+                          unreadCount: c.unreadCount, 
+                          updatedAt: updated.updated_at,
+                        };
+                      })
                   );
 
                   chatsRef.current = next;
                   setChats(next);
-                  return;
+                  break;
                 }
 
                 case "DELETE": {
                   const deleted = payload.old as { id: string };
-
                   const next = chatsRef.current.filter((c) => c.id !== deleted.id);
                   chatsRef.current = next;
                   setChats(next);
@@ -176,27 +173,64 @@ export function ChatList({
                   if (deleted.id === selectedChatIdRef.current) {
                     router.refresh();
                   }
-
-                  return;
+                  break;
                 }
               }
             },
         )
-        .subscribe((status) => {
-          console.log("REALTIME STATUS:", status);
-        });
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "chat_messages",
+          },
+          (payload) => {
+            const inserted = payload.new as RealtimeMessageRow;
+            const currentChat = chatsRef.current.find(c => c.id === inserted.chat_id);
+            
+            if (!currentChat) {
+              // If we receive a message for a chat we don't have in state, 
+              // it might be a new chat or a sync issue. Trigger refresh.
+              router.refresh();
+              return;
+            }
+
+            // Hybrid Patch: update preview and unreadCount locally
+            const next = sortChatsByActivity(
+              chatsRef.current.map(c => {
+                if (c.id !== inserted.chat_id) return c;
+
+                const isNewClientMessage = inserted.sender_type === 'client';
+                const shouldIncrementUnread = isNewClientMessage && c.id !== selectedChatIdRef.current;
+
+                return {
+                  ...c,
+                  subtitle: inserted.text.length > 50 ? inserted.text.substring(0, 50) + '...' : inserted.text,
+                  unreadCount: shouldIncrementUnread ? c.unreadCount + 1 : c.unreadCount,
+                  lastMessageAt: inserted.created_at,
+                };
+              })
+            );
+
+            chatsRef.current = next;
+            setChats(next);
+          }
+        )
+        .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
 
+  // Local reset when selecting a chat
   useEffect(() => {
     if (!selectedChatId) return;
 
     const next = chatsRef.current.map((chat) =>
         chat.id === selectedChatId
-            ? { ...chat, isUnread: false }
+            ? { ...chat, unreadCount: 0 }
             : chat
     );
 

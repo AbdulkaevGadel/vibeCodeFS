@@ -20,6 +20,7 @@ type ChatRow = {
   bot_username: string;
   status: string;
   last_message_at: string | null;
+  last_read_at: string | null;
   created_at: string;
   updated_at: string;
   clients: {
@@ -45,6 +46,7 @@ type ChatRowResponse = {
   bot_username: string;
   status: string;
   last_message_at: string | null;
+  last_read_at: string | null;
   created_at: string;
   updated_at: string;
   clients: ClientResponse[] | ClientResponse | null;
@@ -85,7 +87,7 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
     .map<ChatSummary>((chat) => {
       const client = chat.clients;
       const messages = sortChatMessages(messagesByChatId[chat.id] ?? []);
-      const latestMessage = messages[0] ?? null;
+      const latestMessage = messages[messages.length - 1] ?? null;
 
       return {
         id: chat.id,
@@ -107,6 +109,12 @@ function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, C
         assignedManagerName: chat.assigned_manager_name,
         telegramUserId: client?.telegram_user_id ?? 0,
         lastMessageAt: chat.last_message_at,
+        lastReadAt: chat.last_read_at,
+        unreadCount: messages.filter(
+          (m) =>
+            m.senderType === "client" &&
+            new Date(m.createdAt).getTime() > new Date(chat.last_read_at || "1970-01-01").getTime(),
+        ).length,
         messageCount: messages.length,
         createdAt: chat.created_at,
         updatedAt: chat.updated_at,
@@ -157,6 +165,7 @@ function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, 
       bot_username: row.bot_username,
       status: row.status,
       last_message_at: row.last_message_at,
+      last_read_at: row.last_read_at,
       created_at: row.created_at,
       updated_at: row.updated_at,
       clients: (client as ClientResponse) || null,
@@ -217,6 +226,7 @@ export async function getSupportAdminPageData(
           bot_username,
           status,
           last_message_at,
+          last_read_at,
           created_at,
           updated_at,
           clients!inner(
