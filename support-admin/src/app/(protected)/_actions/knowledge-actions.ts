@@ -17,49 +17,43 @@ export async function upsertArticleAction(
   expectedVersion?: number,
 ) {
   const supabase = await createSupabaseServerClient();
-  const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
 
   try {
     if (!id) {
-      // INSERT: Создание новой статьи
-      const { data, error } = await supabase
-        .from("knowledge_base_articles")
-        .insert({
-          title,
-          content,
-          slug: cleanSlug,
-          status,
-        })
-        .select()
-        .single();
+      // RPC: Создание новой статьи (с генератором слагов)
+      const { data, error } = await supabase.rpc("create_kb_article_v1", {
+        p_title: title,
+        p_content: content,
+        p_slug: slug,
+        p_status: status,
+      });
 
       if (error) {
-        if (error.code === "23505") return { error: "Статья с таким адресом (slug) уже существует." };
+        if (error.message.includes("SLUG_GENERATION_FAILED")) {
+          return { error: "Не удалось создать уникальный адрес статьи. Попробуйте другой заголовок." };
+        }
         throw error;
       }
       
       revalidatePath("/knowledge-base");
       return { data };
     } else {
-      // UPDATE: Обновление с проверкой версии
+      // RPC: Обновление с проверкой версии и авторства
       if (expectedVersion === undefined) throw new Error("expectedVersion is required for updates");
 
-      const { data, error, count } = await supabase
-        .from("knowledge_base_articles")
-        .update({
-          title,
-          content,
-          slug: cleanSlug,
-          status,
-          version: expectedVersion + 1, // Инкремент версии в SQL
-        })
-        .eq("id", id)
-        .eq("version", expectedVersion) // Optimistic Lock Check
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc("update_kb_article_v1", {
+        p_id: id,
+        p_title: title,
+        p_content: content,
+        p_slug: slug,
+        p_status: status,
+        p_version: expectedVersion
+      });
 
       if (error) {
-        if (error.code === "PGRST116") return { error: "Конфликт версий: статья была изменена другим пользователем. Обновите страницу." };
+        if (error.message.includes("VERSION_CONFLICT_OR_FORBIDDEN")) {
+          return { error: "Ошибка доступа или конфликт версий: статья была изменена другим менеджером." };
+        }
         if (error.code === "23505") return { error: "Статья с таким адресом (slug) уже существует." };
         throw error;
       }
@@ -74,22 +68,23 @@ export async function upsertArticleAction(
 }
 
 /**
- * Переводит статью в архив или обратно.
+ * Переводит статью в архив или обратно через специализированные RPC.
  */
 export async function setArticleStatusAction(id: string, status: ArticleStatus, expectedVersion: number) {
   const supabase = await createSupabaseServerClient();
 
   try {
-    const { data, error } = await supabase
-        .from("knowledge_base_articles")
-        .update({ status, version: expectedVersion + 1 })
-        .eq("id", id)
-        .eq("version", expectedVersion)
-        .select()
-        .single();
+    const rpcName = status === 'archived' ? 'archive_kb_article_v1' : 'restore_kb_article_v1';
+    
+    const { data, error } = await supabase.rpc(rpcName, {
+      p_id: id,
+      p_version: expectedVersion
+    });
 
     if (error) {
-      if (error.code === "PGRST116") return { error: "Конфликт версий при изменении статуса." };
+      if (error.message.includes("VERSION_CONFLICT_OR_FORBIDDEN")) {
+        return { error: "Не удалось изменить статус: конфликт версий." };
+      }
       throw error;
     }
 

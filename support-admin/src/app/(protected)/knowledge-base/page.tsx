@@ -44,6 +44,7 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
                selectedId={selectedArticleId} 
             />
             <KnowledgeDetails 
+               key={selectedArticleId ?? 'new'}
                selectedArticle={pageData.selectedArticle}
                history={pageData.history}
                currentManager={pageData.currentManager}

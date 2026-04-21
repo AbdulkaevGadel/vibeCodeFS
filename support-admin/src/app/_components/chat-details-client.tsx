@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { ChatMessage, ChatSummary, Manager } from "../_lib/page-types";
 import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
 import { createSupabaseClient } from "@/lib/supabase";
@@ -57,6 +58,7 @@ function sortMessagesByCreatedAt(messages: ChatMessage[]) {
 }
 
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [showTransfer, setShowTransfer] = useState(false);
@@ -81,7 +83,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     const supabase = createSupabaseClient();
     
     const channel = supabase
-      .channel(`chat_messages:${selectedChat.id}`)
+      .channel(`chat_details:${selectedChat.id}`)
       .on(
         "postgres_changes",
         {
@@ -134,6 +136,20 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chats",
+          filter: `id=eq.${selectedChat.id}`,
+        },
+        () => {
+          // Metadata (status, assigned manager) changed.
+          // Trigger SSR refresh to get new props.
+          router.refresh();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -152,7 +168,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
 
   const handleTransfer = (targetManagerId: string) => {
     startTransition(async () => {
-      const result = await transferChatAction(selectedChat.id, targetManagerId);
+      const result = await transferChatAction(selectedChat.id, targetManagerId, selectedChat.assignedManagerId);
       if (!result.success) {
         alert("Ошибка: " + result.error);
       } else {
@@ -176,7 +192,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     startTransition(async () => {
       // Подгружаем новый экшен динамически, чтобы не раздувать импорты в начале (условно)
       const { updateChatStatusAction } = await import("../(protected)/_actions/chat-actions");
-      const result = await updateChatStatusAction(selectedChat.id, newStatus);
+      const result = await updateChatStatusAction(selectedChat.id, newStatus, selectedChat.status);
       if (!result.success) {
         alert("Ошибка: " + result.error);
       }

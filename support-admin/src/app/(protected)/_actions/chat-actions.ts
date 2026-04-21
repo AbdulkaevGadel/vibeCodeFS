@@ -47,11 +47,12 @@ export async function sendManagerMessageAction(chatId: string, text: string, cli
   }
 }
 
-export async function resolveChatAction(chatId: string) {
+export async function resolveChatAction(chatId: string, expectedStatus?: string | null) {
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.rpc("resolve_chat", {
       p_chat_id: chatId,
+      p_expected_status: expectedStatus
     });
 
     if (error) {
@@ -67,12 +68,13 @@ export async function resolveChatAction(chatId: string) {
   }
 }
 
-export async function transferChatAction(chatId: string, targetManagerId: string) {
+export async function transferChatAction(chatId: string, targetManagerId: string, expectedFromManagerId?: string | null) {
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.rpc("transfer_chat", {
       p_chat_id: chatId,
       p_target_manager_id: targetManagerId,
+      p_expected_from_manager_id: expectedFromManagerId
     });
 
     if (error) {
@@ -88,12 +90,13 @@ export async function transferChatAction(chatId: string, targetManagerId: string
   }
 }
 
-export async function updateChatStatusAction(chatId: string, newStatus: string) {
+export async function updateChatStatusAction(chatId: string, newStatus: string, expectedStatus?: string | null) {
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.rpc("update_chat_status", {
       p_chat_id: chatId,
       p_new_status: newStatus,
+      p_expected_status: expectedStatus
     });
 
     if (error) {

@@ -1,6 +1,6 @@
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { getCurrentManager } from "./manager-utils";
-import { KnowledgeArticle, KnowledgeArticleHistory, Manager } from "./page-types";
+import {createSupabaseServerClient} from "@/lib/supabase-server";
+import {getCurrentManager} from "./manager-utils";
+import {KnowledgeArticle, KnowledgeArticleHistory, Manager} from "./page-types";
 
 export type KnowledgeBasePageData = {
   articles: KnowledgeArticle[];
