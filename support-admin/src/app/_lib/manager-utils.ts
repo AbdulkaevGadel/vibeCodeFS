@@ -23,8 +23,7 @@ export async function getCurrentManager(): Promise<Manager> {
     .single();
 
   if (managerError || !manager) {
-    console.error("Manager record not found for auth user:", user.id);
-    throw new Error("Manager profile not found. Please contact administrator.");
+    throw new Error("Профиль менеджера не найден. Обратитесь к администратору.");
   }
 
   return {
