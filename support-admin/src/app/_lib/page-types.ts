@@ -6,6 +6,8 @@ export type PageProps = {
     chat?: SearchParamValue;
     article?: SearchParamValue;
     search?: SearchParamValue;
+    view?: SearchParamValue;
+    mode?: SearchParamValue;
   }>;
 };
 
@@ -81,6 +83,8 @@ export type SupportAdminPageData = {
 };
 
 export type ArticleStatus = "draft" | "published" | "archived";
+
+export type KnowledgeBaseView = "active" | "archive";
 
 export type KnowledgeArticle = {
   id: string;

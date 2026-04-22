@@ -1,12 +1,13 @@
 import {createSupabaseServerClient} from "@/lib/supabase-server";
 import {getCurrentManager} from "./manager-utils";
-import {KnowledgeArticle, KnowledgeArticleHistory, Manager} from "./page-types";
+import {KnowledgeArticle, KnowledgeArticleHistory, KnowledgeBaseView, Manager} from "./page-types";
 
 export type KnowledgeBasePageData = {
   articles: KnowledgeArticle[];
   selectedArticle: KnowledgeArticle | null;
   history: KnowledgeArticleHistory[];
   currentManager: Manager | null;
+  view: KnowledgeBaseView;
   totalCount: number;
   publishedCount: number;
   errorMessage: string | null;
@@ -14,12 +15,14 @@ export type KnowledgeBasePageData = {
 
 export async function getKnowledgeBaseData(
   selectedId?: string | null,
-  searchQuery?: string | null
+  searchQuery?: string | null,
+  requestedView: KnowledgeBaseView = "active",
 ): Promise<KnowledgeBasePageData> {
   let articles: KnowledgeArticle[] = [];
   let selectedArticle: KnowledgeArticle | null = null;
   let history: KnowledgeArticleHistory[] = [];
   let currentManager: Manager | null = null;
+  let view: KnowledgeBaseView = "active";
   let totalCount = 0;
   let publishedCount = 0;
   let errorMessage: string | null = null;
@@ -29,9 +32,17 @@ export async function getKnowledgeBaseData(
     
     // 1. Текущий менеджер
     currentManager = await getCurrentManager().catch(() => null);
+    const canManageArchive = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+    view = requestedView === "archive" && canManageArchive ? "archive" : "active";
 
     // 2. Статьи с учетом поиска
     let query = supabase.from("knowledge_base_articles").select("*");
+
+    if (view === "archive") {
+      query = query.eq("status", "archived");
+    } else {
+      query = query.neq("status", "archived");
+    }
     
     if (searchQuery) {
       query = query.textSearch("search_vector", searchQuery, {
@@ -63,6 +74,8 @@ export async function getKnowledgeBaseData(
 
         if (!historyError && historyData) {
           history = historyData.map(mapHistory);
+        } else if (historyError) {
+          console.error("Fetch article history error:", historyError);
         }
       }
     }
@@ -76,6 +89,7 @@ export async function getKnowledgeBaseData(
     selectedArticle,
     history,
     currentManager,
+    view,
     totalCount: articles.length,
     publishedCount: articles.filter(a => a.status === "published").length,
     errorMessage,

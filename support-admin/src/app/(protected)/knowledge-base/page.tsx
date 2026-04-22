@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { AdminHeader } from "../../_components/admin-header";
 import { ErrorAlert } from "../../_components/error-alert";
 import { KnowledgeList } from "../../_components/knowledge/knowledge-list";
@@ -13,8 +12,10 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const selectedArticleId = typeof params?.article === "string" ? params.article : null;
   const searchQuery = typeof params?.search === "string" ? params.search : null;
+  const requestedView = params?.view === "archive" ? "archive" : "active";
+  const isCreatingArticle = params?.mode === "create" && requestedView === "active";
   
-  const pageData = await getKnowledgeBaseData(selectedArticleId, searchQuery);
+  const pageData = await getKnowledgeBaseData(selectedArticleId, searchQuery, requestedView);
 
   // Для шапки нам нужны базовые данные менеджера (подтянем из pageData)
   // В идеале мы должны иметь общий провайдер или кэшировать это, 
@@ -42,12 +43,15 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
             <KnowledgeList 
                articles={pageData.articles} 
                selectedId={selectedArticleId} 
+               view={pageData.view}
+               currentManager={pageData.currentManager}
             />
             <KnowledgeDetails 
-               key={selectedArticleId ?? 'new'}
+               key={selectedArticleId ?? (isCreatingArticle ? "create" : "empty")}
                selectedArticle={pageData.selectedArticle}
                history={pageData.history}
                currentManager={pageData.currentManager}
+               isCreatingArticle={isCreatingArticle}
             />
           </section>
         )}
