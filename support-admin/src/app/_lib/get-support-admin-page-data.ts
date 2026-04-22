@@ -196,8 +196,7 @@ export async function getSupportAdminPageData(
     try {
       currentManager = await getCurrentManager();
     } catch (e: any) {
-      console.warn("Could not fetch current manager:", e);
-      errorMessage = "Ошибка авторизации: не удалось загрузить профиль менеджера. " + e.message;
+      errorMessage = `Ошибка авторизации: ${e.message}`;
     }
 
     // 1. Fetch ALL managers
