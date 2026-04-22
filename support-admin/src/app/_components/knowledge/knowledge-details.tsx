@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { KnowledgeArticle, KnowledgeArticleHistory, Manager } from "../../_lib/page-types";
-import { upsertArticleAction, setArticleStatusAction } from "../../(protected)/_actions/knowledge-actions";
+import { upsertArticleAction, setArticleStatusAction, deleteArticleAction } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 
@@ -10,12 +10,13 @@ type KnowledgeDetailsProps = {
   selectedArticle: KnowledgeArticle | null;
   history: KnowledgeArticleHistory[];
   currentManager: Manager | null;
+  isCreatingArticle: boolean;
 };
 
-export function KnowledgeDetails({ selectedArticle, history, currentManager }: KnowledgeDetailsProps) {
+export function KnowledgeDetails({ selectedArticle, history, currentManager, isCreatingArticle }: KnowledgeDetailsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [isEditing, setIsEditing] = useState(!selectedArticle);
+  const [isEditing, setIsEditing] = useState(isCreatingArticle);
   const [showHistory, setShowHistory] = useState(false);
   
   // Форма
@@ -26,7 +27,8 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager }: K
   const [error, setError] = useState<string | null>(null);
 
   const canEdit = !!currentManager;
-  const isAdmin = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+  const canCreateArticle = !!currentManager;
+  const canManageLifecycle = currentManager?.role === "admin" || currentManager?.role === "supervisor";
 
   const handleSave = async () => {
     setError(null);
@@ -58,15 +60,48 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager }: K
       const result = await setArticleStatusAction(selectedArticle.id, newStatus, selectedArticle.version);
       if (result.error) {
         setError(result.error);
+      } else if (result.data) {
+        if (newStatus === "archived") {
+          router.push("/knowledge-base");
+        } else {
+          router.push("/knowledge-base?view=archive");
+        }
+        router.refresh();
       }
     });
   };
 
-  if (!selectedArticle && !isEditing) {
+  const handleDelete = async () => {
+    if (!selectedArticle) return;
+
+    const confirmed = confirm(
+      `Удалить статью "${selectedArticle.title}" навсегда?\n\n` +
+      "Будет удалена сама статья и вся история изменений.\n" +
+      "Это действие необратимо."
+    );
+
+    if (!confirmed) return;
+
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteArticleAction(selectedArticle.id, selectedArticle.version);
+
+      if (result.error) {
+        setError(result.error);
+      } else {
+        router.push("/knowledge-base?view=archive");
+        router.refresh();
+      }
+    });
+  };
+
+  if (!selectedArticle && (!isEditing || !canCreateArticle)) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-12 text-center text-white/20">
-        <h3 className="text-xl font-medium mb-2">Выберите статью</h3>
-        <p className="max-w-xs text-sm">Или создайте новую, чтобы начать наполнение базы знаний.</p>
+      <div className="flex h-[calc(100vh-200px)] flex-col items-center justify-center support-panel p-12 text-center">
+        <h3 className="support-text-primary mb-2 text-xl font-semibold">Откройте статью, чтобы прочитать</h3>
+        <p className="support-text-secondary max-w-xs text-sm">
+          Выберите материал из списка слева.
+        </p>
       </div>
     );
   }
@@ -235,8 +270,18 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager }: K
                    {selectedArticle?.content}
                 </div>
 
-                {isAdmin && selectedArticle && (
-                  <div className="mt-16 pt-10 border-t border-black/5 flex justify-end">
+                {canManageLifecycle && selectedArticle && (
+                  <div className="mt-16 pt-10 border-t border-black/5 flex flex-wrap justify-end gap-3">
+                     {selectedArticle.status === "archived" ? (
+                       <Button 
+                         onClick={handleDelete}
+                         isLoading={isPending}
+                         variant="danger"
+                       >
+                         Удалить навсегда
+                       </Button>
+                     ) : null}
+
                      <Button 
                        onClick={() => handleStatusChange(selectedArticle.status === 'archived' ? 'draft' : 'archived')}
                        isLoading={isPending}

@@ -2,7 +2,7 @@
 
 import { RefreshButton } from "../refresh-button";
 import { BotOption, Manager } from "../_lib/page-types";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "./ui/button";
 import { logoutAction } from "../_actions/logout";
 import { BotTabs } from "./bot-tabs";
@@ -48,7 +48,10 @@ export function AdminHeader({
   kbPublishedCount = 0,
 }: AdminHeaderProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isKnowledgeBase = pathname?.startsWith("/knowledge-base");
+  const isArchiveView = searchParams?.get("view") === "archive";
+  const canManageKnowledgeArchive = currentManager?.role === "admin" || currentManager?.role === "supervisor";
 
   return (
     <header className={headerClassName}>
@@ -66,12 +69,25 @@ export function AdminHeader({
           <div className={actionsWrapperClassName}>
             <RefreshButton />
             
-            <Button 
-              href={isKnowledgeBase ? "/" : "/knowledge-base"} 
-              variant="secondary"
-            >
-              {isKnowledgeBase ? "← Вернуться к чатам" : "База знаний"}
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button 
+                href={isKnowledgeBase ? "/" : "/knowledge-base"} 
+                variant="secondary"
+              >
+                {isKnowledgeBase ? "← Вернуться к чатам" : "База знаний"}
+              </Button>
+
+              {isKnowledgeBase && canManageKnowledgeArchive ? (
+                <Button
+                  href={isArchiveView ? "/knowledge-base" : "/knowledge-base?view=archive"}
+                  variant="secondary"
+                  active={isArchiveView}
+                  size="sm"
+                >
+                  {isArchiveView ? "Активные статьи" : "Архив"}
+                </Button>
+              ) : null}
+            </div>
 
             {currentManager?.role === "admin" ? (
               <ManagersAdminModal managers={allManagers} />

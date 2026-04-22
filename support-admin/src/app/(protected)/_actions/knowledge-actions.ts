@@ -3,6 +3,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { ArticleStatus } from "../../_lib/page-types";
+import { getCurrentManager } from "../../_lib/manager-utils";
 
 /**
  * Создает или обновляет статью Базы Знаний.
@@ -19,6 +20,12 @@ export async function upsertArticleAction(
   const supabase = await createSupabaseServerClient();
 
   try {
+    const currentManager = await getCurrentManager().catch(() => null);
+
+    if (!currentManager) {
+      return { error: "Создавать и редактировать статьи могут только пользователи с ролью менеджера." };
+    }
+
     if (!id) {
       // RPC: Создание новой статьи (с генератором слагов)
       const { data, error } = await supabase.rpc("create_kb_article_v1", {
@@ -85,6 +92,9 @@ export async function setArticleStatusAction(id: string, status: ArticleStatus, 
       if (error.message.includes("VERSION_CONFLICT_OR_FORBIDDEN")) {
         return { error: "Не удалось изменить статус: конфликт версий." };
       }
+      if (error.message.includes("KB_LIFECYCLE_FORBIDDEN")) {
+        return { error: "Только supervisor или admin может архивировать и восстанавливать статьи." };
+      }
       throw error;
     }
 
@@ -93,5 +103,38 @@ export async function setArticleStatusAction(id: string, status: ArticleStatus, 
   } catch (err: any) {
     console.error("Knowledge Base Status Error:", err);
     return { error: err.message || "Ошибка при изменении статуса" };
+  }
+}
+
+/**
+ * Физически удаляет архивную статью. Разрешено только supervisor/admin на уровне RPC.
+ */
+export async function deleteArticleAction(id: string, expectedVersion: number) {
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    const { data, error } = await supabase.rpc("delete_kb_article_v1", {
+      p_id: id,
+      p_version: expectedVersion,
+    });
+
+    if (error) {
+      if (error.message.includes("KB_DELETE_FORBIDDEN")) {
+        return { error: "Только supervisor или admin может удалить статью навсегда." };
+      }
+      if (error.message.includes("KB_DELETE_REQUIRES_ARCHIVED")) {
+        return { error: "Навсегда можно удалить только архивную статью." };
+      }
+      if (error.message.includes("VERSION_CONFLICT_OR_FORBIDDEN")) {
+        return { error: "Не удалось удалить статью: конфликт версий." };
+      }
+      throw error;
+    }
+
+    revalidatePath("/knowledge-base");
+    return { data };
+  } catch (err: any) {
+    console.error("Knowledge Base Delete Error:", err);
+    return { error: err.message || "Ошибка при удалении статьи" };
   }
 }

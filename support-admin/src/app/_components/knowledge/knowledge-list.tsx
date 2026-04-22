@@ -4,33 +4,49 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
-import { KnowledgeArticle } from "../../_lib/page-types";
-import styles from "../../page.module.css";
+import { KnowledgeArticle, KnowledgeBaseView, Manager } from "../../_lib/page-types";
 
 type KnowledgeListProps = {
   articles: KnowledgeArticle[];
   selectedId: string | null;
+  view: KnowledgeBaseView;
+  currentManager: Manager | null;
 };
 
-export function KnowledgeList({ articles, selectedId }: KnowledgeListProps) {
+export function KnowledgeList({ articles, selectedId, view, currentManager }: KnowledgeListProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const isArchiveView = view === "archive";
+  const canCreateArticle = !!currentManager;
 
   const handleSearch = (val: string) => {
     setSearch(val);
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams();
+
+    if (isArchiveView) params.set("view", "archive");
     if (val) params.set("search", val);
-    else params.delete("search");
     
     // Используем плавный переход без полной перезагрузки
     router.replace(`/knowledge-base?${params.toString()}`);
+  };
+
+  const getArticleHref = (article: KnowledgeArticle) => {
+    const params = new URLSearchParams();
+
+    params.set("article", article.id);
+    if (article.status === "archived") params.set("view", "archive");
+    if (search) params.set("search", search);
+
+    return `/knowledge-base?${params.toString()}`;
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel">
       <div className="p-5 border-b border-black/5 flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-widest support-text-muted">Статьи</h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest support-text-muted">
+            {isArchiveView ? "Архив" : "Статьи"}
+          </h2>
         </div>
         
         <div className="relative">
@@ -49,14 +65,16 @@ export function KnowledgeList({ articles, selectedId }: KnowledgeListProps) {
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
         <div className="flex flex-col gap-2">
           {articles.length === 0 ? (
-            <p className="p-4 text-sm support-text-muted italic text-center">Статей пока нет.</p>
+            <p className="p-4 text-sm support-text-muted italic text-center">
+              {isArchiveView ? "В архиве пока нет статей." : "Статей пока нет."}
+            </p>
           ) : (
             articles.map((article) => {
               const isActive = selectedId === article.id;
               return (
                 <Link
                   key={article.id}
-                  href={`/knowledge-base?article=${article.id}`}
+                  href={getArticleHref(article)}
                   className={`
                     flex flex-col gap-1.5 p-4 rounded-3xl transition-all duration-300
                     ${isActive 
@@ -89,13 +107,25 @@ export function KnowledgeList({ articles, selectedId }: KnowledgeListProps) {
       
 
       <div className="p-4 border-t border-black/5">
-        <Button 
-          href="/knowledge-base"
-          variant="primary"
-          className="w-full"
-        >
-          Создать статью
-        </Button>
+        {isArchiveView ? (
+          <Button 
+            href="/knowledge-base"
+            variant="secondary"
+            className="w-full"
+          >
+            К активным статьям
+          </Button>
+        ) : (
+          canCreateArticle ? (
+            <Button 
+              href="/knowledge-base?mode=create"
+              variant="primary"
+              className="w-full"
+            >
+              Создать статью
+            </Button>
+          ) : null
+        )}
       </div>
     </div>
   );
