@@ -247,6 +247,54 @@ Rules:
 - no silent schema changes
 - **IMMUTABLE MIGRATIONS:** Once a migration is pushed to the database, do NOT modify its file. Any further changes or fixes must be created as a NEW migration file (Incremental approach).
 - no direct manual table editing without matching migration intent
+- if the user discusses уточнение, исправление, or change of an already created migration, the agent MUST first ask:
+  - была ли эта миграция уже применена в Supabase или ещё нет
+- if the migration is already applied in Supabase:
+  - the agent MUST NOT modify the existing migration file
+  - the agent MUST create a new migration for any follow-up fix
+- if the migration is not yet applied in Supabase:
+  - the existing migration file may be edited after explicit discussion and agreement with the user
+
+---
+
+## 13.1 Pre-Implementation Workflow (CRITICAL)
+
+Before writing any new code, the agent MUST:
+
+1. fully discuss the implementation with the user
+2. prepare or update `docs/plan/TASK.md`
+3. wait until the user reviews and approves the task document
+4. only then proceed to code changes
+
+Rules:
+- do NOT jump from architecture discussion directly into code
+- even if the overall direction is already approved, implementation details must first be fixed in `docs/plan/TASK.md`
+- `docs/plan/TASK.md` is the required pre-implementation gate for a new implementation task
+- `docs/plan/TASK.md` is created at the start of a new implementation task, not for every micro-step inside an already agreed task
+- if the current work is only a continuation or small correction inside the same already approved task, a new `docs/plan/TASK.md` is not required
+
+Required structure for `docs/plan/TASK.md`:
+- `Title`
+- `Goal`
+- `Context`
+- `Scope`
+- `Files To Change`
+- `Migration`
+- `Backend Logic`
+- `Frontend Impact`
+- `Manual Steps`
+- `Verification`
+- `Risks / Open Questions`
+- `Approval`
+
+Rules for `docs/plan/TASK.md`:
+- write the document in Russian
+- keep it implementation-focused, not abstract
+- clearly separate what is included vs not included in the task
+- if schema changes are involved, explicitly state:
+  - whether a migration is needed
+  - whether an existing migration was already applied in Supabase
+  - whether the current migration can still be edited or a new migration is required
 
 ---
 

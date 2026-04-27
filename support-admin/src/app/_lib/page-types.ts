@@ -41,7 +41,7 @@ export type ChatSummary = {
   id: string;
   telegramChatId: number;
   botUsername: string;
-  status: string;
+  status: "open" | "in_progress" | "escalated" | "resolved" | "closed";
   title: string;
   fullName: string | null;
   subtitle: string;

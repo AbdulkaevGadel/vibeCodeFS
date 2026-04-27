@@ -16,7 +16,7 @@ type ChatListProps = {
 type RealtimeChatRow = {
   id: string;
   bot_username: string | null;
-  status: string;
+  status: "open" | "in_progress" | "escalated" | "resolved" | "closed";
   last_message_at: string | null;
   last_read_at: string | null;
   created_at: string;

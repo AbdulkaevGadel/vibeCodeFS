@@ -18,7 +18,7 @@ type ChatRow = {
   id: string;
   telegram_chat_id: number;
   bot_username: string;
-  status: string;
+  status: "open" | "in_progress" | "escalated" | "resolved" | "closed";
   last_message_at: string | null;
   last_read_at: string | null;
   created_at: string;
@@ -44,7 +44,7 @@ type ChatRowResponse = {
   id: string;
   telegram_chat_id: number;
   bot_username: string;
-  status: string;
+  status: "open" | "in_progress" | "escalated" | "resolved" | "closed";
   last_message_at: string | null;
   last_read_at: string | null;
   created_at: string;
