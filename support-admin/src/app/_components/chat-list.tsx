@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChatSummary, MessageSenderType } from "../_lib/page-types";
+import { ChatStatus, ChatSummary, MessageSenderType } from "../_lib/page-types";
 import { getBotKey } from "../_lib/page-utils";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatListItem } from "./chat-list-item";
@@ -16,7 +16,7 @@ type ChatListProps = {
 type RealtimeChatRow = {
   id: string;
   bot_username: string | null;
-  status: "open" | "in_progress" | "escalated" | "resolved" | "closed";
+  status: ChatStatus;
   last_message_at: string | null;
   last_read_at: string | null;
   created_at: string;

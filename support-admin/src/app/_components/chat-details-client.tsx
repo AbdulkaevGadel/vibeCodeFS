@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ChatMessage, ChatSummary, Manager } from "../_lib/page-types";
+import { ChatMessage, ChatStatus, ChatSummary, Manager } from "../_lib/page-types";
 import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatMessageInput } from "./chat-message-input";
@@ -65,6 +65,20 @@ function sortMessagesByCreatedAt(messages: ChatMessage[]) {
   );
 }
 
+type StatusOption = {
+  value: ChatStatus;
+  label: string;
+};
+
+const statusOptions: StatusOption[] = [
+  { value: "open", label: "Открыть заново (open)" },
+  { value: "waiting_operator", label: "Needs help (waiting_operator)" },
+  { value: "in_progress", label: "В работе (in_progress)" },
+  { value: "escalated", label: "Эскалирован (escalated)" },
+  { value: "resolved", label: "Решен (resolved)" },
+  { value: "closed", label: "Закрыт (closed)" },
+];
+
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -103,6 +117,12 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newMessage = payload.new as any;
+            if (newMessage.sender_type === "client") {
+              markChatAsReadAction(selectedChat.id).catch(err =>
+                console.warn("Failed to mark chat as read:", err)
+              );
+            }
+
             setMessages((prev) => {
               const formatted: ChatMessage = {
                 id: newMessage.id,
@@ -185,12 +205,14 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     });
   };
 
-  const handleStatusChange = (newStatus: string) => {
+  const handleStatusChange = (newStatus: ChatStatus) => {
     if (newStatus === selectedChat.status) return;
 
     let confirmationMsg = `Вы уверены, что хотите изменить статус на '${newStatus}'?`;
     if (newStatus === "open") {
       confirmationMsg = "Вы уверены, что хотите сбросить чат в 'open'? Это удалит текущее назначение на менеджера.";
+    } else if (newStatus === "waiting_operator") {
+      confirmationMsg = "Перевести чат в Needs help? Текущее назначение на менеджера будет снято.";
     } else if (newStatus === "resolved") {
        confirmationMsg = "Завершить этот диалог?";
     }
@@ -218,8 +240,24 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   }, [messages]);
 
   const isResolved = selectedChat.status === "resolved" || selectedChat.status === "closed";
-  const canReopen = currentManager?.role === "admin" || currentManager?.role === "supervisor";
-  const isStatusLocked = selectedChat.status === "escalated" && currentManager?.role === "support";
+  const isClaimable = selectedChat.status === "open" || selectedChat.status === "waiting_operator";
+  const isPrivilegedManager = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+  const isAssignedToCurrentManager = selectedChat.assignedManagerId === currentManager?.id;
+  const canSupportChangeStatus =
+    currentManager?.role === "support" && isAssignedToCurrentManager && selectedChat.status !== "escalated";
+  const canUseStatusSelector = Boolean(isPrivilegedManager || canSupportChangeStatus);
+  const canTransferChat = Boolean(!isResolved && !isClaimable && (isPrivilegedManager || isAssignedToCurrentManager));
+  const visibleStatusOptions = statusOptions.filter((option) => {
+    if (option.value === "waiting_operator") {
+      return Boolean(isPrivilegedManager && !isResolved);
+    }
+
+    if (option.value === "open") {
+      return Boolean(isPrivilegedManager || canSupportChangeStatus);
+    }
+
+    return true;
+  });
   const isAdmin = currentManager?.role === "admin";
 
   const handleDeleteMessage = (messageId: string) => {
@@ -285,7 +323,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {selectedChat.status === "open" && (
+          {isClaimable && (
             <Button
               onClick={handleTakeIntoWork}
               isLoading={isPending}
@@ -295,9 +333,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
             </Button>
           )}
 
-          {selectedChat.status !== "open" && (
+          {(canUseStatusSelector || canTransferChat) && (
             <>
-              {!isResolved && (
+              {canTransferChat && (
                 <div className="relative">
                   <Button
                     onClick={() => setShowTransfer(!showTransfer)}
@@ -327,21 +365,22 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                 </div>
               )}
               
-              <div className="relative">
-                <select 
-                  value={selectedChat.status}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  disabled={isPending || isStatusLocked}
-                  className={`rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-slate-900 ${isStatusLocked ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-50 disabled:opacity-50'}`}
-                  title={isStatusLocked ? "Эскалированный чат может менять только Admin или Supervisor" : undefined}
-                >
-                  {canReopen && <option value="open">Открыть заново (open)</option>}
-                  <option value="in_progress">В работе (in_progress)</option>
-                  <option value="escalated">Эскалирован (escalated)</option>
-                  <option value="resolved">Решен (resolved)</option>
-                  <option value="closed">Закрыт (closed)</option>
-                </select>
-              </div>
+              {canUseStatusSelector && (
+                <div className="relative">
+                  <select
+                    value={selectedChat.status}
+                    onChange={(e) => handleStatusChange(e.target.value as ChatStatus)}
+                    disabled={isPending}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50"
+                  >
+                    {visibleStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </>
           )}
 

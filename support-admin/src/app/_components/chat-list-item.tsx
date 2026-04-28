@@ -16,6 +16,10 @@ const activeCountClassName =
   "rounded-full bg-white/12 px-2 py-1 text-xs font-medium text-white";
 const inactiveCountClassName =
   "support-surface-muted support-text-secondary rounded-full px-2 py-1 text-xs font-medium";
+const activeNeedsHelpClassName =
+  "rounded-full bg-amber-300/95 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-950 shadow-sm";
+const inactiveNeedsHelpClassName =
+  "rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-700 ring-1 ring-amber-200";
 const activeMetaClassName =
   "mt-4 flex items-center justify-between text-xs text-[color:rgba(255,255,255,0.65)]";
 const inactiveMetaClassName = "support-text-muted mt-4 flex items-center justify-between text-xs";
@@ -30,6 +34,8 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
   const lastActivityLabel = chat.lastMessageAt
     ? new Date(chat.lastMessageAt).toLocaleDateString("ru-RU")
     : "нет сообщений";
+  const needsHelp = chat.status === "waiting_operator";
+  const showUnreadBadge = !isActive && chat.unreadCount > 0;
 
   return (
     <a
@@ -49,14 +55,21 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
             {chat.subtitle}
           </p>
         </div>
-        {chat.unreadCount > 0 && (
+        {(needsHelp || showUnreadBadge) && (
           <div className="flex flex-col items-end gap-1 pt-1">
-            <span className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">New</span>
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-white/10 animate-in zoom-in duration-300">
-                {chat.unreadCount}
+            {needsHelp && (
+              <span className={isActive ? activeNeedsHelpClassName : inactiveNeedsHelpClassName}>
+                Needs help
               </span>
-            </span>
+            )}
+            {showUnreadBadge && (
+              <span className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">New</span>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-white/10 animate-in zoom-in duration-300">
+                  {chat.unreadCount}
+                </span>
+              </span>
+            )}
           </div>
         )}
       </div>

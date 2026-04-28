@@ -20,6 +20,8 @@ export type ClientSnapshot = {
 
 export type MessageSenderType = "client" | "manager" | "ai" | "system";
 
+export type ChatStatus = "open" | "waiting_operator" | "in_progress" | "escalated" | "resolved" | "closed";
+
 export type ChatMessage = {
   id: string;
   chatId: string;
@@ -43,7 +45,7 @@ export type ChatSummary = {
   id: string;
   telegramChatId: number;
   botUsername: string;
-  status: "open" | "in_progress" | "escalated" | "resolved" | "closed";
+  status: ChatStatus;
   title: string;
   fullName: string | null;
   subtitle: string;
