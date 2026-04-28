@@ -5,6 +5,7 @@ import {parseUpdate} from "./lib/parse-update.ts";
 import {getBotToken} from "./lib/env.ts";
 import {canPersistMessage, canReplyToMessage} from "./lib/validate-message.ts";
 import {saveIncomingMessage} from "./lib/save-incoming-message.ts";
+import {invokeAiOrchestrator} from "./lib/invoke-ai-orchestrator.ts";
 
 Deno.serve(async (request) => {
     if (request.method !== "POST") {
@@ -36,7 +37,45 @@ Deno.serve(async (request) => {
 
         if (canPersistMessage(message)) {
             const botUsername = await getBotUsername(botToken)
-            await saveIncomingMessage(message, botUsername)
+            const saveResult = await saveIncomingMessage(message, botUsername)
+
+            if (saveResult?.inserted && saveResult.messageId) {
+                const correlationId = crypto.randomUUID()
+
+                console.log("AI orchestrator invoke scheduled:", JSON.stringify({
+                    chat_id: saveResult.chatId,
+                    trigger_message_id: saveResult.messageId,
+                    correlation_id: correlationId,
+                }))
+
+                try {
+                    const orchestratorInvoked = await invokeAiOrchestrator({
+                        chatId: saveResult.chatId,
+                        triggerMessageId: saveResult.messageId,
+                        correlationId,
+                    })
+
+                    if (orchestratorInvoked) {
+                        console.log("AI orchestrator invoke finished:", JSON.stringify({
+                            trigger_message_id: saveResult.messageId,
+                            correlation_id: correlationId,
+                        }))
+                    } else {
+                        console.error("AI orchestrator invoke did not finish successfully:", JSON.stringify({
+                            trigger_message_id: saveResult.messageId,
+                            correlation_id: correlationId,
+                        }))
+                    }
+                } catch (error) {
+                    console.error("AI orchestrator best-effort invoke error:", error)
+                }
+            } else {
+                console.log("AI orchestrator invoke skipped:", JSON.stringify({
+                    inserted: saveResult?.inserted ?? null,
+                    is_duplicate: saveResult?.isDuplicate ?? null,
+                    message_id: saveResult?.messageId ?? null,
+                }))
+            }
         }
 
         return createSuccessResponse()

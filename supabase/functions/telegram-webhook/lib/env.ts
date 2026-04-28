@@ -9,3 +9,7 @@ export function getSupabaseUrl() {
 export function getSupabaseServiceRoleKey() {
   return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? null
 }
+
+export function getInternalSecret() {
+  return Deno.env.get("INTERNAL_SECRET") ?? null
+}
