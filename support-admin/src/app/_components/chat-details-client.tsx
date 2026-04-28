@@ -44,6 +44,14 @@ function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Ma
     return "Менеджер";
   }
 
+  if (message.senderType === "ai") {
+    return "ИИ-помощник";
+  }
+
+  if (message.senderType === "system") {
+    return "Система";
+  }
+
   return chatTitle;
 }
 

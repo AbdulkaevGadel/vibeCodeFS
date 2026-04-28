@@ -18,10 +18,12 @@ export type ClientSnapshot = {
   lastName: string | null;
 };
 
+export type MessageSenderType = "client" | "manager" | "ai" | "system";
+
 export type ChatMessage = {
   id: string;
   chatId: string;
-  senderType: "client" | "manager";
+  senderType: MessageSenderType;
   managerId: string | null;
   text: string;
   deliveryStatus: "pending" | "sent" | "failed" | null;

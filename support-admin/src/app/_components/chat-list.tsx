@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChatSummary } from "../_lib/page-types";
+import { ChatSummary, MessageSenderType } from "../_lib/page-types";
 import { getBotKey } from "../_lib/page-utils";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatListItem } from "./chat-list-item";
@@ -26,7 +26,7 @@ type RealtimeChatRow = {
 type RealtimeMessageRow = {
   id: string;
   chat_id: string;
-  sender_type: "client" | "manager";
+  sender_type: MessageSenderType;
   text: string;
   created_at: string;
 };
