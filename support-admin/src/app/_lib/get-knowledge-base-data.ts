@@ -1,6 +1,6 @@
 import {createSupabaseServerClient} from "@/lib/supabase-server";
 import {getCurrentManager} from "./manager-utils";
-import {KnowledgeArticle, KnowledgeArticleHistory, KnowledgeBaseView, Manager} from "./page-types";
+import {ArticleEmbeddingStatus, KnowledgeArticle, KnowledgeArticleHistory, KnowledgeBaseView, Manager} from "./page-types";
 
 export type KnowledgeBasePageData = {
   articles: KnowledgeArticle[];
@@ -66,6 +66,20 @@ export async function getKnowledgeBaseData(
       selectedArticle = articles.find(a => a.id === selectedId) || null;
       
       if (selectedArticle) {
+        const { data: embeddingState, error: embeddingStateError } = await supabase
+          .rpc("get_kb_article_embedding_state_v1", {
+            p_article_id: selectedId,
+          });
+
+        if (embeddingStateError) {
+          console.error("Fetch article embedding state error:", embeddingStateError);
+        } else {
+          selectedArticle = {
+            ...selectedArticle,
+            ...mapEmbeddingState(embeddingState),
+          };
+        }
+
         const { data: historyData, error: historyError } = await supabase
           .from("knowledge_base_history")
           .select("*")
@@ -110,6 +124,29 @@ function mapArticle(row: any): KnowledgeArticle {
     updatedAt: row.updated_at,
     archivedAt: row.archived_at,
     archivedById: row.archived_by_id,
+    embeddingStatus: "unavailable",
+    embeddingChunkSetId: null,
+    embeddingErrorMessage: null,
+  };
+}
+
+function mapEmbeddingState(value: any): Pick<KnowledgeArticle, "embeddingStatus" | "embeddingChunkSetId" | "embeddingErrorMessage"> {
+  const allowedStatuses = new Set<ArticleEmbeddingStatus>([
+    "actual",
+    "outdated",
+    "updating",
+    "failed",
+    "unavailable",
+  ]);
+  const rawStatus = value?.embedding_status;
+  const embeddingStatus = allowedStatuses.has(rawStatus) ? rawStatus : "unavailable";
+
+  return {
+    embeddingStatus,
+    embeddingChunkSetId: typeof value?.chunk_set_id === "string" ? value.chunk_set_id : null,
+    embeddingErrorMessage: typeof value?.error_message === "string" && value.error_message.trim()
+      ? value.error_message
+      : null,
   };
 }
 

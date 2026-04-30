@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { KnowledgeArticle, KnowledgeArticleHistory, Manager } from "../../_lib/page-types";
-import { upsertArticleAction, setArticleStatusAction, deleteArticleAction } from "../../(protected)/_actions/knowledge-actions";
+import {
+  upsertArticleAction,
+  setArticleStatusAction,
+  deleteArticleAction,
+  refreshArticleEmbeddingsAction,
+} from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 
@@ -16,6 +21,7 @@ type KnowledgeDetailsProps = {
 export function KnowledgeDetails({ selectedArticle, history, currentManager, isCreatingArticle }: KnowledgeDetailsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isRefreshPending, startRefreshTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(isCreatingArticle);
   const [showHistory, setShowHistory] = useState(false);
   
@@ -25,6 +31,7 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const [slug, setSlug] = useState(selectedArticle?.slug ?? "");
   const [status, setStatus] = useState(selectedArticle?.status ?? "draft");
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
@@ -32,6 +39,7 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
   const handleSave = async () => {
     setError(null);
+    setStatusMessage(null);
     startTransition(async () => {
       const result = await upsertArticleAction(
         selectedArticle?.id ?? null,
@@ -56,6 +64,7 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const handleStatusChange = async (newStatus: any) => {
     if (!selectedArticle) return;
     setError(null);
+    setStatusMessage(null);
     startTransition(async () => {
       const result = await setArticleStatusAction(selectedArticle.id, newStatus, selectedArticle.version);
       if (result.error) {
@@ -83,6 +92,7 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
     if (!confirmed) return;
 
     setError(null);
+    setStatusMessage(null);
     startTransition(async () => {
       const result = await deleteArticleAction(selectedArticle.id, selectedArticle.version);
 
@@ -94,6 +104,30 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       }
     });
   };
+
+  const handleRefreshEmbeddings = async () => {
+    if (!selectedArticle) return;
+
+    setError(null);
+    setStatusMessage(null);
+    startRefreshTransition(async () => {
+      const result = await refreshArticleEmbeddingsAction(selectedArticle.id, selectedArticle.version);
+
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setStatusMessage(result.message ?? "Обновление знаний ИИ запущено");
+        router.refresh();
+      }
+    });
+  };
+
+  const embeddingUi = selectedArticle ? getEmbeddingUi(selectedArticle) : null;
+  const canRefreshEmbeddings = canManageLifecycle
+    && !!selectedArticle
+    && !isEditing
+    && !showHistory
+    && (selectedArticle.embeddingStatus === "outdated" || selectedArticle.embeddingStatus === "failed");
 
   if (!selectedArticle && (!isEditing || !canCreateArticle)) {
     return (
@@ -125,6 +159,29 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
         </div>
         
         <div className="flex items-center gap-3 ml-6">
+           {selectedArticle && embeddingUi && !isEditing && !showHistory && (
+             <span
+               title={embeddingUi.tooltip}
+               className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-black ${embeddingUi.className}`}
+             >
+               <span className={embeddingUi.isSpinner ? "animate-spin" : ""}>{embeddingUi.icon}</span>
+             </span>
+           )}
+
+           {selectedArticle && canManageLifecycle && !isEditing && !showHistory && (
+             <Button
+               onClick={handleRefreshEmbeddings}
+               isLoading={isRefreshPending}
+               disabled={!canRefreshEmbeddings}
+               variant="secondary"
+               size="sm"
+               title={embeddingUi?.buttonTitle}
+               className="whitespace-nowrap"
+             >
+               Обновить знания ИИ
+             </Button>
+           )}
+
            {selectedArticle && (
              <Button 
                 onClick={() => {
@@ -186,6 +243,12 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
           {error && (
             <div className="mb-6 p-4 rounded-3xl support-alert-danger text-sm font-medium animate-in fade-in slide-in-from-top-2">
                {error}
+            </div>
+          )}
+
+          {statusMessage && (
+            <div className="mb-6 p-4 rounded-3xl bg-emerald-50 text-emerald-700 border border-emerald-100 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+               {statusMessage}
             </div>
           )}
 
@@ -297,4 +360,54 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       </div>
     </div>
   );
+}
+
+function getEmbeddingUi(article: KnowledgeArticle) {
+  if (article.status === "archived" || article.embeddingStatus === "unavailable") {
+    return {
+      icon: "–",
+      tooltip: "Embeddings недоступны для этой статьи",
+      buttonTitle: "Embeddings недоступны для этой статьи",
+      className: "border-slate-200 bg-slate-50 text-slate-400",
+      isSpinner: false,
+    };
+  }
+
+  if (article.embeddingStatus === "actual") {
+    return {
+      icon: "✓",
+      tooltip: "Embeddings актуальны",
+      buttonTitle: "Embeddings уже актуальны",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-600",
+      isSpinner: false,
+    };
+  }
+
+  if (article.embeddingStatus === "updating") {
+    return {
+      icon: "◌",
+      tooltip: "Идёт обновление embeddings",
+      buttonTitle: "Идёт обновление embeddings",
+      className: "border-sky-200 bg-sky-50 text-sky-600",
+      isSpinner: true,
+    };
+  }
+
+  if (article.embeddingStatus === "failed") {
+    return {
+      icon: "⚠",
+      tooltip: "Последнее обновление embeddings завершилось ошибкой. Попробуйте снова",
+      buttonTitle: "Повторить обновление embeddings",
+      className: "border-red-200 bg-red-50 text-red-600",
+      isSpinner: false,
+    };
+  }
+
+  return {
+    icon: "⚠",
+    tooltip: "Embeddings устарели, требуется обновление",
+    buttonTitle: "Обновить embeddings для текущей версии статьи",
+    className: "border-amber-200 bg-amber-50 text-amber-600",
+    isSpinner: false,
+  };
 }

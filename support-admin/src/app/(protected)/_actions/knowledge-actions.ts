@@ -138,3 +138,123 @@ export async function deleteArticleAction(id: string, expectedVersion: number) {
     return { error: err.message || "Ошибка при удалении статьи" };
   }
 }
+
+export async function refreshArticleEmbeddingsAction(id: string, expectedVersion: number) {
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    const currentManager = await getCurrentManager().catch(() => null);
+
+    if (!currentManager) {
+      return { error: "Обновлять знания ИИ могут только пользователи с ролью менеджера." };
+    }
+
+    if (currentManager.role !== "admin" && currentManager.role !== "supervisor") {
+      return { error: "Обновлять знания ИИ могут только supervisor или admin." };
+    }
+
+    const { data, error } = await supabase.rpc("request_kb_article_embedding_refresh_v1", {
+      p_article_id: id,
+      p_expected_version: expectedVersion,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    const result = data as {
+      type?: string;
+      chunk_set_id?: string | null;
+      embedding_status?: string;
+    } | null;
+
+    if (!result?.type) {
+      throw new Error("EMPTY_EMBEDDING_REFRESH_RESULT");
+    }
+
+    if (result.type === "version_conflict") {
+      revalidatePath("/knowledge-base");
+      return { error: "Статья была изменена. Обновите страницу и повторите действие." };
+    }
+
+    if (result.type === "forbidden") {
+      return { error: "Обновлять знания ИИ могут только supervisor или admin." };
+    }
+
+    if (result.type === "not_found") {
+      revalidatePath("/knowledge-base");
+      return { error: "Статья не найдена." };
+    }
+
+    if (result.type === "unavailable") {
+      revalidatePath("/knowledge-base");
+      return { error: "Embeddings недоступны для этой статьи." };
+    }
+
+    if (result.type === "already_actual") {
+      revalidatePath("/knowledge-base");
+      return { data: result, message: "Embeddings уже актуальны" };
+    }
+
+    if (result.type === "already_updating") {
+      revalidatePath("/knowledge-base");
+      return { data: result, message: "Обновление embeddings уже запущено" };
+    }
+
+    if (result.type !== "queued" && result.type !== "retry_queued") {
+      revalidatePath("/knowledge-base");
+      return { error: "Не удалось запустить обновление знаний ИИ." };
+    }
+
+    if (!result.chunk_set_id) {
+      throw new Error("EMBEDDING_REFRESH_CHUNK_SET_ID_MISSING");
+    }
+
+    await invokeKbIngestion(result.chunk_set_id);
+
+    revalidatePath("/knowledge-base");
+    return { data: result, message: "Обновление знаний ИИ запущено" };
+  } catch (err: any) {
+    console.error("Knowledge Base Embedding Refresh Error:", err);
+    return { error: err.message || "Ошибка при обновлении знаний ИИ" };
+  }
+}
+
+async function invokeKbIngestion(chunkSetId: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const internalSecret = process.env.INTERNAL_SECRET?.trim();
+
+  if (!supabaseUrl || !internalSecret) {
+    throw new Error("INTERNAL_SECRET_OR_SUPABASE_URL_NOT_CONFIGURED");
+  }
+
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/kb-ingestion`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": internalSecret,
+    },
+    body: JSON.stringify({
+      mode: "webhook",
+      chunk_set_id: chunkSetId,
+    }),
+  });
+
+  const responseText = await response.text();
+  let body: any = null;
+
+  try {
+    body = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    body = null;
+  }
+
+  if (!response.ok || body?.ok === false) {
+    console.error("KB ingestion invocation failed:", {
+      status: response.status,
+      body,
+    });
+    throw new Error("Не удалось запустить ingestion pipeline.");
+  }
+}

@@ -90,6 +90,8 @@ export type ArticleStatus = "draft" | "published" | "archived";
 
 export type KnowledgeBaseView = "active" | "archive";
 
+export type ArticleEmbeddingStatus = "actual" | "outdated" | "updating" | "failed" | "unavailable";
+
 export type KnowledgeArticle = {
   id: string;
   slug: string;
@@ -103,6 +105,9 @@ export type KnowledgeArticle = {
   updatedAt: string;
   archivedAt: string | null;
   archivedById: string | null;
+  embeddingStatus: ArticleEmbeddingStatus;
+  embeddingChunkSetId: string | null;
+  embeddingErrorMessage: string | null;
 };
 
 export type KnowledgeArticleHistory = {
