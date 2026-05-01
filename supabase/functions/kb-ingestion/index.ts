@@ -1,6 +1,7 @@
 export {}
 
 const maxPayloadBytes = 4096
+const workerPipelineVersion = "kb_ingestion_v2"
 
 const config = {
   chunkSize: readIntegerEnv("CHUNK_SIZE", 1000, 300, 5000),
@@ -33,6 +34,8 @@ type ClaimResult = {
   chunk_set_id?: string
   article_id?: string
   content_checksum?: string
+  ingestion_pipeline_version?: string
+  expected_ingestion_pipeline_version?: string
   embedding_model?: string
   embedding_dimension?: number
   processing_token?: string
@@ -46,7 +49,7 @@ type ChunkPayload = {
   embedding: number[]
 }
 
-type ErrorType = "validation" | "external" | "system"
+type ErrorType = "validation" | "external" | "system" | "pipeline_version_mismatch"
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
@@ -82,6 +85,22 @@ Deno.serve(async (request) => {
   }
 
   try {
+    const expectedPipelineVersion = await getExpectedPipelineVersion()
+
+    if (workerPipelineVersion !== expectedPipelineVersion) {
+      console.error("kb-ingestion pipeline version mismatch:", JSON.stringify({
+        worker_pipeline_version: workerPipelineVersion,
+        expected_pipeline_version: expectedPipelineVersion,
+      }))
+
+      return jsonResponse({
+        ok: false,
+        type: "pipeline_version_mismatch",
+        worker_pipeline_version: workerPipelineVersion,
+        expected_pipeline_version: expectedPipelineVersion,
+      })
+    }
+
     if (payload.mode === "webhook") {
       const result = await processWebhook(payload)
       return jsonResponse(result)
@@ -253,10 +272,15 @@ async function processClaimedChunkSet(claim: ClaimResult) {
   const chunkSetId = requireString(claim.chunk_set_id, "chunk_set_id")
   const processingToken = requireString(claim.processing_token, "processing_token")
   const ingestionRunId = requireString(claim.ingestion_run_id, "ingestion_run_id")
+  const chunkSetPipelineVersion = requireString(claim.ingestion_pipeline_version, "ingestion_pipeline_version")
 
   try {
     if (!claim.article) {
       throw new IngestionError("Article payload is missing", "validation")
+    }
+
+    if (chunkSetPipelineVersion !== workerPipelineVersion) {
+      throw new IngestionError("PIPELINE_VERSION_MISMATCH", "pipeline_version_mismatch")
     }
 
     if (claim.embedding_dimension !== config.embeddingDimension) {
@@ -310,8 +334,13 @@ async function processClaimedChunkSet(claim: ClaimResult) {
       p_chunk_set_id: chunkSetId,
       p_processing_token: processingToken,
       p_content_checksum: requireString(claim.content_checksum, "content_checksum"),
+      p_ingestion_pipeline_version: workerPipelineVersion,
       p_chunks: embeddedChunks,
     })
+
+    if (completeResult.type === "pipeline_version_mismatch") {
+      throw new IngestionError("PIPELINE_VERSION_MISMATCH", "pipeline_version_mismatch")
+    }
 
     if (completeResult.type !== "completed") {
       throw new IngestionError(`Completion failed: ${String(completeResult.type)}`, "system")
@@ -322,6 +351,7 @@ async function processClaimedChunkSet(claim: ClaimResult) {
       chunk_set_id: chunkSetId,
       article_id: claim.article_id,
       chunk_count: embeddedChunks.length,
+      ingestion_pipeline_version: workerPipelineVersion,
     }))
 
     return {
@@ -330,6 +360,7 @@ async function processClaimedChunkSet(claim: ClaimResult) {
       ingestion_run_id: ingestionRunId,
       chunk_set_id: chunkSetId,
       chunk_count: embeddedChunks.length,
+      ingestion_pipeline_version: workerPipelineVersion,
     }
   } catch (error) {
     const errorType = classifyError(error)
@@ -364,6 +395,12 @@ async function processClaimedChunkSet(claim: ClaimResult) {
   }
 }
 
+async function getExpectedPipelineVersion() {
+  const version = await callRpc<string>("get_kb_ingestion_pipeline_version_v1", {})
+
+  return requireString(version, "expected_pipeline_version")
+}
+
 async function heartbeat(chunkSetId: string, processingToken: string) {
   const result = await callRpc<Record<string, unknown>>("heartbeat_kb_chunk_set_ingestion", {
     p_chunk_set_id: chunkSetId,
@@ -376,44 +413,67 @@ async function heartbeat(chunkSetId: string, processingToken: string) {
 }
 
 function buildSourceText(title: string, content: string) {
-  return [title, content]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join("\n\n")
+  const cleanTitle = title.trim()
+  const cleanContent = normalizeNewlines(content).trim()
+
+  if (!cleanTitle) {
+    return cleanContent
+  }
+
+  if (!cleanContent) {
+    return `# ${cleanTitle}`
+  }
+
+  const firstMeaningfulLine = findFirstMeaningfulLine(cleanContent)
+
+  if (firstMeaningfulLine && canonicalTitle(firstMeaningfulLine) === canonicalTitle(cleanTitle)) {
+    return cleanContent
+  }
+
+  return [`# ${cleanTitle}`, cleanContent].join("\n\n")
 }
 
 function splitIntoChunks(text: string, chunkSize: number, overlap: number) {
-  const normalized = text.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim()
+  const units = extractTextUnits(text)
 
-  if (!normalized) {
+  if (units.length === 0) {
     return []
   }
 
-  const units = normalized
-    .split(/\n{2,}|(?<=[.!?])\s+/g)
-    .map((unit) => unit.trim())
-    .filter(Boolean)
-
   const chunks: string[] = []
   let current = ""
+  const smallUnitLimit = Math.floor(chunkSize * 0.5)
 
   for (const unit of units) {
     if (unit.length > chunkSize) {
+      const blockToSplit = current && current.length < smallUnitLimit
+        ? joinTextUnits(current, unit)
+        : unit
+
       if (current) {
-        chunks.push(current)
+        if (current.length >= smallUnitLimit) {
+          chunks.push(current)
+        }
+
         current = ""
       }
 
-      for (const part of hardSplit(unit, chunkSize, overlap)) {
+      for (const part of hardSplit(blockToSplit, chunkSize, overlap)) {
         chunks.push(part)
       }
 
       continue
     }
 
-    const candidate = current ? `${current} ${unit}` : unit
+    if (!current) {
+      current = unit
+      continue
+    }
 
-    if (candidate.length <= chunkSize) {
+    const candidate = joinTextUnits(current, unit)
+    const shouldMerge = current.length < smallUnitLimit || unit.length < smallUnitLimit
+
+    if (shouldMerge && candidate.length <= chunkSize) {
       current = candidate
       continue
     }
@@ -422,7 +482,7 @@ function splitIntoChunks(text: string, chunkSize: number, overlap: number) {
       chunks.push(current)
     }
 
-    current = withOverlap(current, unit, overlap)
+    current = unit
   }
 
   if (current) {
@@ -432,12 +492,149 @@ function splitIntoChunks(text: string, chunkSize: number, overlap: number) {
   return chunks
 }
 
+function normalizeNewlines(text: string) {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+}
+
+function findFirstMeaningfulLine(text: string) {
+  for (const line of normalizeNewlines(text).split("\n")) {
+    const trimmed = line.trim()
+
+    if (!trimmed || isHorizontalRule(trimmed)) {
+      continue
+    }
+
+    const withoutBlockquote = stripBlockquoteMarker(trimmed).trim()
+
+    if (!withoutBlockquote) {
+      continue
+    }
+
+    return trimmed
+  }
+
+  return null
+}
+
+function canonicalTitle(text: string) {
+  return stripBlockquoteMarker(text)
+    .replace(/^#+\s*/, "")
+    .replace(/:+\s*$/, "")
+    .replace(/\*\*/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim()
+    .toLowerCase()
+}
+
+function extractTextUnits(text: string) {
+  const units: string[] = []
+  let currentLines: string[] = []
+
+  const flushCurrent = () => {
+    const unit = normalizeUnitText(currentLines.join("\n"))
+
+    if (unit) {
+      units.push(unit)
+    }
+
+    currentLines = []
+  }
+
+  for (const line of normalizeNewlines(text).split("\n")) {
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      flushCurrent()
+      continue
+    }
+
+    if (isHorizontalRule(trimmed)) {
+      flushCurrent()
+      continue
+    }
+
+    const headingText = readSupportedHeading(trimmed)
+
+    if (headingText) {
+      flushCurrent()
+      units.push(formatHeadingUnit(headingText))
+      continue
+    }
+
+    const cleanLine = cleanMarkdownLine(line)
+
+    if (cleanLine) {
+      currentLines.push(cleanLine)
+    }
+  }
+
+  flushCurrent()
+
+  return units
+}
+
+function isHorizontalRule(text: string) {
+  return /^-{3,}$/.test(text.trim())
+}
+
+function readSupportedHeading(text: string) {
+  const match = text.match(/^#{1,3}\s+(.+)$/)
+
+  if (!match) {
+    return null
+  }
+
+  return cleanMarkdownLine(match[1])
+}
+
+function formatHeadingUnit(text: string) {
+  const normalized = normalizeUnitText(text)
+
+  if (!normalized) {
+    return ""
+  }
+
+  return /[:：]$/.test(normalized) ? normalized : `${normalized}:`
+}
+
+function cleanMarkdownLine(line: string) {
+  let text = stripBlockquoteMarker(line.trim()).trim()
+
+  if (!text || isHorizontalRule(text)) {
+    return ""
+  }
+
+  text = text.replace(/^#+\s*/, "")
+  text = text.replace(/^[-*+]\s+/, "")
+  text = text.replace(/\*\*/g, "")
+  text = text.replace(/[ \t]+/g, " ")
+
+  return text.trim()
+}
+
+function stripBlockquoteMarker(text: string) {
+  return text.replace(/^(>\s*)+/, "")
+}
+
+function normalizeUnitText(text: string) {
+  return normalizeNewlines(text)
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim()
+}
+
+function joinTextUnits(left: string, right: string) {
+  return `${left.trim()}\n\n${right.trim()}`.trim()
+}
+
 function hardSplit(text: string, chunkSize: number, overlap: number) {
   const chunks: string[] = []
   let start = 0
 
   while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length)
+    const end = chooseSplitEnd(text, start, chunkSize)
     const chunk = text.slice(start, end).trim()
 
     if (chunk) {
@@ -448,21 +645,91 @@ function hardSplit(text: string, chunkSize: number, overlap: number) {
       break
     }
 
-    start = Math.max(end - overlap, start + 1)
+    start = chooseNextSplitStart(text, start, end, overlap)
   }
 
   return chunks
 }
 
-function withOverlap(previous: string, next: string, overlap: number) {
-  if (!previous || overlap <= 0) {
-    return next
+function chooseSplitEnd(text: string, start: number, chunkSize: number) {
+  const maxEnd = Math.min(start + chunkSize, text.length)
+
+  if (maxEnd === text.length) {
+    return maxEnd
   }
 
-  const suffix = previous.slice(Math.max(0, previous.length - overlap)).trim()
-  const candidate = `${suffix} ${next}`.trim()
+  const minEnd = start + Math.floor(chunkSize * 0.5)
+  const sentenceEnd = findLastSentenceEnd(text, start, maxEnd, minEnd)
 
-  return candidate
+  if (sentenceEnd) {
+    return sentenceEnd
+  }
+
+  const whitespaceEnd = findLastWhitespaceEnd(text, start, maxEnd, minEnd)
+
+  if (whitespaceEnd) {
+    return whitespaceEnd
+  }
+
+  return maxEnd
+}
+
+function findLastSentenceEnd(text: string, start: number, maxEnd: number, minEnd: number) {
+  for (let index = maxEnd - 1; index >= minEnd; index -= 1) {
+    const char = text[index]
+    const nextChar = text[index + 1]
+
+    if ((char === "." || char === "!" || char === "?") && (!nextChar || /\s/.test(nextChar))) {
+      return index + 1
+    }
+  }
+
+  return null
+}
+
+function findLastWhitespaceEnd(text: string, start: number, maxEnd: number, minEnd: number) {
+  for (let index = maxEnd - 1; index >= minEnd; index -= 1) {
+    if (/\s/.test(text[index])) {
+      return index
+    }
+  }
+
+  return null
+}
+
+function chooseNextSplitStart(text: string, previousStart: number, previousEnd: number, overlap: number) {
+  if (overlap <= 0) {
+    return skipWhitespace(text, previousEnd)
+  }
+
+  let nextStart = Math.max(previousStart + 1, previousEnd - overlap)
+
+  while (
+    nextStart < previousEnd
+    && nextStart > 0
+    && !/\s/.test(text[nextStart - 1])
+    && !/\s/.test(text[nextStart])
+  ) {
+    nextStart += 1
+  }
+
+  nextStart = skipWhitespace(text, nextStart)
+
+  if (nextStart >= previousEnd) {
+    return skipWhitespace(text, previousEnd)
+  }
+
+  return nextStart
+}
+
+function skipWhitespace(text: string, start: number) {
+  let index = start
+
+  while (index < text.length && /\s/.test(text[index])) {
+    index += 1
+  }
+
+  return index
 }
 
 async function fetchEmbeddings(model: string, inputs: string[]) {
