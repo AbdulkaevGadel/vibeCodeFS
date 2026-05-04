@@ -1,11 +1,11 @@
 export {}
 
 const maxPayloadBytes = 4096
-const workerPipelineVersion = "kb_ingestion_v2"
+const workerPipelineVersion = "kb_ingestion_v4"
 
 const config = {
-  chunkSize: readIntegerEnv("CHUNK_SIZE", 1000, 300, 5000),
-  chunkOverlap: readIntegerEnv("CHUNK_OVERLAP", 150, 0, 1000),
+  chunkSize: readIntegerEnv("CHUNK_SIZE", 700, 300, 900),
+  chunkOverlap: readIntegerEnv("CHUNK_OVERLAP", 120, 0, 400),
   maxSweepItems: readIntegerEnv("MAX_SWEEP_ITEMS", 5, 1, 20),
   maxAttempts: readIntegerEnv("MAX_INGESTION_ATTEMPTS", 3, 1, 10),
   staleProcessingSeconds: readIntegerEnv("STALE_PROCESSING_SECONDS", 300, 30, 3600),
@@ -50,6 +50,20 @@ type ChunkPayload = {
 }
 
 type ErrorType = "validation" | "external" | "system" | "pipeline_version_mismatch"
+
+type ArticleUnit = {
+  sectionLabel: string | null
+  stepLabel: string | null
+  text: string
+  userPhrases: string[]
+}
+
+type TextBlock = {
+  sectionLabel: string | null
+  stepLabel: string | null
+  lines: string[]
+  userPhrases: string[]
+}
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
@@ -289,8 +303,7 @@ async function processClaimedChunkSet(claim: ClaimResult) {
 
     await heartbeat(chunkSetId, processingToken)
 
-    const sourceText = buildSourceText(claim.article.title, claim.article.content)
-    const chunks = splitIntoChunks(sourceText, config.chunkSize, config.chunkOverlap)
+    const chunks = buildRetrievalChunks(claim.article.title, claim.article.content, config.chunkSize, config.chunkOverlap)
 
     if (chunks.length === 0) {
       throw new IngestionError("Article content is empty after chunking", "validation")
@@ -412,81 +425,232 @@ async function heartbeat(chunkSetId: string, processingToken: string) {
   }
 }
 
-function buildSourceText(title: string, content: string) {
-  const cleanTitle = title.trim()
-  const cleanContent = normalizeNewlines(content).trim()
-
-  if (!cleanTitle) {
-    return cleanContent
-  }
-
-  if (!cleanContent) {
-    return `# ${cleanTitle}`
-  }
-
-  const firstMeaningfulLine = findFirstMeaningfulLine(cleanContent)
-
-  if (firstMeaningfulLine && canonicalTitle(firstMeaningfulLine) === canonicalTitle(cleanTitle)) {
-    return cleanContent
-  }
-
-  return [`# ${cleanTitle}`, cleanContent].join("\n\n")
-}
-
-function splitIntoChunks(text: string, chunkSize: number, overlap: number) {
-  const units = extractTextUnits(text)
+function buildRetrievalChunks(title: string, content: string, chunkSize: number, overlap: number) {
+  const articleTitle = normalizeInlineText(title)
+  const units = extractArticleUnits(articleTitle, content)
 
   if (units.length === 0) {
-    return []
+    return articleTitle ? [`Article: ${articleTitle}`] : []
   }
 
   const chunks: string[] = []
-  let current = ""
-  const smallUnitLimit = Math.floor(chunkSize * 0.5)
+  const targetSize = Math.min(chunkSize, 700)
+  const hardMaxSize = Math.min(Math.max(chunkSize, 300), 900)
 
-  for (const unit of units) {
-    if (unit.length > chunkSize) {
-      const blockToSplit = current && current.length < smallUnitLimit
-        ? joinTextUnits(current, unit)
-        : unit
+  for (const unit of mergeShortUnits(units, articleTitle, targetSize)) {
+    const chunkText = formatRetrievalChunk(articleTitle, unit)
 
-      if (current) {
-        if (current.length >= smallUnitLimit) {
-          chunks.push(current)
-        }
+    if (chunkText.length <= hardMaxSize) {
+      chunks.push(chunkText)
+      continue
+    }
 
-        current = ""
-      }
+    for (const part of splitLongRetrievalChunk(articleTitle, unit, hardMaxSize, overlap)) {
+      chunks.push(part)
+    }
+  }
 
-      for (const part of hardSplit(blockToSplit, chunkSize, overlap)) {
-        chunks.push(part)
-      }
+  return chunks.filter((chunk) => chunk.trim().length > 0)
+}
 
+function extractArticleUnits(articleTitle: string, content: string) {
+  const units: ArticleUnit[] = []
+  let currentSection: string | null = null
+  let current: TextBlock | null = null
+
+  const flushCurrent = () => {
+    if (!current) {
+      return
+    }
+
+    const text = normalizeUnitText(current.lines.join("\n"))
+
+    if (text) {
+      units.push({
+        sectionLabel: current.sectionLabel,
+        stepLabel: current.stepLabel,
+        text,
+        userPhrases: uniqueStrings(current.userPhrases),
+      })
+    }
+
+    current = null
+  }
+
+  const beginBlock = (stepLabel: string | null, initialLine: string | null = null, sectionLabel = currentSection) => {
+    flushCurrent()
+    const nextBlock = {
+      sectionLabel,
+      stepLabel,
+      lines: initialLine ? [initialLine] : [],
+      userPhrases: [],
+    }
+
+    current = nextBlock
+
+    return nextBlock
+  }
+
+  for (const rawLine of normalizeNewlines(content).split("\n")) {
+    const trimmed = rawLine.trim()
+
+    if (!trimmed || isHorizontalRule(trimmed)) {
+      flushCurrent()
+      continue
+    }
+
+    if (articleTitle && canonicalTitle(trimmed) === canonicalTitle(articleTitle)) {
+      continue
+    }
+
+    const headingLabel = readSupportedHeading(trimmed)
+
+    if (headingLabel) {
+      flushCurrent()
+      currentSection = headingLabel
+      continue
+    }
+
+    const supportLabel = readSupportSectionLabel(trimmed)
+
+    if (supportLabel) {
+      flushCurrent()
+      currentSection = supportLabel
+      continue
+    }
+
+    const numberedStep = readNumberedStep(trimmed)
+
+    if (numberedStep) {
+      const stepLine = numberedStep.text
+        ? `${numberedStep.label}: ${numberedStep.text}`
+        : numberedStep.label
+
+      beginBlock(numberedStep.label, stepLine, null)
+      continue
+    }
+
+    const cleanLine = cleanMarkdownLine(rawLine)
+
+    if (!cleanLine) {
       continue
     }
 
     if (!current) {
-      current = unit
+      current = beginBlock(null)
+    }
+
+    const activeBlock = current
+
+    if (!activeBlock) {
       continue
     }
 
-    const candidate = joinTextUnits(current, unit)
-    const shouldMerge = current.length < smallUnitLimit || unit.length < smallUnitLimit
+    activeBlock.lines.push(cleanLine)
 
-    if (shouldMerge && candidate.length <= chunkSize) {
-      current = candidate
-      continue
+    for (const phrase of readUserPhrasesFromLine(cleanLine, currentSection)) {
+      activeBlock.userPhrases.push(phrase)
     }
-
-    if (current) {
-      chunks.push(current)
-    }
-
-    current = unit
   }
 
-  if (current) {
-    chunks.push(current)
+  flushCurrent()
+
+  return units
+}
+
+function mergeShortUnits(units: ArticleUnit[], articleTitle: string, targetSize: number) {
+  const merged: ArticleUnit[] = []
+
+  for (const unit of units) {
+    const previous = merged[merged.length - 1]
+
+    if (
+      previous
+      && !unit.stepLabel
+      && !previous.stepLabel
+      && previous.sectionLabel === unit.sectionLabel
+      && formatRetrievalChunk(articleTitle, combineUnits(previous, unit)).length <= targetSize
+    ) {
+      merged[merged.length - 1] = combineUnits(previous, unit)
+      continue
+    }
+
+    merged.push(unit)
+  }
+
+  return merged
+}
+
+function combineUnits(left: ArticleUnit, right: ArticleUnit): ArticleUnit {
+  return {
+    sectionLabel: left.sectionLabel,
+    stepLabel: left.stepLabel,
+    text: joinTextUnits(left.text, right.text),
+    userPhrases: uniqueStrings([...left.userPhrases, ...right.userPhrases]),
+  }
+}
+
+function formatRetrievalChunk(articleTitle: string, unit: ArticleUnit) {
+  const lines: string[] = []
+
+  if (articleTitle && shouldIncludeArticleTitle(unit)) {
+    lines.push(`Статья: ${articleTitle}`)
+  }
+
+  if (unit.sectionLabel) {
+    lines.push(`Раздел: ${unit.sectionLabel}`)
+  }
+
+  if (unit.stepLabel) {
+    lines.push(`Шаг: ${unit.stepLabel}`)
+  }
+
+  const intent = inferIntent(articleTitle, unit)
+
+  if (intent) {
+    lines.push(`Намерение: ${intent}`)
+  }
+
+  if (unit.userPhrases.length > 0) {
+    const customerIntent = inferCustomerIntent(articleTitle, unit)
+
+    if (customerIntent) {
+      lines.push(customerIntent)
+    }
+
+    lines.push("Фразы клиента:")
+    lines.push(...unit.userPhrases.map((phrase) => `- ${phrase}`))
+  }
+
+  const keywords = shouldIncludeKeywords(unit)
+    ? extractKeywords([articleTitle, unit.sectionLabel ?? "", unit.text, ...unit.userPhrases].join(" "))
+    : []
+
+  if (keywords.length > 0) {
+    lines.push(`Ключевые слова: ${keywords.join(", ")}`)
+  }
+
+  lines.push("")
+  lines.push(unit.text)
+
+  return normalizeUnitText(lines.join("\n"))
+}
+
+function splitLongRetrievalChunk(articleTitle: string, unit: ArticleUnit, chunkSize: number, overlap: number) {
+  const chunks: string[] = []
+  const contextUnit = {
+    ...unit,
+    text: "",
+  }
+  const contextPrefix = formatRetrievalChunk(articleTitle, contextUnit).trim()
+  const availableSize = Math.max(200, chunkSize - contextPrefix.length - 2)
+
+  for (const part of hardSplit(unit.text, availableSize, overlap)) {
+    const chunk = normalizeUnitText(`${contextPrefix}\n\n${part}`)
+
+    if (chunk.length <= chunkSize || part.length <= availableSize) {
+      chunks.push(chunk)
+    }
   }
 
   return chunks
@@ -584,7 +748,7 @@ function readSupportedHeading(text: string) {
     return null
   }
 
-  return cleanMarkdownLine(match[1])
+  return normalizeSectionLabel(cleanMarkdownLine(match[1]))
 }
 
 function formatHeadingUnit(text: string) {
@@ -595,6 +759,218 @@ function formatHeadingUnit(text: string) {
   }
 
   return /[:：]$/.test(normalized) ? normalized : `${normalized}:`
+}
+
+function readSupportSectionLabel(text: string) {
+  const cleaned = cleanSectionLine(text)
+  const withoutColon = cleaned.replace(/[:：]\s*$/, "").trim()
+  const canonical = withoutColon.toLowerCase()
+
+  const knownLabels: Record<string, string> = {
+    "когда использовать": "Когда использовать",
+    "когда применять": "Когда использовать",
+    "фразы клиента": "Фразы клиента",
+    "что пишет клиент": "Фразы клиента",
+    "что нужно сделать": "Что нужно сделать",
+    "шаги": "Что нужно сделать",
+    "важно": "Важно",
+    "готовый ответ": "Готовый ответ клиенту",
+    "готовый ответ клиенту": "Готовый ответ клиенту",
+    "ответ клиенту": "Готовый ответ клиенту",
+    "эскалация": "Эскалация",
+    "когда эскалировать": "Эскалация",
+  }
+
+  return knownLabels[canonical] ?? null
+}
+
+function normalizeSectionLabel(text: string) {
+  const supportLabel = readSupportSectionLabel(text)
+
+  if (supportLabel) {
+    return supportLabel
+  }
+
+  return cleanSectionLine(text).replace(/[:：]\s*$/, "").trim()
+}
+
+function readNumberedStep(text: string) {
+  const match = stripBlockquoteMarker(text)
+    .trim()
+    .match(/^(\d{1,2})[.)]\s+(.+)$/)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    label: `Step ${match[1]}`,
+    text: cleanMarkdownLine(match[2]),
+  }
+}
+
+function readUserPhrasesFromLine(text: string, sectionLabel: string | null) {
+  if (!sectionLabel || !isUserPhraseSection(sectionLabel)) {
+    return []
+  }
+
+  const phrase = text
+    .replace(/^["'«»]+|["'«»]+$/g, "")
+    .replace(/[.;]+$/g, "")
+    .trim()
+
+  if (
+    !phrase
+    || phrase.length > 120
+    || /[:：]$/.test(phrase)
+    || /^если\s+клиент\s+пишет/i.test(phrase)
+  ) {
+    return []
+  }
+
+  return [phrase]
+}
+
+function inferIntent(articleTitle: string, unit: ArticleUnit) {
+  const unitSource = [unit.sectionLabel ?? "", unit.stepLabel ?? "", unit.text, ...unit.userPhrases].join(" ").toLowerCase()
+  const source = [articleTitle, unitSource].join(" ").toLowerCase()
+
+  if (isWarningSection(unit.sectionLabel)) {
+    return "правила безопасности"
+  }
+
+  if (isReadyAnswerSection(unit.sectionLabel)) {
+    return "готовый ответ клиенту"
+  }
+
+  if (/эскалац|оператор|менеджер|поддержк/.test(unitSource)) {
+    return "передача обращения оператору"
+  }
+
+  if (/возврат|вернуть|refund/.test(unitSource)) {
+    return "возврат средств"
+  }
+
+  if (/оплат|плат[её]ж|карт|деньг|списал/.test(source)) {
+    return "клиент не может оплатить заказ"
+  }
+
+  return null
+}
+
+function inferCustomerIntent(articleTitle: string, unit: ArticleUnit) {
+  const source = [articleTitle, unit.text, ...unit.userPhrases].join(" ").toLowerCase()
+
+  if (/оплат|плат[её]ж|карт/.test(source)) {
+    return "Клиент не может оплатить картой или сообщает об ошибке платежа."
+  }
+
+  if (/деньг|списал/.test(source)) {
+    return "Клиент сообщает, что деньги списались или платёж завис."
+  }
+
+  return null
+}
+
+function shouldIncludeArticleTitle(unit: ArticleUnit) {
+  return !isWarningSection(unit.sectionLabel)
+}
+
+function shouldIncludeKeywords(unit: ArticleUnit) {
+  return !isWarningSection(unit.sectionLabel) && !isReadyAnswerSection(unit.sectionLabel)
+}
+
+function isUserPhraseSection(sectionLabel: string | null) {
+  return sectionLabel === "Когда использовать" || sectionLabel === "Фразы клиента"
+}
+
+function isWarningSection(sectionLabel: string | null) {
+  return sectionLabel === "Важно"
+}
+
+function isReadyAnswerSection(sectionLabel: string | null) {
+  return sectionLabel === "Готовый ответ клиенту"
+}
+
+function extractKeywords(text: string) {
+  const normalized = text
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^a-zа-я0-9\s-]/g, " ")
+
+  const words = normalized
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 4 && !isStopWord(word))
+
+  const keywordStems = [
+    "оплат",
+    "платеж",
+    "карт",
+    "деньг",
+    "спис",
+    "ошиб",
+    "заказ",
+    "возврат",
+    "оператор",
+    "эскалац",
+    "поддерж",
+    "cvv",
+  ]
+
+  const keywords: string[] = []
+
+  for (const stem of keywordStems) {
+    const word = words.find((item) => item.includes(stem))
+
+    if (word) {
+      keywords.push(word)
+    }
+  }
+
+  return uniqueStrings(keywords).slice(0, 8)
+}
+
+function isStopWord(word: string) {
+  return [
+    "если",
+    "когда",
+    "нужно",
+    "можно",
+    "клиент",
+    "клиента",
+    "клиенту",
+    "использовать",
+    "проверить",
+    "уточнить",
+    "который",
+    "другие",
+    "после",
+    "перед",
+    "через",
+    "this",
+    "that",
+    "with",
+  ].includes(word)
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const value of values) {
+    const normalized = normalizeInlineText(value)
+    const key = normalized.toLowerCase()
+
+    if (!normalized || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    result.push(normalized)
+  }
+
+  return result
 }
 
 function cleanMarkdownLine(line: string) {
@@ -610,6 +986,17 @@ function cleanMarkdownLine(line: string) {
   text = text.replace(/[ \t]+/g, " ")
 
   return text.trim()
+}
+
+function cleanSectionLine(line: string) {
+  return cleanMarkdownLine(line)
+    .replace(/^[^0-9A-Za-zА-Яа-яЁё]+/, "")
+    .replace(/[ \t]+/g, " ")
+    .trim()
+}
+
+function normalizeInlineText(text: string) {
+  return text.replace(/[ \t]+/g, " ").trim()
 }
 
 function stripBlockquoteMarker(text: string) {

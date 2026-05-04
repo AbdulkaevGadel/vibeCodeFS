@@ -4,7 +4,7 @@ const config = {
   promptVersion: "phase-8-retrieval-v1",
   retrieval: {
     enabled: true,
-    matchThreshold: readNumberEnv("RETRIEVAL_MATCH_THRESHOLD", 0.65, 0, 1),
+    matchThreshold: readNumberEnv("RETRIEVAL_MATCH_THRESHOLD", 0.60, 0, 1),
     matchCount: readIntegerEnv("RETRIEVAL_MATCH_COUNT", 5, 1, 20),
     candidateCount: readIntegerEnv("RETRIEVAL_CANDIDATE_COUNT", 50, 5, 200),
     embeddingProvider: "huggingface",
@@ -243,6 +243,7 @@ async function runRetrieval(triggerMessageId: string): Promise<RetrievalResult> 
 
   const result = await callRpc<RetrievalResult>("match_knowledge_chunks_v1", {
     p_query_embedding: queryEmbedding,
+    p_query_text: triggerMessage.text,
     p_match_threshold: config.retrieval.matchThreshold,
     p_match_count: config.retrieval.matchCount,
     p_candidate_count: config.retrieval.candidateCount,

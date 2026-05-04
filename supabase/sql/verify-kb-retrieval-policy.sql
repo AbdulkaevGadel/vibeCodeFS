@@ -61,16 +61,28 @@ where n.nspname = 'public'
   )
 order by p.proname;
 
--- 5. Vector index exists.
+-- 5. Trigram extension exists for lexical fallback.
+select
+    extname,
+    extversion
+from pg_extension
+where extname = 'pg_trgm';
+
+-- 6. Retrieval indexes exist.
 select
     indexname,
     indexdef
 from pg_indexes
 where schemaname = 'public'
   and tablename = 'knowledge_chunks'
-  and indexname = 'knowledge_chunks_embedding_cosine_idx';
+  and indexname in (
+      'knowledge_chunks_embedding_cosine_idx',
+      'knowledge_chunks_chunk_text_fts_idx',
+      'knowledge_chunks_chunk_text_trgm_idx'
+  )
+order by indexname;
 
--- 6. Planner statistics should be refreshed after ivfflat index creation.
+-- 7. Planner statistics should be refreshed after retrieval index creation.
 -- Expected: last_analyze or last_autoanalyze is not null after manual ANALYZE/auto-analyze.
 select
     relname,
@@ -80,7 +92,7 @@ from pg_stat_all_tables
 where schemaname = 'public'
   and relname = 'knowledge_chunks';
 
--- 7. Completed chunks should have vector(384).
+-- 8. Completed chunks should have vector(384).
 select
     id,
     article_id,
@@ -94,7 +106,7 @@ where embedding_status = 'completed'
       or vector_dims(embedding) <> 384
   );
 
--- 8. Policy-eligible chunks preview.
+-- 9. Policy-eligible chunks preview.
 select
     kc.id as chunk_id,
     kc.article_id,
@@ -115,7 +127,7 @@ where kcs.is_active = true
 order by kc.created_at desc, kc.id desc
 limit 20;
 
--- 9. Retrieval snapshot shape should stay lightweight.
+-- 10. Retrieval snapshot shape should stay lightweight.
 select
     id,
     retrieval_status,
@@ -154,7 +166,7 @@ where retrieval_chunks is not null
       )
   );
 
--- 10. Retrieval status consistency.
+-- 11. Retrieval status consistency.
 select
     id,
     retrieval_status,
