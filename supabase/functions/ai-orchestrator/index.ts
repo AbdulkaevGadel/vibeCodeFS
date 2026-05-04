@@ -1,7 +1,7 @@
 const maxPayloadBytes = 2048
 
 const config = {
-  promptVersion: "phase-8-retrieval-v1",
+  promptVersion: "phase-9-context-prompt-v1",
   retrieval: {
     enabled: true,
     matchThreshold: readNumberEnv("RETRIEVAL_MATCH_THRESHOLD", 0.60, 0, 1),
@@ -12,7 +12,17 @@ const config = {
     embeddingDimension: 384,
   },
   context: {
-    enabled: false,
+    enabled: true,
+    builderVersion: "context-builder-v1",
+    maxHistoryMessages: 8,
+    maxClientHistoryMessages: 4,
+    maxAiHistoryMessages: 4,
+    maxHistoryAgeHours: 24,
+    maxHistoryMessageChars: 800,
+    maxKbFragments: 5,
+    maxKbFragmentChars: 1200,
+    maxPromptChars: 9000,
+    maxCurrentMessageChars: 2000,
   },
   behavior: {
     mode: "retrieval_only",
@@ -37,6 +47,7 @@ type TriggerMessage = {
   chat_id: string
   text: string
   sender_type: string
+  created_at: string
 }
 
 type RetrievalStatus = "hit" | "miss" | "empty" | "failed"
@@ -55,6 +66,88 @@ type RetrievalChunk = {
   article_id: string
   chunk_index: number
   similarity_score: number
+}
+
+type ChatMessageRow = {
+  id: string
+  chat_id: string
+  text: string
+  sender_type: "client" | "manager" | "ai" | "system"
+  created_at: string
+}
+
+type KnowledgeChunkRow = {
+  id: string
+  article_id: string
+  chunk_set_id: string
+  chunk_index: number
+  chunk_text: string
+  content_checksum: string | null
+  embedding_status: string
+  ingestion_pipeline_version: string | null
+  knowledge_chunk_sets?: KnowledgeChunkSetRow | KnowledgeChunkSetRow[]
+  knowledge_base_articles?: KnowledgeArticleRow | KnowledgeArticleRow[]
+}
+
+type KnowledgeChunkSetRow = {
+  status: string
+  is_active: boolean
+  content_checksum: string | null
+  ingestion_pipeline_version: string | null
+}
+
+type KnowledgeArticleRow = {
+  status: string
+  title: string | null
+  slug: string | null
+}
+
+type ContextSnapshot = {
+  current_message: SnapshotMessage
+  history_messages: SnapshotMessage[]
+  kb_fragments: KbFragment[]
+  limits: typeof config.context
+  source_counts: {
+    retrieved_chunks: number
+    usable_chunks: number
+    history_messages: number
+    client_history_messages: number
+    ai_history_messages: number
+  }
+}
+
+type PromptSnapshot = {
+  messages: PromptMessage[]
+  prompt_version: string
+  builder_version: string
+  estimated_chars: number
+}
+
+type SnapshotMessage = {
+  id: string
+  sender_type: "client" | "ai"
+  created_at: string
+  text: string
+  truncated: boolean
+}
+
+type KbFragment = {
+  chunk_id: string
+  article_id: string
+  chunk_set_id: string
+  chunk_index: number
+  similarity_score: number
+  article_title: string | null
+  article_slug: string | null
+  content_checksum: string | null
+  ingestion_pipeline_version: string | null
+  text: string
+  truncated: boolean
+}
+
+type PromptMessage = {
+  role: "system" | "user" | "assistant"
+  content: string
 }
 
 type ErrorType = "validation" | "external" | "system"
@@ -146,6 +239,30 @@ Deno.serve(async (request) => {
       })
     }
 
+    let contextSnapshot: ContextSnapshot | null = null
+    let promptSnapshot: PromptSnapshot | null = null
+
+    if (retrievalResult.retrieval_status === "hit") {
+      const snapshots = await buildContextAndPrompt(payload.trigger_message_id, retrievalResult)
+      contextSnapshot = snapshots.contextSnapshot
+      promptSnapshot = snapshots.promptSnapshot
+
+      const snapshotResult = await callRpc<RpcResult>("save_chat_ai_context_prompt_snapshot", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_context_snapshot: contextSnapshot,
+        p_prompt_snapshot: promptSnapshot,
+      })
+
+      if (snapshotResult.type !== "saved" && snapshotResult.type !== "already_saved") {
+        return jsonResponse({
+          ok: true,
+          type: snapshotResult.type,
+          run_id: runId,
+        })
+      }
+    }
+
     const finalStatus = retrievalResult.retrieval_status === "failed" ? "failed" : "completed"
     const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
       p_run_id: runId,
@@ -167,6 +284,8 @@ Deno.serve(async (request) => {
       retrieval_status: retrievalResult.retrieval_status,
       matched_chunks_count: retrievalResult.matched_chunks_count,
       top_similarity_score: retrievalResult.top_similarity_score,
+      context_snapshot_saved: contextSnapshot !== null,
+      prompt_snapshot_saved: promptSnapshot !== null,
     })
   } catch (error) {
     console.error("ai-orchestrator error:", getErrorMessage(error))
@@ -254,7 +373,7 @@ async function runRetrieval(triggerMessageId: string): Promise<RetrievalResult> 
 
 async function fetchTriggerMessage(triggerMessageId: string): Promise<TriggerMessage> {
   const rows = await callRest<TriggerMessage[]>(
-    `/rest/v1/chat_messages?id=eq.${encodeURIComponent(triggerMessageId)}&select=id,chat_id,text,sender_type&limit=1`,
+    `/rest/v1/chat_messages?id=eq.${encodeURIComponent(triggerMessageId)}&select=id,chat_id,text,sender_type,created_at&limit=1`,
   )
   const message = rows[0]
 
@@ -284,6 +403,259 @@ async function saveRetrievalResult(runId: string, processingToken: string, resul
     p_error_message: result.error_message ?? null,
     p_error_type: result.error_type ?? null,
   })
+}
+
+async function buildContextAndPrompt(triggerMessageId: string, retrievalResult: RetrievalResult) {
+  const triggerMessage = await fetchTriggerMessage(triggerMessageId)
+  const [historyMessages, kbFragments] = await Promise.all([
+    fetchRecentHistory(triggerMessage),
+    fetchKbFragments(retrievalResult.chunks),
+  ])
+
+  if (kbFragments.length === 0) {
+    throw new OrchestratorError("Retrieval hit has no usable KB fragments", "system")
+  }
+
+  const contextSnapshot = buildContextSnapshot(triggerMessage, historyMessages, kbFragments, retrievalResult)
+  const promptSnapshot = buildPromptSnapshot(contextSnapshot)
+
+  return { contextSnapshot, promptSnapshot }
+}
+
+async function fetchRecentHistory(triggerMessage: TriggerMessage): Promise<ChatMessageRow[]> {
+  const oldestHistoryDate = new Date(triggerMessage.created_at)
+  oldestHistoryDate.setHours(oldestHistoryDate.getHours() - config.context.maxHistoryAgeHours)
+
+  const query = [
+    `chat_id=eq.${encodeURIComponent(triggerMessage.chat_id)}`,
+    `created_at=gte.${encodeURIComponent(oldestHistoryDate.toISOString())}`,
+    `created_at=lte.${encodeURIComponent(triggerMessage.created_at)}`,
+    `id=neq.${encodeURIComponent(triggerMessage.id)}`,
+    "sender_type=in.(client,ai)",
+    "select=id,chat_id,text,sender_type,created_at",
+    "order=created_at.desc,id.desc",
+    "limit=24",
+  ].join("&")
+
+  const rows = await callRest<ChatMessageRow[]>(`/rest/v1/chat_messages?${query}`)
+  const selected: ChatMessageRow[] = []
+  let clientCount = 0
+  let aiCount = 0
+
+  for (const row of rows) {
+    if (selected.length >= config.context.maxHistoryMessages) {
+      break
+    }
+
+    if (row.sender_type === "client") {
+      if (clientCount >= config.context.maxClientHistoryMessages) {
+        continue
+      }
+
+      clientCount += 1
+      selected.push(row)
+      continue
+    }
+
+    if (row.sender_type === "ai") {
+      if (aiCount >= config.context.maxAiHistoryMessages) {
+        continue
+      }
+
+      aiCount += 1
+      selected.push(row)
+    }
+  }
+
+  return selected.reverse()
+}
+
+async function fetchKbFragments(retrievalChunks: RetrievalChunk[]): Promise<KbFragment[]> {
+  const requestedChunks = retrievalChunks.slice(0, config.context.maxKbFragments)
+  const chunkIds = requestedChunks.map((chunk) => chunk.chunk_id)
+
+  if (chunkIds.length === 0) {
+    return []
+  }
+
+  const query = [
+    `id=in.(${chunkIds.map(encodeURIComponent).join(",")})`,
+    "select=id,article_id,chunk_set_id,chunk_index,chunk_text,content_checksum,embedding_status,ingestion_pipeline_version,knowledge_chunk_sets!inner(status,is_active,content_checksum,ingestion_pipeline_version),knowledge_base_articles!inner(status,title,slug)",
+  ].join("&")
+
+  const rows = await callRest<KnowledgeChunkRow[]>(`/rest/v1/knowledge_chunks?${query}`)
+  const rowsById = new Map(rows.map((row) => [row.id, row]))
+  const fragments: KbFragment[] = []
+
+  for (const retrievalChunk of requestedChunks) {
+    const row = rowsById.get(retrievalChunk.chunk_id)
+
+    if (!row) {
+      continue
+    }
+
+    const chunkSet = firstRelation(row.knowledge_chunk_sets)
+    const article = firstRelation(row.knowledge_base_articles)
+
+    if (!chunkSet || !article) {
+      continue
+    }
+
+    if (
+      chunkSet.is_active !== true
+      || chunkSet.status !== "completed"
+      || row.embedding_status !== "completed"
+      || article.status !== "published"
+    ) {
+      continue
+    }
+
+    const truncatedText = truncateText(row.chunk_text, config.context.maxKbFragmentChars)
+
+    fragments.push({
+      chunk_id: row.id,
+      article_id: row.article_id,
+      chunk_set_id: row.chunk_set_id,
+      chunk_index: row.chunk_index,
+      similarity_score: retrievalChunk.similarity_score,
+      article_title: article.title,
+      article_slug: article.slug,
+      content_checksum: row.content_checksum ?? chunkSet.content_checksum,
+      ingestion_pipeline_version: row.ingestion_pipeline_version ?? chunkSet.ingestion_pipeline_version,
+      text: truncatedText.text,
+      truncated: truncatedText.truncated,
+    })
+  }
+
+  return fragments
+}
+
+function buildContextSnapshot(
+  triggerMessage: TriggerMessage,
+  historyMessages: ChatMessageRow[],
+  kbFragments: KbFragment[],
+  retrievalResult: RetrievalResult,
+): ContextSnapshot {
+  const currentMessageText = truncateText(triggerMessage.text, config.context.maxCurrentMessageChars)
+  const historySnapshot = historyMessages.map((message) => {
+    const text = truncateText(message.text, config.context.maxHistoryMessageChars)
+
+    return {
+      id: message.id,
+      sender_type: message.sender_type as "client" | "ai",
+      created_at: message.created_at,
+      text: text.text,
+      truncated: text.truncated,
+    }
+  })
+
+  return {
+    current_message: {
+      id: triggerMessage.id,
+      sender_type: "client",
+      created_at: triggerMessage.created_at,
+      text: currentMessageText.text,
+      truncated: currentMessageText.truncated,
+    },
+    history_messages: historySnapshot,
+    kb_fragments: fitKbFragmentsToBudget(historySnapshot, kbFragments, currentMessageText.text),
+    limits: config.context,
+    source_counts: {
+      retrieved_chunks: retrievalResult.chunks.length,
+      usable_chunks: kbFragments.length,
+      history_messages: historySnapshot.length,
+      client_history_messages: historySnapshot.filter((message) => message.sender_type === "client").length,
+      ai_history_messages: historySnapshot.filter((message) => message.sender_type === "ai").length,
+    },
+  }
+}
+
+function buildPromptSnapshot(contextSnapshot: ContextSnapshot): PromptSnapshot {
+  const historyText = contextSnapshot.history_messages.length > 0
+    ? contextSnapshot.history_messages.map(formatHistoryMessage).join("\n")
+    : "Нет предыдущего client/ai контекста."
+
+  const kbText = contextSnapshot.kb_fragments.map(formatKbFragment).join("\n\n")
+
+  const messages: PromptMessage[] = [
+    {
+      role: "system",
+      content: [
+        "Ты backend-only AI assistant службы поддержки.",
+        "Отвечай только на основе KB fragments.",
+        "Если в KB fragments нет достаточной информации, скажи, что данных недостаточно.",
+        "Не придумывай правила, сроки, статусы, цены или обещания.",
+        "Не принимай workflow decisions вроде handoff.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "Current client message:",
+        contextSnapshot.current_message.text,
+        "",
+        "Recent client/ai history:",
+        historyText,
+        "",
+        "KB fragments:",
+        kbText,
+      ].join("\n"),
+    },
+  ]
+
+  return {
+    messages,
+    prompt_version: config.promptVersion,
+    builder_version: config.context.builderVersion,
+    estimated_chars: messages.reduce((sum, message) => sum + message.content.length, 0),
+  }
+}
+
+function fitKbFragmentsToBudget(
+  historyMessages: SnapshotMessage[],
+  kbFragments: KbFragment[],
+  currentMessageText: string,
+) {
+  const baseSize = currentMessageText.length
+    + historyMessages.reduce((sum, message) => sum + message.text.length, 0)
+    + 1200
+
+  let totalSize = baseSize
+  const selected: KbFragment[] = []
+
+  for (const fragment of kbFragments) {
+    const nextSize = totalSize + fragment.text.length + 200
+
+    if (nextSize > config.context.maxPromptChars && selected.length > 0) {
+      break
+    }
+
+    selected.push(fragment)
+    totalSize = nextSize
+  }
+
+  return selected
+}
+
+function formatHistoryMessage(message: SnapshotMessage) {
+  const role = message.sender_type === "client" ? "client" : "ai"
+
+  return `[${role} ${message.created_at}] ${message.text}`
+}
+
+function formatKbFragment(fragment: KbFragment) {
+  return [
+    `[fragment chunk_id=${fragment.chunk_id} article_id=${fragment.article_id} chunk_index=${fragment.chunk_index}]`,
+    fragment.text,
+  ].join("\n")
+}
+
+function firstRelation<T>(value: T | T[] | undefined): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null
+  }
+
+  return value ?? null
 }
 
 async function fetchEmbedding(input: string) {
@@ -479,6 +851,17 @@ function readNumberEnv(name: string, fallback: number, min: number, max: number)
   }
 
   return value
+}
+
+function truncateText(value: string, maxChars: number) {
+  if (value.length <= maxChars) {
+    return { text: value, truncated: false }
+  }
+
+  return {
+    text: value.slice(0, Math.max(0, maxChars - 20)).trimEnd() + "\n[truncated]",
+    truncated: true,
+  }
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
