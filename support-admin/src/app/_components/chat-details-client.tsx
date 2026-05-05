@@ -65,6 +65,14 @@ function sortMessagesByCreatedAt(messages: ChatMessage[]) {
   );
 }
 
+function dedupeMessagesById(messages: ChatMessage[]) {
+  return Array.from(new Map(messages.map((message) => [message.id, message])).values());
+}
+
+function normalizeMessages(messages: ChatMessage[]) {
+  return sortMessagesByCreatedAt(dedupeMessagesById(messages));
+}
+
 type StatusOption = {
   value: ChatStatus;
   label: string;
@@ -82,13 +90,13 @@ const statusOptions: StatusOption[] = [
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => normalizeMessages(initialMessages));
   const [showTransfer, setShowTransfer] = useState(false);
   const lastMarkedReadRef = useRef<string | null>(null);
 
   // Синхронизация при смене чата + сброс прочитанности
   useEffect(() => {
-    setMessages(initialMessages);
+    setMessages(normalizeMessages(initialMessages));
     setShowTransfer(false);
 
     // Сброс прочитанности в базе при выборе чата (guard: только если есть непрочитанные и мы еще не помечали этот чат в текущей сессии)
@@ -145,20 +153,22 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                 ? prev.filter((message) => message.clientMessageId !== formatted.clientMessageId)
                 : prev;
 
-              return sortMessagesByCreatedAt([...withoutOptimisticDuplicate, formatted]);
+              return normalizeMessages([...withoutOptimisticDuplicate, formatted]);
             });
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as any;
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === updated.id || m.clientMessageId === updated.client_message_id
-                  ? {
-                      ...m,
-                      id: updated.id,
-                      deliveryStatus: updated.delivery_status,
-                      deliveryError: updated.delivery_error,
-                    }
-                  : m
+              normalizeMessages(
+                prev.map((m) =>
+                  m.id === updated.id || m.clientMessageId === updated.client_message_id
+                    ? {
+                        ...m,
+                        id: updated.id,
+                        deliveryStatus: updated.delivery_status,
+                        deliveryError: updated.delivery_error,
+                      }
+                    : m
+                ),
               )
             );
           }
@@ -452,7 +462,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           <ChatMessageInput
               chatId={selectedChat.id}
               onLocalMessage={(msg) => {
-                setMessages(prev => sortMessagesByCreatedAt([...prev, msg]));
+                setMessages(prev => normalizeMessages([...prev, msg]));
               }}
           />
       )}

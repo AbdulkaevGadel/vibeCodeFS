@@ -24,8 +24,17 @@ const config = {
     maxPromptChars: 9000,
     maxCurrentMessageChars: 2000,
   },
+  llm: {
+    provider: "huggingface",
+    model: Deno.env.get("LLM_MODEL")?.trim() || "Qwen/Qwen2.5-7B-Instruct-1M:cheapest",
+    endpoint: Deno.env.get("LLM_ENDPOINT")?.trim() || "https://router.huggingface.co/v1/chat/completions",
+    requestTimeoutMs: readIntegerEnv("LLM_REQUEST_TIMEOUT_MS", 20000, 1000, 60000),
+    maxProviderRetries: readIntegerEnv("LLM_MAX_PROVIDER_RETRIES", 1, 0, 3),
+    maxOutputTokens: readIntegerEnv("LLM_MAX_OUTPUT_TOKENS", 500, 100, 2000),
+    temperature: readNumberEnv("LLM_TEMPERATURE", 0.2, 0, 2),
+  },
   behavior: {
-    mode: "retrieval_only",
+    mode: "ai_reply",
   },
   hfRequestTimeoutMs: readIntegerEnv("HF_REQUEST_TIMEOUT_MS", 30000, 1000, 120000),
 }
@@ -42,6 +51,13 @@ type RpcResult = {
   status?: string
 }
 
+type PublishResult = RpcResult & {
+  response_kind?: ResponseKind
+  message_id?: string | null
+  telegram_chat_id?: number | null
+  text?: string | null
+}
+
 type TriggerMessage = {
   id: string
   chat_id: string
@@ -51,6 +67,7 @@ type TriggerMessage = {
 }
 
 type RetrievalStatus = "hit" | "miss" | "empty" | "failed"
+type ResponseKind = "answer" | "clarify" | "handoff"
 
 type RetrievalResult = {
   retrieval_status: RetrievalStatus
@@ -152,6 +169,14 @@ type PromptMessage = {
 
 type ErrorType = "validation" | "external" | "system"
 
+type LlmResponse =
+  | { kind: "answer"; answer_text: string }
+  | { kind: "insufficient" }
+
+type ChatAiRunSummary = {
+  response_kind: "none" | ResponseKind
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", {
@@ -171,6 +196,7 @@ Deno.serve(async (request) => {
   let payload: OrchestratorPayload
   let runId: string | null = null
   let processingToken: string | null = null
+  let retrievalResultSaved = false
 
   try {
     payload = await readPayload(request)
@@ -188,6 +214,15 @@ Deno.serve(async (request) => {
       prompt_version: config.promptVersion,
       retrieval: config.retrieval,
       context: config.context,
+      llm: {
+        provider: config.llm.provider,
+        model: config.llm.model,
+        endpoint: config.llm.endpoint,
+        requestTimeoutMs: config.llm.requestTimeoutMs,
+        maxProviderRetries: config.llm.maxProviderRetries,
+        maxOutputTokens: config.llm.maxOutputTokens,
+        temperature: config.llm.temperature,
+      },
       behavior: config.behavior,
     }
     const configHash = await hashJson(configSnapshot)
@@ -239,6 +274,8 @@ Deno.serve(async (request) => {
       })
     }
 
+    retrievalResultSaved = true
+
     let contextSnapshot: ContextSnapshot | null = null
     let promptSnapshot: PromptSnapshot | null = null
 
@@ -263,25 +300,44 @@ Deno.serve(async (request) => {
       }
     }
 
-    const finalStatus = retrievalResult.retrieval_status === "failed" ? "failed" : "completed"
-    const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
-      p_run_id: runId,
-      p_processing_token: processingToken,
-      p_final_status: finalStatus,
-      p_error_message: retrievalResult.retrieval_status === "failed"
-        ? retrievalResult.error_message ?? "RETRIEVAL_FAILED"
-        : null,
-      p_error_type: retrievalResult.retrieval_status === "failed"
-        ? retrievalResult.error_type ?? "system"
-        : null,
-    })
+    if (retrievalResult.retrieval_status === "failed") {
+      const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_final_status: "failed",
+        p_error_message: retrievalResult.error_message ?? "RETRIEVAL_FAILED",
+        p_error_type: retrievalResult.error_type ?? "system",
+      })
+
+      return jsonResponse({
+        ok: true,
+        type: finishResult.type,
+        status: finishResult.status,
+        run_id: runId,
+        retrieval_status: retrievalResult.retrieval_status,
+      })
+    }
+
+    const branch = await decideResponseBranch(
+      payload.chat_id,
+      runId,
+      retrievalResult,
+      promptSnapshot,
+    )
+    const publishResult = await publishAiResponse(runId, processingToken, branch.kind, branch.text)
+
+    if (publishResult.type === "published") {
+      await deliverPublishedMessage(publishResult)
+    }
 
     return jsonResponse({
       ok: true,
-      type: finishResult.type,
-      status: finishResult.status,
+      type: publishResult.type,
+      status: publishResult.status,
       run_id: runId,
       retrieval_status: retrievalResult.retrieval_status,
+      response_kind: publishResult.response_kind ?? branch.kind,
+      response_message_id: publishResult.message_id ?? null,
       matched_chunks_count: retrievalResult.matched_chunks_count,
       top_similarity_score: retrievalResult.top_similarity_score,
       context_snapshot_saved: contextSnapshot !== null,
@@ -291,17 +347,19 @@ Deno.serve(async (request) => {
     console.error("ai-orchestrator error:", getErrorMessage(error))
 
     if (runId && processingToken) {
-      try {
-        await saveRetrievalResult(runId, processingToken, {
-          retrieval_status: "failed",
-          top_similarity_score: null,
-          matched_chunks_count: 0,
-          chunks: [],
-          error_type: classifyError(error),
-          error_message: getErrorMessage(error),
-        })
-      } catch (saveError) {
-        console.error("ai-orchestrator failed to save retrieval failure:", getErrorMessage(saveError))
+      if (!retrievalResultSaved) {
+        try {
+          await saveRetrievalResult(runId, processingToken, {
+            retrieval_status: "failed",
+            top_similarity_score: null,
+            matched_chunks_count: 0,
+            chunks: [],
+            error_type: classifyError(error),
+            error_message: getErrorMessage(error),
+          })
+        } catch (saveError) {
+          console.error("ai-orchestrator failed to save retrieval failure:", getErrorMessage(saveError))
+        }
       }
 
       try {
@@ -420,6 +478,406 @@ async function buildContextAndPrompt(triggerMessageId: string, retrievalResult: 
   const promptSnapshot = buildPromptSnapshot(contextSnapshot)
 
   return { contextSnapshot, promptSnapshot }
+}
+
+async function decideResponseBranch(
+  chatId: string,
+  runId: string,
+  retrievalResult: RetrievalResult,
+  promptSnapshot: PromptSnapshot | null,
+): Promise<{ kind: ResponseKind; text: string }> {
+  if (retrievalResult.retrieval_status === "hit") {
+    if (!promptSnapshot) {
+      throw new OrchestratorError("Prompt snapshot is required for LLM answer", "system")
+    }
+
+    await sendTypingAction(chatId)
+
+    const llmResponse = await callLlmWithRetry(promptSnapshot)
+
+    if (llmResponse.kind === "answer") {
+      const normalizedAnswer = normalizeVisibleText(llmResponse.answer_text)
+
+      if (!normalizedAnswer) {
+        throw new OrchestratorError("LLM answer text is empty", "external")
+      }
+
+      return {
+        kind: "answer",
+        text: await formatAnswerText(chatId, normalizedAnswer),
+      }
+    }
+  }
+
+  return await decideBusinessMissBranch(chatId, runId)
+}
+
+async function decideBusinessMissBranch(chatId: string, runId: string): Promise<{ kind: ResponseKind; text: string }> {
+  const previousMissCount = await fetchConsecutiveBusinessMissCount(chatId, runId)
+  const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+
+  if (previousMissCount >= 1) {
+    return {
+      kind: "handoff",
+      text: isFirstAiMessage
+        ? "На связи ИИ-помощник службы поддержки. Я всё ещё не нашёл достаточно точной информации в базе знаний. Передаю чат оператору службы поддержки."
+        : "ИИ-помощник: Я всё ещё не нашёл достаточно точной информации в базе знаний. Передаю чат оператору службы поддержки.",
+    }
+  }
+
+  return {
+    kind: "clarify",
+    text: isFirstAiMessage
+      ? "На связи ИИ-помощник службы поддержки. Я не нашёл достаточно точной информации в базе знаний. Попробуйте, пожалуйста, переформулировать вопрос или добавить детали."
+      : "ИИ-помощник: Я не нашёл достаточно точной информации в базе знаний. Попробуйте, пожалуйста, переформулировать вопрос или добавить детали.",
+  }
+}
+
+async function fetchConsecutiveBusinessMissCount(chatId: string, runId: string) {
+  const query = [
+    `chat_id=eq.${encodeURIComponent(chatId)}`,
+    `id=neq.${encodeURIComponent(runId)}`,
+    "status=eq.completed",
+    "response_kind=in.(answer,clarify,handoff)",
+    "select=response_kind",
+    "order=completed_at.desc,created_at.desc",
+    "limit=10",
+  ].join("&")
+  const rows = await callRest<ChatAiRunSummary[]>(`/rest/v1/chat_ai_runs?${query}`)
+  let count = 0
+
+  for (const row of rows) {
+    if (row.response_kind === "answer") {
+      break
+    }
+
+    if (row.response_kind === "clarify" || row.response_kind === "handoff") {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+async function isFirstAiMessageInChat(chatId: string) {
+  const rows = await callRest<{ id: string }[]>(
+    `/rest/v1/chat_messages?chat_id=eq.${encodeURIComponent(chatId)}&sender_type=eq.ai&select=id&limit=1`,
+  )
+
+  return rows.length === 0
+}
+
+async function formatAnswerText(chatId: string, answerText: string) {
+  const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+
+  if (isFirstAiMessage) {
+    return `На связи ИИ-помощник службы поддержки.\n\n${answerText}`
+  }
+
+  return `ИИ-помощник: ${answerText}`
+}
+
+async function publishAiResponse(
+  runId: string,
+  processingToken: string,
+  responseKind: ResponseKind,
+  text: string,
+) {
+  return await callRpc<PublishResult>("publish_chat_ai_response", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_response_kind: responseKind,
+    p_text: text,
+  })
+}
+
+async function deliverPublishedMessage(publishResult: PublishResult) {
+  if (!publishResult.message_id || !publishResult.telegram_chat_id || !publishResult.text) {
+    throw new OrchestratorError("Publish RPC returned incomplete delivery payload", "system")
+  }
+
+  const deliveryResult = await sendTelegramMessage(publishResult.telegram_chat_id, publishResult.text)
+
+  try {
+    await updateMessageDeliveryStatus(
+      publishResult.message_id,
+      deliveryResult.ok ? "sent" : "failed",
+      deliveryResult.error,
+    )
+  } catch (error) {
+    console.error("Failed to update AI message delivery status:", getErrorMessage(error))
+  }
+}
+
+async function callLlmWithRetry(promptSnapshot: PromptSnapshot): Promise<LlmResponse> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= config.llm.maxProviderRetries; attempt += 1) {
+    try {
+      return await callLlm(promptSnapshot)
+    } catch (error) {
+      lastError = error
+
+      if (!isRetryableProviderError(error) || attempt >= config.llm.maxProviderRetries) {
+        break
+      }
+
+      await delay(500 + attempt * 500)
+    }
+  }
+
+  if (lastError instanceof OrchestratorError) {
+    throw lastError
+  }
+
+  throw new OrchestratorError(`LLM request failed: ${getErrorMessage(lastError)}`, "external")
+}
+
+async function callLlm(promptSnapshot: PromptSnapshot): Promise<LlmResponse> {
+  const token = Deno.env.get("HF_LLM_API_TOKEN")?.trim()
+
+  if (!token) {
+    throw new OrchestratorError("HF_LLM_API_TOKEN is not configured", "validation")
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), config.llm.requestTimeoutMs)
+
+  try {
+    const response = await fetch(config.llm.endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: config.llm.model,
+        messages: strengthenPromptForJson(promptSnapshot.messages),
+        temperature: config.llm.temperature,
+        max_tokens: config.llm.maxOutputTokens,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "supportbot_ai_response",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                kind: {
+                  type: "string",
+                  enum: ["answer", "insufficient"],
+                },
+                answer_text: {
+                  type: "string",
+                },
+              },
+              required: ["kind", "answer_text"],
+            },
+          },
+        },
+      }),
+    })
+
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      throw new ProviderHttpError(response.status, safeProviderMessage(responseText))
+    }
+
+    const parsed = JSON.parse(responseText) as {
+      choices?: Array<{ message?: { content?: unknown } }>
+    }
+    const content = parsed.choices?.[0]?.message?.content
+
+    if (typeof content !== "string") {
+      throw new OrchestratorError("LLM response content is missing", "external")
+    }
+
+    return parseLlmJson(content)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ProviderTimeoutError("LLM request timed out")
+    }
+
+    if (error instanceof ProviderHttpError || error instanceof OrchestratorError) {
+      throw error
+    }
+
+    throw new OrchestratorError(`LLM request failed: ${getErrorMessage(error)}`, "external")
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+function strengthenPromptForJson(messages: PromptMessage[]): PromptMessage[] {
+  const jsonContract = [
+    "Output contract is strict.",
+    "Return only one raw JSON object and nothing else.",
+    "Do not wrap JSON in markdown or code fences.",
+    "Do not add explanations before or after JSON.",
+    "Allowed shapes:",
+    '{"kind":"answer","answer_text":"..."}',
+    '{"kind":"insufficient","answer_text":""}',
+    "For kind=answer, answer_text is required and must be a non-empty Russian support answer.",
+    "For kind=insufficient, answer_text must be an empty string.",
+    "Never return {\"kind\":\"answer\"} without answer_text.",
+    "Use kind=insufficient when KB fragments do not contain enough information.",
+  ].join("\n")
+
+  const [firstMessage, ...restMessages] = messages
+
+  if (!firstMessage || firstMessage.role !== "system") {
+    return [
+      {
+        role: "system",
+        content: jsonContract,
+      },
+      ...messages,
+    ]
+  }
+
+  return [
+    {
+      ...firstMessage,
+      content: `${firstMessage.content}\n\n${jsonContract}`,
+    },
+    ...restMessages,
+  ]
+}
+
+function parseLlmJson(content: string): LlmResponse {
+  let parsed: unknown
+  const jsonText = extractJsonObjectText(content)
+
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch (_error) {
+    throw new OrchestratorError(`LLM response is not valid JSON: ${previewLlmContent(content)}`, "external")
+  }
+
+  if (!isRecord(parsed)) {
+    throw new OrchestratorError(`LLM JSON response is not an object: ${previewLlmContent(content)}`, "external")
+  }
+
+  if (parsed.kind === "insufficient") {
+    return { kind: "insufficient" }
+  }
+
+  if (parsed.kind === "answer" && typeof parsed.answer_text === "string" && parsed.answer_text.trim()) {
+    return {
+      kind: "answer",
+      answer_text: parsed.answer_text,
+    }
+  }
+
+  throw new OrchestratorError(`LLM JSON response does not match contract: ${previewLlmContent(jsonText)}`, "external")
+}
+
+function extractJsonObjectText(content: string) {
+  const trimmed = content.trim()
+  const fencedJsonMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+
+  if (fencedJsonMatch?.[1]) {
+    return fencedJsonMatch[1].trim()
+  }
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed
+  }
+
+  const startIndex = trimmed.indexOf("{")
+  const endIndex = trimmed.lastIndexOf("}")
+
+  if (startIndex >= 0 && endIndex > startIndex) {
+    return trimmed.slice(startIndex, endIndex + 1)
+  }
+
+  return trimmed
+}
+
+function previewLlmContent(content: string) {
+  return safeProviderMessage(content)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300)
+}
+
+async function sendTypingAction(chatId: string) {
+  try {
+    const rows = await callRest<Array<{ telegram_chat_id: number }>>(
+      `/rest/v1/chats?id=eq.${encodeURIComponent(chatId)}&select=telegram_chat_id&limit=1`,
+    )
+    const telegramChatId = rows[0]?.telegram_chat_id
+
+    if (!telegramChatId) {
+      return
+    }
+
+    const botToken = Deno.env.get("BOT_TOKEN")?.trim()
+
+    if (!botToken) {
+      return
+    }
+
+    await fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: telegramChatId,
+        action: "typing",
+      }),
+    })
+  } catch (error) {
+    console.error("sendTypingAction failed:", getErrorMessage(error))
+  }
+}
+
+async function sendTelegramMessage(telegramChatId: number, text: string) {
+  const botToken = Deno.env.get("BOT_TOKEN")?.trim()
+
+  if (!botToken) {
+    return { ok: false, error: "BOT_TOKEN is not configured" }
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: telegramChatId,
+        text,
+      }),
+    })
+    const responseText = await response.text()
+    const parsed = parseMaybeJson(responseText)
+
+    if (!response.ok || !isTelegramOk(parsed)) {
+      const description = isRecord(parsed) && typeof parsed.description === "string"
+        ? parsed.description
+        : `Telegram API error ${response.status}`
+
+      return { ok: false, error: safeProviderMessage(description) }
+    }
+
+    return { ok: true, error: null }
+  } catch (error) {
+    return { ok: false, error: getErrorMessage(error) }
+  }
+}
+
+async function updateMessageDeliveryStatus(messageId: string, status: "sent" | "failed", error: string | null) {
+  await callRest<unknown>(`/rest/v1/chat_messages?id=eq.${encodeURIComponent(messageId)}&delivery_status=eq.pending`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      delivery_status: status,
+      delivery_error: error,
+    }),
+  })
 }
 
 async function fetchRecentHistory(triggerMessage: TriggerMessage): Promise<ChatMessageRow[]> {
@@ -783,7 +1241,13 @@ async function callRest<T>(path: string, init?: RequestInit): Promise<T> {
     throw new OrchestratorError(`Supabase request failed ${response.status}: ${safeProviderMessage(errorText)}`, "system")
   }
 
-  return await response.json() as T
+  const responseText = await response.text()
+
+  if (!responseText) {
+    return null as T
+  }
+
+  return JSON.parse(responseText) as T
 }
 
 async function hashJson(value: unknown) {
@@ -864,6 +1328,46 @@ function truncateText(value: string, maxChars: number) {
   }
 }
 
+function normalizeVisibleText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 3800)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function parseMaybeJson(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch (_error) {
+    return null
+  }
+}
+
+function isTelegramOk(value: unknown) {
+  return isRecord(value) && value.ok === true
+}
+
+function isRetryableProviderError(error: unknown) {
+  if (error instanceof ProviderTimeoutError) {
+    return true
+  }
+
+  if (error instanceof ProviderHttpError) {
+    return error.status === 429 || error.status >= 500
+  }
+
+  return false
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -894,5 +1398,22 @@ class OrchestratorError extends Error {
     super(message)
     this.name = "OrchestratorError"
     this.errorType = errorType
+  }
+}
+
+class ProviderHttpError extends OrchestratorError {
+  status: number
+
+  constructor(status: number, providerMessage: string) {
+    super(`LLM provider request failed with status ${status}: ${providerMessage}`, "external")
+    this.name = "ProviderHttpError"
+    this.status = status
+  }
+}
+
+class ProviderTimeoutError extends OrchestratorError {
+  constructor(message: string) {
+    super(message, "external")
+    this.name = "ProviderTimeoutError"
   }
 }
