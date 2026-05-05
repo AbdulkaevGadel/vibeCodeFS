@@ -67,7 +67,8 @@ type TriggerMessage = {
 }
 
 type RetrievalStatus = "hit" | "miss" | "empty" | "failed"
-type ResponseKind = "answer" | "clarify" | "handoff"
+type ResponseKind = "answer" | "clarify" | "handoff" | "intent_reply"
+type IntentType = "greeting" | "thanks" | "farewell" | "manager_request"
 
 type RetrievalResult = {
   retrieval_status: RetrievalStatus
@@ -175,6 +176,27 @@ type LlmResponse =
 
 type ChatAiRunSummary = {
   response_kind: "none" | ResponseKind
+  retrieval_status: "not_started" | RetrievalStatus | "skipped"
+  intent_type: IntentType | null
+  completed_at: string
+  created_at: string
+}
+
+type StatusResetBoundary = {
+  created_at: string
+}
+
+type ChatStatusRow = {
+  status: string
+}
+
+type ResponseBranch = {
+  kind: ResponseKind
+  text: string
+}
+
+type IntentMatch = {
+  type: IntentType
 }
 
 Deno.serve(async (request) => {
@@ -263,7 +285,46 @@ Deno.serve(async (request) => {
       })
     }
 
-    const retrievalResult = await runRetrieval(payload.trigger_message_id)
+    const triggerMessage = await fetchTriggerMessage(payload.trigger_message_id)
+    const intent = classifyIntent(triggerMessage.text)
+
+    if (intent) {
+      const intentSaveResult = await saveIntentResult(runId, processingToken, intent.type)
+
+      if (intentSaveResult.type !== "saved" && intentSaveResult.type !== "already_saved") {
+        return jsonResponse({
+          ok: true,
+          type: intentSaveResult.type,
+          run_id: runId,
+        })
+      }
+
+      retrievalResultSaved = true
+
+      const branch = await buildIntentResponseBranch(payload.chat_id, intent.type)
+      const publishResult = await publishAiResponse(runId, processingToken, branch.kind, branch.text)
+
+      if (publishResult.type === "published") {
+        await deliverPublishedMessage(publishResult)
+      }
+
+      return jsonResponse({
+        ok: true,
+        type: publishResult.type,
+        status: publishResult.status,
+        run_id: runId,
+        retrieval_status: "skipped",
+        response_kind: publishResult.response_kind ?? branch.kind,
+        response_message_id: publishResult.message_id ?? null,
+        intent_type: intent.type,
+        matched_chunks_count: 0,
+        top_similarity_score: null,
+        context_snapshot_saved: false,
+        prompt_snapshot_saved: false,
+      })
+    }
+
+    const retrievalResult = await runRetrieval(triggerMessage)
     const saveResult = await saveRetrievalResult(runId, processingToken, retrievalResult)
 
     if (saveResult.type !== "saved" && saveResult.type !== "already_saved") {
@@ -275,6 +336,24 @@ Deno.serve(async (request) => {
     }
 
     retrievalResultSaved = true
+
+    if (!(await isChatAiEligibleForPublish(payload.chat_id))) {
+      const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_final_status: "ignored",
+        p_error_message: null,
+        p_error_type: null,
+      })
+
+      return jsonResponse({
+        ok: true,
+        type: finishResult.type,
+        status: finishResult.status,
+        run_id: runId,
+        retrieval_status: retrievalResult.retrieval_status,
+      })
+    }
 
     let contextSnapshot: ContextSnapshot | null = null
     let promptSnapshot: PromptSnapshot | null = null
@@ -323,6 +402,7 @@ Deno.serve(async (request) => {
       runId,
       retrievalResult,
       promptSnapshot,
+      triggerMessage.text,
     )
     const publishResult = await publishAiResponse(runId, processingToken, branch.kind, branch.text)
 
@@ -414,13 +494,13 @@ async function readPayload(request: Request): Promise<OrchestratorPayload> {
   }
 }
 
-async function runRetrieval(triggerMessageId: string): Promise<RetrievalResult> {
-  const triggerMessage = await fetchTriggerMessage(triggerMessageId)
-  const queryEmbedding = await fetchEmbedding(triggerMessage.text)
+async function runRetrieval(triggerMessage: TriggerMessage): Promise<RetrievalResult> {
+  const queryText = getRetrievalQueryText(triggerMessage.text)
+  const queryEmbedding = await fetchEmbedding(queryText)
 
   const result = await callRpc<RetrievalResult>("match_knowledge_chunks_v1", {
     p_query_embedding: queryEmbedding,
-    p_query_text: triggerMessage.text,
+    p_query_text: queryText,
     p_match_threshold: config.retrieval.matchThreshold,
     p_match_count: config.retrieval.matchCount,
     p_candidate_count: config.retrieval.candidateCount,
@@ -463,6 +543,14 @@ async function saveRetrievalResult(runId: string, processingToken: string, resul
   })
 }
 
+async function saveIntentResult(runId: string, processingToken: string, intentType: IntentType) {
+  return await callRpc<RpcResult>("save_chat_ai_intent_result", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_intent_type: intentType,
+  })
+}
+
 async function buildContextAndPrompt(triggerMessageId: string, retrievalResult: RetrievalResult) {
   const triggerMessage = await fetchTriggerMessage(triggerMessageId)
   const [historyMessages, kbFragments] = await Promise.all([
@@ -485,6 +573,7 @@ async function decideResponseBranch(
   runId: string,
   retrievalResult: RetrievalResult,
   promptSnapshot: PromptSnapshot | null,
+  triggerMessageText: string,
 ): Promise<{ kind: ResponseKind; text: string }> {
   if (retrievalResult.retrieval_status === "hit") {
     if (!promptSnapshot) {
@@ -504,7 +593,7 @@ async function decideResponseBranch(
 
       return {
         kind: "answer",
-        text: await formatAnswerText(chatId, normalizedAnswer),
+        text: await formatAnswerText(chatId, normalizedAnswer, triggerMessageText),
       }
     }
   }
@@ -534,12 +623,13 @@ async function decideBusinessMissBranch(chatId: string, runId: string): Promise<
 }
 
 async function fetchConsecutiveBusinessMissCount(chatId: string, runId: string) {
+  const resetBoundary = await fetchLatestMissResetBoundary(chatId)
   const query = [
     `chat_id=eq.${encodeURIComponent(chatId)}`,
     `id=neq.${encodeURIComponent(runId)}`,
     "status=eq.completed",
-    "response_kind=in.(answer,clarify,handoff)",
-    "select=response_kind",
+    "response_kind=in.(answer,clarify,handoff,intent_reply)",
+    "select=response_kind,retrieval_status,intent_type,completed_at,created_at",
     "order=completed_at.desc,created_at.desc",
     "limit=10",
   ].join("&")
@@ -547,16 +637,59 @@ async function fetchConsecutiveBusinessMissCount(chatId: string, runId: string) 
   let count = 0
 
   for (const row of rows) {
+    const rowCompletedAt = Date.parse(row.completed_at ?? row.created_at)
+
+    if (resetBoundary && Number.isFinite(rowCompletedAt) && rowCompletedAt <= resetBoundary.getTime()) {
+      break
+    }
+
     if (row.response_kind === "answer") {
       break
     }
 
-    if (row.response_kind === "clarify" || row.response_kind === "handoff") {
+    if (
+      (row.response_kind === "clarify" || row.response_kind === "handoff")
+      && row.retrieval_status !== "skipped"
+      && row.intent_type === null
+    ) {
       count += 1
     }
   }
 
   return count
+}
+
+async function fetchLatestMissResetBoundary(chatId: string) {
+  const query = [
+    `chat_id=eq.${encodeURIComponent(chatId)}`,
+    "from_status=eq.waiting_operator",
+    "to_status=in.(open,in_progress)",
+    "select=created_at",
+    "order=created_at.desc",
+    "limit=1",
+  ].join("&")
+  const rows = await callRest<StatusResetBoundary[]>(`/rest/v1/chat_status_history?${query}`)
+  const createdAt = rows[0]?.created_at
+
+  if (!createdAt) {
+    return null
+  }
+
+  const timestamp = Date.parse(createdAt)
+
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null
+}
+
+async function isChatAiEligibleForPublish(chatId: string) {
+  const rows = await callRest<ChatStatusRow[]>(
+    `/rest/v1/chats?id=eq.${encodeURIComponent(chatId)}&select=status&limit=1`,
+  )
+  const status = rows[0]?.status
+
+  return status !== "waiting_operator"
+    && status !== "in_progress"
+    && status !== "resolved"
+    && status !== "closed"
 }
 
 async function isFirstAiMessageInChat(chatId: string) {
@@ -567,14 +700,269 @@ async function isFirstAiMessageInChat(chatId: string) {
   return rows.length === 0
 }
 
-async function formatAnswerText(chatId: string, answerText: string) {
+async function formatAnswerText(chatId: string, answerText: string, triggerMessageText: string) {
   const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+  const finalAnswerText = addGreetingAcknowledgementIfNeeded(answerText, triggerMessageText)
 
   if (isFirstAiMessage) {
-    return `На связи ИИ-помощник службы поддержки.\n\n${answerText}`
+    return `На связи ИИ-помощник службы поддержки.\n\n${finalAnswerText}`
   }
 
-  return `ИИ-помощник: ${answerText}`
+  return `ИИ-помощник: ${finalAnswerText}`
+}
+
+async function buildIntentResponseBranch(chatId: string, intentType: IntentType): Promise<ResponseBranch> {
+  const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+
+  if (intentType === "manager_request") {
+    return {
+      kind: "handoff",
+      text: isFirstAiMessage
+        ? "На связи ИИ-помощник службы поддержки. Передаю чат оператору службы поддержки."
+        : "ИИ-помощник: Передаю чат оператору службы поддержки.",
+    }
+  }
+
+  const replyByIntent: Record<Exclude<IntentType, "manager_request">, string> = {
+    greeting: "Здравствуйте. Опишите, пожалуйста, ваш вопрос, и я постараюсь помочь.",
+    thanks: "Пожалуйста. Если появится ещё вопрос, напишите здесь.",
+    farewell: "До свидания. Если понадобится помощь, напишите здесь.",
+  }
+  const reply = replyByIntent[intentType]
+
+  return {
+    kind: "intent_reply",
+    text: isFirstAiMessage
+      ? `На связи ИИ-помощник службы поддержки. ${reply}`
+      : `ИИ-помощник: ${reply}`,
+  }
+}
+
+function classifyIntent(text: string): IntentMatch | null {
+  const normalized = normalizeIntentText(text)
+
+  if (!normalized) {
+    return null
+  }
+
+  if (isManagerRequestIntent(normalized)) {
+    return { type: "manager_request" }
+  }
+
+  if (isGreetingOnlyIntent(normalized)) {
+    return { type: "greeting" }
+  }
+
+  if (isThanksOnlyIntent(normalized)) {
+    return { type: "thanks" }
+  }
+
+  if (isFarewellOnlyIntent(normalized)) {
+    return { type: "farewell" }
+  }
+
+  return null
+}
+
+function normalizeIntentText(text: string) {
+  return text
+    .toLocaleLowerCase("ru-RU")
+    .replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function isManagerRequestIntent(text: string) {
+  return [
+    "позовите оператора",
+    "позови оператора",
+    "позвать оператора",
+    "вызовите оператора",
+    "вызови оператора",
+    "позовите менеджера",
+    "позови менеджера",
+    "вызовите менеджера",
+    "позовите человека",
+    "позови человека",
+    "позовите сотрудника",
+    "нужен оператор",
+    "нужна оператор",
+    "нужен менеджер",
+    "нужна менеджер",
+    "нужен человек",
+    "нужен сотрудник",
+    "хочу к оператору",
+    "хочу к менеджеру",
+    "хочу оператора",
+    "хочу менеджера",
+    "хочу поговорить с оператором",
+    "хочу поговорить с менеджером",
+    "хочу поговорить с человеком",
+    "соедините с оператором",
+    "соедините с менеджером",
+    "соедините с поддержкой",
+    "соедините с человеком",
+    "переведите на оператора",
+    "переведите на менеджера",
+    "переведите в поддержку",
+    "передайте оператору",
+    "передайте менеджеру",
+    "передайте в поддержку",
+    "живой оператор",
+    "служба поддержки",
+  ].some((phrase) => includesIntentPhrase(text, phrase))
+}
+
+function isGreetingOnlyIntent(text: string) {
+  return [
+    "доброе утро",
+    "добрый вечер",
+    "привет",
+    "хай",
+    "здравствуйте",
+    "здраствуйте",
+    "здравствуй",
+    "добрый день",
+    "доброго дня",
+    "доброго времени суток",
+  ].includes(text)
+}
+
+function isThanksOnlyIntent(text: string) {
+  const exactThanks = [
+    "спасибо",
+    "спасибо большое",
+    "большое спасибо",
+    "благодарю",
+    "спс",
+    "спасибо вам",
+    "получилось",
+    "помогло",
+    "сработало",
+    "заработало",
+    "решено",
+    "решилось",
+    "вышло",
+    "работает",
+  ]
+
+  if (exactThanks.includes(text)) {
+    return true
+  }
+
+  const tokens = text.split(" ").filter(Boolean)
+  const thanksTokens = new Set(["спасибо", "спс", "благодарю"])
+
+  if (!tokens.some((token) => thanksTokens.has(token))) {
+    return false
+  }
+
+  const allowedThanksTokens = new Set([
+    "ага",
+    "благодарю",
+    "большое",
+    "вам",
+    "все",
+    "всё",
+    "да",
+    "класс",
+    "ну",
+    "о",
+    "окей",
+    "ок",
+    "отлично",
+    "понятно",
+    "понял",
+    "поняла",
+    "принял",
+    "приняла",
+    "помогло",
+    "получилось",
+    "работает",
+    "решилось",
+    "решено",
+    "сработало",
+    "супер",
+    "спасибо",
+    "спс",
+    "ура",
+    "вышло",
+    "хорошо",
+    "ясно",
+    "заработало",
+  ])
+
+  return tokens.length > 0 && tokens.every((token) => allowedThanksTokens.has(token))
+}
+
+function isFarewellOnlyIntent(text: string) {
+  return [
+    "до свидания",
+    "до свидание",
+    "пока",
+    "всего доброго",
+    "хорошего дня",
+    "хорошего вечера",
+    "спокойной ночи",
+    "до встречи",
+    "увидимся",
+  ].includes(text)
+}
+
+function includesIntentPhrase(text: string, phrase: string) {
+  return ` ${text} `.includes(` ${phrase} `)
+}
+
+function getRetrievalQueryText(text: string) {
+  const trimmed = text.trim()
+  const withoutGreetingPrefix = stripGreetingPrefix(trimmed)
+
+  return withoutGreetingPrefix || trimmed
+}
+
+function stripGreetingPrefix(text: string) {
+  const normalizedInput = normalizeIntentText(text)
+  const greetingPrefixes = [
+    "доброго времени суток",
+    "доброе утро",
+    "добрый вечер",
+    "добрый день",
+    "доброго дня",
+    "здравствуйте",
+    "здравствуй",
+    "привет",
+  ]
+  const matchedPrefix = greetingPrefixes.find((prefix) => {
+    return normalizedInput === prefix || normalizedInput.startsWith(`${prefix} `)
+  })
+
+  if (!matchedPrefix || normalizedInput === matchedPrefix) {
+    return null
+  }
+
+  const patternText = matchedPrefix
+    .replace(/\s+/g, String.raw`\s+`)
+  const prefixPattern = new RegExp(String.raw`^\s*${patternText}[\s,!.:;?-]+`, "iu")
+  const cleaned = text.replace(prefixPattern, "").trim()
+
+  if (!cleaned || normalizeIntentText(cleaned) === normalizeIntentText(text)) {
+    return null
+  }
+
+  return cleaned
+}
+
+function addGreetingAcknowledgementIfNeeded(answerText: string, triggerMessageText: string) {
+  if (!stripGreetingPrefix(triggerMessageText)) {
+    return answerText
+  }
+
+  if (/^\s*(здравствуйте|добрый день|доброе утро|добрый вечер)\b/iu.test(answerText)) {
+    return answerText
+  }
+
+  return `Здравствуйте. ${answerText}`
 }
 
 async function publishAiResponse(
