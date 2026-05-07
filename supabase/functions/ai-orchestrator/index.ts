@@ -7,9 +7,11 @@ const config = {
     matchThreshold: readNumberEnv("RETRIEVAL_MATCH_THRESHOLD", 0.60, 0, 1),
     matchCount: readIntegerEnv("RETRIEVAL_MATCH_COUNT", 5, 1, 20),
     candidateCount: readIntegerEnv("RETRIEVAL_CANDIDATE_COUNT", 50, 5, 200),
+    stageTimeoutMs: readIntegerEnv("AI_RETRIEVAL_STAGE_TIMEOUT_MS", 45000, 3000, 120000),
     embeddingProvider: "huggingface",
     embeddingModel: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     embeddingDimension: 384,
+    embeddingMaxProviderRetries: readIntegerEnv("HF_EMBEDDING_MAX_PROVIDER_RETRIES", 1, 0, 3),
   },
   context: {
     enabled: true,
@@ -36,6 +38,11 @@ const config = {
   behavior: {
     mode: "ai_reply",
   },
+  staleRunRecovery: {
+    enabled: true,
+    staleAfterMinutes: readIntegerEnv("AI_STALE_RUN_RECOVERY_MINUTES", 10, 1, 120),
+    limit: readIntegerEnv("AI_STALE_RUN_RECOVERY_LIMIT", 20, 1, 100),
+  },
   hfRequestTimeoutMs: readIntegerEnv("HF_REQUEST_TIMEOUT_MS", 30000, 1000, 120000),
 }
 
@@ -49,6 +56,13 @@ type RpcResult = {
   type?: string
   run_id?: string | null
   status?: string
+}
+
+type StaleRunRecoveryResult = {
+  type?: string
+  recovered_count?: number
+  run_ids?: string[]
+  stale_after_minutes?: number
 }
 
 type PublishResult = RpcResult & {
@@ -79,11 +93,18 @@ type RetrievalResult = {
   error_message?: string
 }
 
+type PersistedRetrievalResult = RetrievalResult & RpcResult
+
 type RetrievalChunk = {
   chunk_id: string
   article_id: string
   chunk_index: number
   similarity_score: number
+  match_source?: "vector" | "fts" | "trigram" | "hybrid" | null
+  vector_similarity_score?: number | null
+  fts_score?: number | null
+  trigram_score?: number | null
+  retrieval_rank?: number | null
 }
 
 type ChatMessageRow = {
@@ -170,6 +191,16 @@ type PromptMessage = {
 
 type ErrorType = "validation" | "external" | "system"
 
+type AiRunStage =
+  | "processing_marked"
+  | "trigger_loaded"
+  | "retrieval_started"
+  | "embedding_started"
+  | "embedding_finished"
+  | "retrieval_rpc_started"
+  | "retrieval_saved"
+  | "failed"
+
 type LlmResponse =
   | { kind: "answer"; answer_text: string }
   | { kind: "insufficient" }
@@ -216,9 +247,6 @@ Deno.serve(async (request) => {
   }
 
   let payload: OrchestratorPayload
-  let runId: string | null = null
-  let processingToken: string | null = null
-  let retrievalResultSaved = false
 
   try {
     payload = await readPayload(request)
@@ -228,6 +256,46 @@ Deno.serve(async (request) => {
   }
 
   const correlationId = payload.correlation_id ?? crypto.randomUUID()
+
+  EdgeRuntime.waitUntil(
+    processAiRun(payload, correlationId).then((result) => {
+      console.log("ai-orchestrator background flow finished:", JSON.stringify({
+        correlation_id: correlationId,
+        type: result.type,
+        status: result.status,
+        run_id: result.run_id,
+        current_stage: result.current_stage,
+      }))
+    }).catch((error) => {
+      console.error("ai-orchestrator background flow failed:", JSON.stringify({
+        correlation_id: correlationId,
+        error: getErrorMessage(error),
+      }))
+    }),
+  )
+
+  return jsonResponse({
+    ok: true,
+    type: "scheduled",
+    correlation_id: correlationId,
+  })
+})
+
+async function processAiRun(payload: OrchestratorPayload, correlationId: string): Promise<Record<string, unknown>> {
+  let runId: string | null = null
+  let processingToken: string | null = null
+  let retrievalResultSaved = false
+  let currentStage: AiRunStage | null = null
+
+  const markStage = async (stage: AiRunStage, stageError: string | null = null) => {
+    currentStage = stage
+
+    if (!runId) {
+      return
+    }
+
+    await updateRunStage(runId, stage, stageError, correlationId)
+  }
 
   try {
     validateRetrievalConfig()
@@ -248,6 +316,7 @@ Deno.serve(async (request) => {
       behavior: config.behavior,
     }
     const configHash = await hashJson(configSnapshot)
+    const recoveryResult = await recoverStaleAiRuns(payload.chat_id, correlationId)
 
     const startResult = await callRpc<RpcResult>("start_chat_ai_run", {
       p_chat_id: payload.chat_id,
@@ -265,9 +334,11 @@ Deno.serve(async (request) => {
         correlation_id: correlationId,
         type: startResult.type,
         run_id: runId,
+        stale_recovery_type: recoveryResult.type,
+        stale_recovery_error: recoveryResult.error,
       }))
 
-      return jsonResponse({ ok: true, type: startResult.type, run_id: runId })
+      return { ok: true, type: startResult.type, run_id: runId }
     }
 
     processingToken = crypto.randomUUID()
@@ -278,25 +349,29 @@ Deno.serve(async (request) => {
     })
 
     if (processingResult.type !== "processing" && processingResult.type !== "already_processing") {
-      return jsonResponse({
+      return {
         ok: true,
         type: processingResult.type,
         run_id: runId,
-      })
+      }
     }
 
+    await markStage("processing_marked")
+
     const triggerMessage = await fetchTriggerMessage(payload.trigger_message_id)
+    await markStage("trigger_loaded")
+
     const intent = classifyIntent(triggerMessage.text)
 
     if (intent) {
       const intentSaveResult = await saveIntentResult(runId, processingToken, intent.type)
 
       if (intentSaveResult.type !== "saved" && intentSaveResult.type !== "already_saved") {
-        return jsonResponse({
+        return {
           ok: true,
           type: intentSaveResult.type,
           run_id: runId,
-        })
+        }
       }
 
       retrievalResultSaved = true
@@ -308,7 +383,7 @@ Deno.serve(async (request) => {
         await deliverPublishedMessage(publishResult)
       }
 
-      return jsonResponse({
+      return {
         ok: true,
         type: publishResult.type,
         status: publishResult.status,
@@ -321,21 +396,54 @@ Deno.serve(async (request) => {
         top_similarity_score: null,
         context_snapshot_saved: false,
         prompt_snapshot_saved: false,
-      })
+      }
     }
 
-    const retrievalResult = await runRetrieval(triggerMessage)
-    const saveResult = await saveRetrievalResult(runId, processingToken, retrievalResult)
+    const retrievalResult = await runRetrievalWithHardTimeout(triggerMessage, runId, processingToken, markStage)
 
-    if (saveResult.type !== "saved" && saveResult.type !== "already_saved") {
-      return jsonResponse({
-        ok: true,
-        type: saveResult.type,
-        run_id: runId,
+    if (!isSuccessfulRetrievalSaveType(retrievalResult.type)) {
+      const errorMessage = getRetrievalSaveFailureMessage(retrievalResult.type)
+
+      await markStage("failed", errorMessage)
+
+      try {
+        const failureSaveResult = await saveRetrievalResult(runId, processingToken, {
+          retrieval_status: "failed",
+          top_similarity_score: null,
+          matched_chunks_count: 0,
+          chunks: [],
+          error_type: "system",
+          error_message: errorMessage,
+        })
+
+        if (failureSaveResult.type === "saved" || failureSaveResult.type === "already_saved") {
+          retrievalResultSaved = true
+        }
+      } catch (saveError) {
+        console.error("ai-orchestrator failed to save retrieval save rejection:", getErrorMessage(saveError))
+      }
+
+      const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_final_status: "failed",
+        p_error_message: errorMessage,
+        p_error_type: "system",
       })
+
+      return {
+        ok: true,
+        type: retrievalResult.type ?? "retrieval_save_failed",
+        status: finishResult.status,
+        run_id: runId,
+        retrieval_status: "failed",
+        error_type: "system",
+        error_message: errorMessage,
+      }
     }
 
     retrievalResultSaved = true
+    await markStage("retrieval_saved")
 
     if (!(await isChatAiEligibleForPublish(payload.chat_id))) {
       const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
@@ -346,13 +454,13 @@ Deno.serve(async (request) => {
         p_error_type: null,
       })
 
-      return jsonResponse({
+      return {
         ok: true,
         type: finishResult.type,
         status: finishResult.status,
         run_id: runId,
         retrieval_status: retrievalResult.retrieval_status,
-      })
+      }
     }
 
     let contextSnapshot: ContextSnapshot | null = null
@@ -371,11 +479,11 @@ Deno.serve(async (request) => {
       })
 
       if (snapshotResult.type !== "saved" && snapshotResult.type !== "already_saved") {
-        return jsonResponse({
+        return {
           ok: true,
           type: snapshotResult.type,
           run_id: runId,
-        })
+        }
       }
     }
 
@@ -388,13 +496,13 @@ Deno.serve(async (request) => {
         p_error_type: retrievalResult.error_type ?? "system",
       })
 
-      return jsonResponse({
+      return {
         ok: true,
         type: finishResult.type,
         status: finishResult.status,
         run_id: runId,
         retrieval_status: retrievalResult.retrieval_status,
-      })
+      }
     }
 
     const branch = await decideResponseBranch(
@@ -410,7 +518,7 @@ Deno.serve(async (request) => {
       await deliverPublishedMessage(publishResult)
     }
 
-    return jsonResponse({
+    return {
       ok: true,
       type: publishResult.type,
       status: publishResult.status,
@@ -422,11 +530,21 @@ Deno.serve(async (request) => {
       top_similarity_score: retrievalResult.top_similarity_score,
       context_snapshot_saved: contextSnapshot !== null,
       prompt_snapshot_saved: promptSnapshot !== null,
-    })
+    }
   } catch (error) {
     console.error("ai-orchestrator error:", getErrorMessage(error))
 
     if (runId && processingToken) {
+      if (error instanceof RetrievalStageTimeoutError && currentStage) {
+        await updateRunStage(runId, currentStage, "RETRIEVAL_STAGE_TIMEOUT", correlationId)
+      } else {
+        try {
+          await markStage("failed", getStageErrorMessage(error))
+        } catch (stageError) {
+          console.error("ai-orchestrator failed to save failed stage:", getErrorMessage(stageError))
+        }
+      }
+
       if (!retrievalResultSaved) {
         try {
           await saveRetrievalResult(runId, processingToken, {
@@ -435,7 +553,7 @@ Deno.serve(async (request) => {
             matched_chunks_count: 0,
             chunks: [],
             error_type: classifyError(error),
-            error_message: getErrorMessage(error),
+            error_message: getFailureErrorMessage(error),
           })
         } catch (saveError) {
           console.error("ai-orchestrator failed to save retrieval failure:", getErrorMessage(saveError))
@@ -447,7 +565,7 @@ Deno.serve(async (request) => {
           p_run_id: runId,
           p_processing_token: processingToken,
           p_final_status: "failed",
-          p_error_message: getErrorMessage(error),
+          p_error_message: getFailureErrorMessage(error),
           p_error_type: classifyError(error),
         })
       } catch (finishError) {
@@ -455,9 +573,14 @@ Deno.serve(async (request) => {
       }
     }
 
-    return jsonResponse({ ok: false, type: "system_error" }, 500)
+    return {
+      ok: false,
+      type: "system_error",
+      current_stage: currentStage,
+      run_id: runId,
+    }
   }
-})
+}
 
 async function readPayload(request: Request): Promise<OrchestratorPayload> {
   const bodyText = await request.text()
@@ -494,19 +617,64 @@ async function readPayload(request: Request): Promise<OrchestratorPayload> {
   }
 }
 
-async function runRetrieval(triggerMessage: TriggerMessage): Promise<RetrievalResult> {
-  const queryText = getRetrievalQueryText(triggerMessage.text)
-  const queryEmbedding = await fetchEmbedding(queryText)
+async function runRetrievalWithHardTimeout(
+  triggerMessage: TriggerMessage,
+  runId: string,
+  processingToken: string,
+  markStage: (stage: AiRunStage, stageError?: string | null) => Promise<void>,
+): Promise<PersistedRetrievalResult> {
+  const controller = new AbortController()
+  const retrievalPromise = runRetrieval(triggerMessage, runId, processingToken, markStage, controller.signal)
+  let timeoutId: number | undefined
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort()
+      reject(new RetrievalStageTimeoutError())
+    }, config.retrieval.stageTimeoutMs)
+  })
 
-  const result = await callRpc<RetrievalResult>("match_knowledge_chunks_v1", {
-    p_query_embedding: queryEmbedding,
+  try {
+    return await Promise.race([retrievalPromise, timeoutPromise])
+  } catch (error) {
+    if (controller.signal.aborted || error instanceof RetrievalStageTimeoutError) {
+      throw new RetrievalStageTimeoutError()
+    }
+
+    throw error
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
+
+async function runRetrieval(
+  triggerMessage: TriggerMessage,
+  runId: string,
+  processingToken: string,
+  markStage: (stage: AiRunStage, stageError?: string | null) => Promise<void>,
+  signal: AbortSignal,
+): Promise<PersistedRetrievalResult> {
+  await markStage("retrieval_started")
+
+  const queryText = getRetrievalQueryText(triggerMessage.text)
+  await markStage("embedding_started")
+
+  const queryEmbedding = await fetchEmbedding(queryText, signal)
+  await markStage("embedding_finished")
+  await markStage("retrieval_rpc_started")
+
+  const result = await callRpc<PersistedRetrievalResult>("save_chat_ai_retrieval_from_json_v1", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_query_embedding_json: queryEmbedding,
     p_query_text: queryText,
     p_match_threshold: config.retrieval.matchThreshold,
     p_match_count: config.retrieval.matchCount,
     p_candidate_count: config.retrieval.candidateCount,
-  })
+  }, { signal })
 
-  return normalizeRetrievalResult(result)
+  return normalizePersistedRetrievalResult(result)
 }
 
 async function fetchTriggerMessage(triggerMessageId: string): Promise<TriggerMessage> {
@@ -549,6 +717,70 @@ async function saveIntentResult(runId: string, processingToken: string, intentTy
     p_processing_token: processingToken,
     p_intent_type: intentType,
   })
+}
+
+async function updateRunStage(
+  runId: string,
+  stage: AiRunStage,
+  stageError: string | null,
+  correlationId: string,
+) {
+  try {
+    const result = await callRpc<RpcResult>("update_chat_ai_run_stage", {
+      p_run_id: runId,
+      p_current_stage: stage,
+      p_stage_error: stageError,
+    })
+
+    if (result.type !== "updated") {
+      console.error("ai-orchestrator stage update skipped:", JSON.stringify({
+        correlation_id: correlationId,
+        run_id: runId,
+        stage,
+        type: result.type,
+      }))
+    }
+  } catch (error) {
+    console.error("ai-orchestrator stage update failed:", JSON.stringify({
+      correlation_id: correlationId,
+      run_id: runId,
+      stage,
+      error: getErrorMessage(error),
+    }))
+  }
+}
+
+async function recoverStaleAiRuns(chatId: string, correlationId: string) {
+  if (!config.staleRunRecovery.enabled) {
+    return { type: "disabled", error: null as string | null }
+  }
+
+  try {
+    const result = await callRpc<StaleRunRecoveryResult>("recover_stale_chat_ai_runs", {
+      p_chat_id: chatId,
+      p_stale_after_minutes: config.staleRunRecovery.staleAfterMinutes,
+      p_limit: config.staleRunRecovery.limit,
+    })
+
+    console.log("ai-orchestrator stale run recovery:", JSON.stringify({
+      correlation_id: correlationId,
+      type: result.type,
+      recovered_count: result.recovered_count ?? 0,
+      run_ids: result.run_ids ?? [],
+      stale_after_minutes: result.stale_after_minutes ?? config.staleRunRecovery.staleAfterMinutes,
+    }))
+
+    return { type: result.type ?? "unknown", error: null as string | null }
+  } catch (error) {
+    const message = getErrorMessage(error)
+
+    console.error("ai-orchestrator stale run recovery failed:", JSON.stringify({
+      correlation_id: correlationId,
+      error: message,
+    }))
+
+    return { type: "failed", error: message }
+  }
 }
 
 async function buildContextAndPrompt(triggerMessageId: string, retrievalResult: RetrievalResult) {
@@ -1504,7 +1736,35 @@ function firstRelation<T>(value: T | T[] | undefined): T | null {
   return value ?? null
 }
 
-async function fetchEmbedding(input: string) {
+async function fetchEmbedding(input: string, signal?: AbortSignal) {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= config.retrieval.embeddingMaxProviderRetries; attempt += 1) {
+    try {
+      return await fetchEmbeddingOnce(input, signal)
+    } catch (error) {
+      lastError = error
+
+      if (!isRetryableEmbeddingProviderError(error) || attempt >= config.retrieval.embeddingMaxProviderRetries) {
+        break
+      }
+
+      if (signal?.aborted) {
+        throw new RetrievalStageTimeoutError()
+      }
+
+      await delay(500 + attempt * 500)
+    }
+  }
+
+  if (lastError instanceof OrchestratorError) {
+    throw lastError
+  }
+
+  throw new OrchestratorError(`Hugging Face request failed: ${getErrorMessage(lastError)}`, "external")
+}
+
+async function fetchEmbeddingOnce(input: string, signal?: AbortSignal) {
   const hfToken = Deno.env.get("HF_API_TOKEN")?.trim()
 
   if (!hfToken) {
@@ -1513,7 +1773,14 @@ async function fetchEmbedding(input: string) {
 
   const endpoint = getHfEndpoint(config.retrieval.embeddingModel)
   const controller = new AbortController()
+  const abortFromParent = () => controller.abort()
   const timeoutId = setTimeout(() => controller.abort(), config.hfRequestTimeoutMs)
+
+  if (signal?.aborted) {
+    throw new RetrievalStageTimeoutError()
+  }
+
+  signal?.addEventListener("abort", abortFromParent, { once: true })
 
   try {
     const response = await fetch(endpoint, {
@@ -1534,10 +1801,7 @@ async function fetchEmbedding(input: string) {
     const responseText = await response.text()
 
     if (!response.ok) {
-      throw new OrchestratorError(
-        `Hugging Face request failed with status ${response.status}: ${safeProviderMessage(responseText)}`,
-        "external",
-      )
+      throw new EmbeddingProviderHttpError(response.status, safeProviderMessage(responseText))
     }
 
     const parsed = JSON.parse(responseText) as unknown
@@ -1550,8 +1814,12 @@ async function fetchEmbedding(input: string) {
 
     return embedding
   } catch (error) {
+    if (signal?.aborted) {
+      throw new RetrievalStageTimeoutError()
+    }
+
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new OrchestratorError("Hugging Face request timed out", "external")
+      throw new EmbeddingProviderTimeoutError()
     }
 
     if (error instanceof OrchestratorError) {
@@ -1561,6 +1829,7 @@ async function fetchEmbedding(input: string) {
     throw new OrchestratorError(`Hugging Face request failed: ${getErrorMessage(error)}`, "external")
   } finally {
     clearTimeout(timeoutId)
+    signal?.removeEventListener("abort", abortFromParent)
   }
 }
 
@@ -1599,8 +1868,41 @@ function normalizeRetrievalResult(value: RetrievalResult): RetrievalResult {
   }
 }
 
-async function callRpc<T>(name: string, body: Record<string, unknown>): Promise<T> {
+function normalizePersistedRetrievalResult(value: PersistedRetrievalResult): PersistedRetrievalResult {
+  const normalized = normalizeRetrievalResult(value)
+
+  return {
+    ...normalized,
+    type: value.type,
+    run_id: value.run_id ?? null,
+    status: value.status,
+  }
+}
+
+function isSuccessfulRetrievalSaveType(type: string | undefined) {
+  return type === "saved" || type === "already_saved"
+}
+
+function getRetrievalSaveFailureMessage(type: string | undefined) {
+  switch (type) {
+    case "invalid_retrieval_chunks":
+      return "RETRIEVAL_CHUNKS_REJECTED"
+    case "invalid_retrieval_result":
+      return "RETRIEVAL_RESULT_REJECTED"
+    case "invalid_request":
+      return "RETRIEVAL_SAVE_INVALID_REQUEST"
+    case "owner_mismatch":
+      return "RETRIEVAL_SAVE_OWNER_MISMATCH"
+    case "already_terminal":
+      return "RETRIEVAL_SAVE_ALREADY_TERMINAL"
+    default:
+      return "RETRIEVAL_SAVE_FAILED"
+  }
+}
+
+async function callRpc<T>(name: string, body: Record<string, unknown>, init?: RequestInit): Promise<T> {
   return await callRest<T>(`/rest/v1/rpc/${name}`, {
+    ...init,
     method: "POST",
     body: JSON.stringify(body),
   })
@@ -1752,6 +2054,18 @@ function isRetryableProviderError(error: unknown) {
   return false
 }
 
+function isRetryableEmbeddingProviderError(error: unknown) {
+  if (error instanceof EmbeddingProviderTimeoutError) {
+    return true
+  }
+
+  if (error instanceof EmbeddingProviderHttpError) {
+    return error.status === 429 || error.status >= 500
+  }
+
+  return false
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -1765,6 +2079,18 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error"
+}
+
+function getFailureErrorMessage(error: unknown) {
+  if (error instanceof RetrievalStageTimeoutError) {
+    return "RETRIEVAL_STAGE_TIMEOUT"
+  }
+
+  return getErrorMessage(error)
+}
+
+function getStageErrorMessage(error: unknown) {
+  return safeProviderMessage(getFailureErrorMessage(error)).slice(0, 500)
 }
 
 function classifyError(error: unknown): ErrorType {
@@ -1803,5 +2129,29 @@ class ProviderTimeoutError extends OrchestratorError {
   constructor(message: string) {
     super(message, "external")
     this.name = "ProviderTimeoutError"
+  }
+}
+
+class EmbeddingProviderHttpError extends OrchestratorError {
+  status: number
+
+  constructor(status: number, providerMessage: string) {
+    super(`Hugging Face request failed with status ${status}: ${providerMessage}`, "external")
+    this.name = "EmbeddingProviderHttpError"
+    this.status = status
+  }
+}
+
+class EmbeddingProviderTimeoutError extends OrchestratorError {
+  constructor() {
+    super("Hugging Face request timed out", "external")
+    this.name = "EmbeddingProviderTimeoutError"
+  }
+}
+
+class RetrievalStageTimeoutError extends OrchestratorError {
+  constructor() {
+    super("RETRIEVAL_STAGE_TIMEOUT", "external")
+    this.name = "RetrievalStageTimeoutError"
   }
 }
