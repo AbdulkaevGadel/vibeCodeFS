@@ -7,3 +7,7 @@ declare namespace Deno {
     handler: (request: Request) => Response | Promise<Response>,
   ): void
 }
+
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<unknown>): void
+}

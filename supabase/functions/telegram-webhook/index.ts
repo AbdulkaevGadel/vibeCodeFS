@@ -48,27 +48,28 @@ Deno.serve(async (request) => {
                     correlation_id: correlationId,
                 }))
 
-                try {
-                    const orchestratorInvoked = await invokeAiOrchestrator({
+                EdgeRuntime.waitUntil(
+                    invokeAiOrchestrator({
                         chatId: saveResult.chatId,
                         triggerMessageId: saveResult.messageId,
                         correlationId,
-                    })
+                    }).then((orchestratorInvoked) => {
+                        if (orchestratorInvoked) {
+                            console.log("AI orchestrator background invoke finished:", JSON.stringify({
+                                trigger_message_id: saveResult.messageId,
+                                correlation_id: correlationId,
+                            }))
+                            return
+                        }
 
-                    if (orchestratorInvoked) {
-                        console.log("AI orchestrator invoke finished:", JSON.stringify({
+                        console.error("AI orchestrator background invoke did not finish successfully:", JSON.stringify({
                             trigger_message_id: saveResult.messageId,
                             correlation_id: correlationId,
                         }))
-                    } else {
-                        console.error("AI orchestrator invoke did not finish successfully:", JSON.stringify({
-                            trigger_message_id: saveResult.messageId,
-                            correlation_id: correlationId,
-                        }))
-                    }
-                } catch (error) {
-                    console.error("AI orchestrator best-effort invoke error:", error)
-                }
+                    }).catch((error) => {
+                        console.error("AI orchestrator best-effort background invoke error:", error)
+                    }),
+                )
             } else {
                 console.log("AI orchestrator invoke skipped:", JSON.stringify({
                     inserted: saveResult?.inserted ?? null,

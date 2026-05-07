@@ -26,6 +26,8 @@ const messageDateClassName = "support-text-muted mt-1 text-xs";
 const messageBadgeClassName =
   "support-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em]";
 const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
+const deliveryStatusClassName =
+  "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -65,6 +67,82 @@ function sortMessagesByCreatedAt(messages: ChatMessage[]) {
   );
 }
 
+function dedupeMessagesById(messages: ChatMessage[]) {
+  return Array.from(new Map(messages.map((message) => [message.id, message])).values());
+}
+
+function normalizeMessages(messages: ChatMessage[]) {
+  return sortMessagesByCreatedAt(dedupeMessagesById(messages));
+}
+
+function isOutgoingMessage(message: ChatMessage) {
+  return message.senderType === "manager" || message.senderType === "ai";
+}
+
+function getMessageCardClassName(message: ChatMessage) {
+  const baseClassName = `relative max-w-[80%] ${messageCardClassName} transition hover:shadow-md`;
+
+  if (message.senderType === "manager") {
+    return `${baseClassName} ml-auto border-l-4 border-l-slate-900 bg-white`;
+  }
+
+  if (message.senderType === "ai") {
+    return `${baseClassName} ml-auto border-l-4 border-l-indigo-500 bg-indigo-50 ring-1 ring-indigo-100`;
+  }
+
+  if (message.senderType === "system") {
+    return `${baseClassName} mx-auto max-w-[90%] border-dashed bg-slate-100`;
+  }
+
+  return `${baseClassName} mr-auto bg-slate-50`;
+}
+
+function getSafeDeliveryError(deliveryError: string | null) {
+  if (!deliveryError) return undefined;
+
+  const normalized = deliveryError.replace(/\s+/g, " ").trim();
+  if (!normalized) return undefined;
+
+  const unsafePatterns = [
+    /authorization/i,
+    /bearer\s+[a-z0-9._-]+/i,
+    /token/i,
+    /secret/i,
+    /service[_-]?role/i,
+    /internal_secret/i,
+    /hf_[a-z0-9_]*api/i,
+    /https?:\/\/\S+\?\S+/i,
+    /\bat\s+\S+\s+\(/i,
+  ];
+  const looksStructuredPayload = /^[{[]/.test(normalized);
+  const looksUnsafe = looksStructuredPayload || unsafePatterns.some((pattern) => pattern.test(normalized));
+
+  if (looksUnsafe) {
+    return "Ошибка доставки";
+  }
+
+  const maxLength = 140;
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
+}
+
+function getDeliveryBadgeLabel(deliveryStatus: ChatMessage["deliveryStatus"]) {
+  if (deliveryStatus === "pending") return "⏳ Отправка";
+  if (deliveryStatus === "sent") return "✅ Доставлено";
+  return "❌ Ошибка";
+}
+
+function getDeliveryBadgeClassName(deliveryStatus: ChatMessage["deliveryStatus"]) {
+  if (deliveryStatus === "pending") {
+    return `${deliveryStatusClassName} bg-amber-100 text-amber-700 animate-pulse`;
+  }
+
+  if (deliveryStatus === "sent") {
+    return `${deliveryStatusClassName} bg-emerald-100 text-emerald-700`;
+  }
+
+  return `${deliveryStatusClassName} bg-red-100 text-red-700`;
+}
+
 type StatusOption = {
   value: ChatStatus;
   label: string;
@@ -82,13 +160,13 @@ const statusOptions: StatusOption[] = [
 export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, currentManager }: ChatDetailsClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => normalizeMessages(initialMessages));
   const [showTransfer, setShowTransfer] = useState(false);
   const lastMarkedReadRef = useRef<string | null>(null);
 
   // Синхронизация при смене чата + сброс прочитанности
   useEffect(() => {
-    setMessages(initialMessages);
+    setMessages(normalizeMessages(initialMessages));
     setShowTransfer(false);
 
     // Сброс прочитанности в базе при выборе чата (guard: только если есть непрочитанные и мы еще не помечали этот чат в текущей сессии)
@@ -145,20 +223,22 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                 ? prev.filter((message) => message.clientMessageId !== formatted.clientMessageId)
                 : prev;
 
-              return sortMessagesByCreatedAt([...withoutOptimisticDuplicate, formatted]);
+              return normalizeMessages([...withoutOptimisticDuplicate, formatted]);
             });
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as any;
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === updated.id || m.clientMessageId === updated.client_message_id
-                  ? {
-                      ...m,
-                      id: updated.id,
-                      deliveryStatus: updated.delivery_status,
-                      deliveryError: updated.delivery_error,
-                    }
-                  : m
+              normalizeMessages(
+                prev.map((m) =>
+                  m.id === updated.id || m.clientMessageId === updated.client_message_id
+                    ? {
+                        ...m,
+                        id: updated.id,
+                        deliveryStatus: updated.delivery_status,
+                        deliveryError: updated.delivery_error,
+                      }
+                    : m
+                ),
               )
             );
           }
@@ -401,8 +481,8 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         {messages.length === 0 && (
           <div className="text-center py-10 text-slate-400">Сообщений пока нет</div>
         )}
-        {messages.map((message, index) => (
-          <article key={message.id} className={`relative max-w-[80%] ${messageCardClassName} transition hover:shadow-md ${message.senderType === 'manager' ? 'ml-auto border-l-4 border-l-slate-900 bg-white' : 'mr-auto bg-slate-50'}`}>
+        {messages.map((message) => (
+          <article key={message.id} className={getMessageCardClassName(message)}>
             {isAdmin && (
               <Button
                 onClick={() => handleDeleteMessage(message.id)}
@@ -425,15 +505,12 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
               </div>
 
               <div className="flex items-center gap-2">
-                {message.senderType === "manager" && message.deliveryStatus && (
-                  <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold ${
-                    message.deliveryStatus === 'pending' ? 'bg-amber-100 text-amber-700 animate-pulse' :
-                    message.deliveryStatus === 'sent' ? 'bg-emerald-100 text-emerald-700' :
-                    'bg-red-100 text-red-700'
-                  }`} title={message.deliveryError || undefined}>
-                    {message.deliveryStatus === 'pending' ? '⏳ Отправка' : 
-                     message.deliveryStatus === 'sent' ? '✅ Доставлено' : 
-                     '❌ Ошибка'}
+                {isOutgoingMessage(message) && message.deliveryStatus && (
+                  <span
+                    className={getDeliveryBadgeClassName(message.deliveryStatus)}
+                    title={getSafeDeliveryError(message.deliveryError)}
+                  >
+                    {getDeliveryBadgeLabel(message.deliveryStatus)}
                   </span>
                 )}
                 <span className={messageBadgeClassName}>
@@ -452,7 +529,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           <ChatMessageInput
               chatId={selectedChat.id}
               onLocalMessage={(msg) => {
-                setMessages(prev => sortMessagesByCreatedAt([...prev, msg]));
+                setMessages(prev => normalizeMessages([...prev, msg]));
               }}
           />
       )}
