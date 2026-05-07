@@ -483,17 +483,6 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         )}
         {messages.map((message) => (
           <article key={message.id} className={getMessageCardClassName(message)}>
-            {isAdmin && (
-              <Button
-                onClick={() => handleDeleteMessage(message.id)}
-                isLoading={isPending}
-                variant="ghost"
-                className="absolute bottom-2 right-2 !p-1.5 text-red-400 hover:text-red-700"
-                title="Удалить сообщение"
-              >
-                🗑️
-              </Button>
-            )}
             <div className={messageHeaderClassName}>
               <div className={messageAuthorClassName}>
                 <div>
@@ -513,9 +502,17 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                     {getDeliveryBadgeLabel(message.deliveryStatus)}
                   </span>
                 )}
-                <span className={messageBadgeClassName}>
-                  {message.legacyMessageId ? `legacy #${message.legacyMessageId}` : "live"}
-                </span>
+                {isAdmin && (
+                  <Button
+                    onClick={() => handleDeleteMessage(message.id)}
+                    isLoading={isPending}
+                    variant="ghost"
+                    className="!h-7 !w-7 !p-0 text-red-400 hover:text-red-700"
+                    title="Удалить сообщение"
+                  >
+                    🗑️
+                  </Button>
+                )}
               </div>
             </div>
 
