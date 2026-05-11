@@ -17,6 +17,7 @@ export function RefreshButton() {
         });
       }}
       isLoading={isPending}
+      size="sm"
     >
       {isPending ? "Обновляю..." : "Обновить"}
     </Button>

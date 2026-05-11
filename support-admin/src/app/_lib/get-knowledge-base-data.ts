@@ -1,6 +1,14 @@
 import {createSupabaseServerClient} from "@/lib/supabase-server";
 import {getCurrentManager} from "./manager-utils";
-import {ArticleEmbeddingStatus, KnowledgeArticle, KnowledgeArticleHistory, KnowledgeBaseView, Manager} from "./page-types";
+import {
+  ArticleEmbeddingStatus,
+  KnowledgeArticle,
+  KnowledgeArticleHistory,
+  KnowledgeBaseView,
+  KnowledgeEmbeddingRefreshBatch,
+  KnowledgeEmbeddingSummary,
+  Manager,
+} from "./page-types";
 
 export type KnowledgeBasePageData = {
   articles: KnowledgeArticle[];
@@ -11,7 +19,20 @@ export type KnowledgeBasePageData = {
   view: KnowledgeBaseView;
   totalCount: number;
   publishedCount: number;
+  embeddingSummary: KnowledgeEmbeddingSummary;
+  embeddingRefreshBatch: KnowledgeEmbeddingRefreshBatch | null;
   errorMessage: string | null;
+};
+
+const emptyEmbeddingSummary: KnowledgeEmbeddingSummary = {
+  totalCount: 0,
+  publishedCount: 0,
+  actualCount: 0,
+  outdatedCount: 0,
+  updatingCount: 0,
+  failedCount: 0,
+  unavailableCount: 0,
+  refreshableCount: 0,
 };
 
 export async function getKnowledgeBaseData(
@@ -27,6 +48,8 @@ export async function getKnowledgeBaseData(
   let view: KnowledgeBaseView = "active";
   let totalCount = 0;
   let publishedCount = 0;
+  let embeddingSummary: KnowledgeEmbeddingSummary = emptyEmbeddingSummary;
+  let embeddingRefreshBatch: KnowledgeEmbeddingRefreshBatch | null = null;
   let errorMessage: string | null = null;
 
   try {
@@ -52,6 +75,24 @@ export async function getKnowledgeBaseData(
         lastName: manager.last_name,
         role: manager.role,
       }));
+    }
+
+    const { data: summaryData, error: summaryError } = await supabase
+      .rpc("get_kb_embeddings_summary_v1");
+
+    if (summaryError) {
+      console.error("Fetch KB embeddings summary error:", formatSupabaseError(summaryError));
+    } else {
+      embeddingSummary = mapEmbeddingSummary(summaryData);
+    }
+
+    const { data: batchData, error: batchError } = await supabase
+      .rpc("get_kb_embedding_refresh_batch_state_v1");
+
+    if (batchError) {
+      console.error("Fetch KB embedding refresh batch error:", formatSupabaseError(batchError));
+    } else {
+      embeddingRefreshBatch = mapEmbeddingRefreshBatch(batchData);
     }
 
     // 2. Статьи с учетом поиска
@@ -126,6 +167,8 @@ export async function getKnowledgeBaseData(
     view,
     totalCount: articles.length,
     publishedCount: articles.filter(a => a.status === "published").length,
+    embeddingSummary,
+    embeddingRefreshBatch,
     errorMessage,
   };
 }
@@ -167,6 +210,65 @@ function mapEmbeddingState(value: any): Pick<KnowledgeArticle, "embeddingStatus"
     embeddingErrorMessage: typeof value?.error_message === "string" && value.error_message.trim()
       ? value.error_message
       : null,
+  };
+}
+
+export function mapEmbeddingSummary(value: any): KnowledgeEmbeddingSummary {
+  return {
+    totalCount: readNumber(value?.total_count),
+    publishedCount: readNumber(value?.published_count),
+    actualCount: readNumber(value?.actual_count),
+    outdatedCount: readNumber(value?.outdated_count),
+    updatingCount: readNumber(value?.updating_count),
+    failedCount: readNumber(value?.failed_count),
+    unavailableCount: readNumber(value?.unavailable_count),
+    refreshableCount: readNumber(value?.refreshable_count),
+  };
+}
+
+export function mapEmbeddingRefreshBatch(value: any): KnowledgeEmbeddingRefreshBatch | null {
+  const batch = value?.batch;
+
+  if (!batch || typeof batch !== "object") {
+    return null;
+  }
+
+  const items = Array.isArray(value?.items) ? value.items : [];
+
+  return {
+    id: String(batch.id),
+    status: batch.status,
+    totalCount: readNumber(batch.total_count),
+    processedCount: readNumber(batch.processed_count),
+    completedCount: readNumber(batch.completed_count),
+    failedCount: readNumber(batch.failed_count),
+    skippedCount: readNumber(batch.skipped_count),
+    startedAt: String(batch.started_at),
+    completedAt: typeof batch.completed_at === "string" ? batch.completed_at : null,
+    errorMessage: typeof batch.error_message === "string" ? batch.error_message : null,
+    items: items.map((item: any) => ({
+      id: String(item.id),
+      articleId: String(item.article_id),
+      articleTitle: String(item.article_title),
+      articleVersion: readNumber(item.article_version),
+      status: item.status,
+      resultType: typeof item.result_type === "string" ? item.result_type : null,
+      errorMessage: typeof item.error_message === "string" ? item.error_message : null,
+      processedAt: typeof item.processed_at === "string" ? item.processed_at : null,
+    })),
+  };
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function formatSupabaseError(error: any) {
+  return {
+    code: error?.code,
+    message: error?.message,
+    details: error?.details,
+    hint: error?.hint,
   };
 }
 

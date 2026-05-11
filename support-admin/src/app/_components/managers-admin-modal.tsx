@@ -318,7 +318,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)}>
+      <Button onClick={() => setIsOpen(true)} size="sm">
         Менеджеры
       </Button>
 

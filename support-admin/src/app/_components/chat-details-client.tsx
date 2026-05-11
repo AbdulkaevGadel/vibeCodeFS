@@ -29,8 +29,6 @@ const messageBadgeClassName =
 const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
 const deliveryStatusClassName =
   "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider";
-const currentManagerBadgeClassName =
-  "ml-2 text-[10px] bg-slate-200 text-slate-800 px-2 py-0.5 rounded-full";
 const assignedManagerBadgeClassName =
   "mt-2 flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 ring-1 ring-inset ring-indigo-500/20";
 const metaChipClassName = "support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200";
@@ -481,12 +479,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
       <div className={detailsHeaderClassName}>
         <div className="flex-1">
           <p className={detailsEyebrowClassName}>
-            Диалог 
-            {currentManager && (
-              <span className={currentManagerBadgeClassName}>
-                Вы вошли как: <span className="font-bold">{currentManager.displayName}</span> ({currentManager.role})
-              </span>
-            )}
+            Диалог
           </p>
           <div className="flex items-center gap-3">
             <h2 className={detailsTitleClassName}>{selectedChat.title}</h2>

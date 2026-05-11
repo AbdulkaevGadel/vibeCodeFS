@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { ArticleStatus } from "../../_lib/page-types";
 import { getCurrentManager } from "../../_lib/manager-utils";
+import { mapEmbeddingRefreshBatch } from "../../_lib/get-knowledge-base-data";
 
 /**
  * Создает или обновляет статью Базы Знаний.
@@ -218,6 +219,159 @@ export async function refreshArticleEmbeddingsAction(id: string, expectedVersion
     console.error("Knowledge Base Embedding Refresh Error:", err);
     return { error: err.message || "Ошибка при обновлении знаний ИИ" };
   }
+}
+
+export async function startKnowledgeEmbeddingRefreshBatchAction() {
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    const currentManager = await getCurrentManager().catch(() => null);
+
+    if (!currentManager) {
+      return { error: "Обновлять знания ИИ могут только пользователи с ролью менеджера." };
+    }
+
+    if (currentManager.role !== "admin" && currentManager.role !== "supervisor") {
+      return { error: "Обновлять все знания ИИ могут только supervisor или admin." };
+    }
+
+    const { data, error } = await supabase.rpc("create_kb_embedding_refresh_batch_v1");
+
+    if (error) {
+      throw error;
+    }
+
+    const result = data as {
+      type?: string;
+      batch_id?: string | null;
+      total_count?: number;
+    } | null;
+
+    if (!result?.type) {
+      throw new Error("EMPTY_KB_EMBEDDING_REFRESH_BATCH_RESULT");
+    }
+
+    if (result.type === "forbidden") {
+      return { error: "Обновлять все знания ИИ могут только supervisor или admin." };
+    }
+
+    if (result.type === "empty") {
+      revalidatePath("/knowledge-base");
+      return {
+        data: await readEmbeddingRefreshBatchState(),
+        message: "Нет статей, которым требуется обновление.",
+      };
+    }
+
+    if (result.type !== "created" && result.type !== "already_running") {
+      return { error: "Не удалось создать batch-задачу обновления знаний ИИ." };
+    }
+
+    const batchId = result.batch_id ?? null;
+
+    try {
+      await invokeKbEmbeddingRefreshBatch(batchId);
+    } catch (invokeError) {
+      console.error("Knowledge Base Embedding Refresh Batch Worker Invoke Error:", invokeError);
+      await failEmbeddingRefreshBatchStart(batchId, getErrorMessage(invokeError));
+      revalidatePath("/knowledge-base");
+      return {
+        data: await readEmbeddingRefreshBatchState(),
+        error: "Batch-задача создана, но worker не запустился. Проверьте deploy Edge Function kb-embedding-refresh-batch и INTERNAL_SECRET.",
+      };
+    }
+
+    revalidatePath("/knowledge-base");
+    return {
+      data: await readEmbeddingRefreshBatchState(),
+      message: result.type === "already_running"
+        ? "Массовое обновление уже выполняется."
+        : "Массовое обновление знаний ИИ запущено.",
+    };
+  } catch (err: any) {
+    console.error("Knowledge Base Embedding Refresh Batch Error:", err);
+    return { error: err.message || "Ошибка при массовом обновлении знаний ИИ" };
+  }
+}
+
+async function failEmbeddingRefreshBatchStart(batchId: string | null, errorMessage: string) {
+  if (!batchId) {
+    return;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("fail_kb_embedding_refresh_batch_start_v1", {
+    p_batch_id: batchId,
+    p_error_message: errorMessage,
+  });
+
+  if (error) {
+    console.error("Knowledge Base Embedding Refresh Batch Fail Start Error:", error);
+  }
+}
+
+export async function getKnowledgeEmbeddingRefreshBatchStateAction() {
+  try {
+    return {
+      data: await readEmbeddingRefreshBatchState(),
+    };
+  } catch (err: any) {
+    console.error("Knowledge Base Embedding Refresh Batch State Error:", err);
+    return { error: err.message || "Ошибка при загрузке прогресса обновления знаний ИИ" };
+  }
+}
+
+async function readEmbeddingRefreshBatchState() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_kb_embedding_refresh_batch_state_v1");
+
+  if (error) {
+    throw error;
+  }
+
+  return mapEmbeddingRefreshBatch(data);
+}
+
+async function invokeKbEmbeddingRefreshBatch(batchId: string | null) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const internalSecret = process.env.INTERNAL_SECRET?.trim();
+
+  if (!supabaseUrl || !internalSecret) {
+    throw new Error("INTERNAL_SECRET_OR_SUPABASE_URL_NOT_CONFIGURED");
+  }
+
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/kb-embedding-refresh-batch`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": internalSecret,
+    },
+    body: JSON.stringify({
+      batch_id: batchId,
+    }),
+  });
+
+  const responseText = await response.text();
+  let body: any = null;
+
+  try {
+    body = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    body = null;
+  }
+
+  if (!response.ok || body?.ok === false) {
+    console.error("KB embedding refresh batch invocation failed:", {
+      status: response.status,
+      body,
+    });
+    throw new Error("Не удалось запустить batch worker.");
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error";
 }
 
 async function invokeKbIngestion(chunkSetId: string) {
