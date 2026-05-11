@@ -327,8 +327,9 @@ export async function getSupportAdminPageData(
   const botFilteredChats = selectedBot
     ? allChatSummaries.filter((chat) => getBotKey(chat.botUsername) === selectedBot.key)
     : allChatSummaries;
-  const selectedChat =
-    botFilteredChats.find((chat) => chat.id === selectedChatParam) ?? botFilteredChats[0] ?? null;
+  const selectedChat = selectedChatParam
+    ? botFilteredChats.find((chat) => chat.id === selectedChatParam) ?? null
+    : null;
   const selectedChatMessages = selectedChat
     ? sortChatMessages(messagesByChatId[selectedChat.id] ?? [])
     : [];
