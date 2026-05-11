@@ -29,6 +29,27 @@ const messageBadgeClassName =
 const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
 const deliveryStatusClassName =
   "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider";
+const currentManagerBadgeClassName =
+  "ml-2 text-[10px] bg-slate-200 text-slate-800 px-2 py-0.5 rounded-full";
+const assignedManagerBadgeClassName =
+  "mt-2 flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 ring-1 ring-inset ring-indigo-500/20";
+const metaChipClassName = "support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200";
+const statusMetaChipClassName = `${metaChipClassName} font-bold uppercase`;
+const transferMenuClassName =
+  "absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5";
+const transferMenuTitleClassName =
+  "mb-2 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400";
+const transferMenuListClassName = "max-h-48 overflow-y-auto";
+const transferManagerRoleClassName = "ml-1 text-[10px] text-slate-400";
+const statusSelectClassName =
+  "rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50";
+const messagesPanelClassName =
+  `${messagesWrapperClassName} overflow-y-auto max-h-[400px] min-h-[300px] p-4 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-4 shadow-inner`;
+const emptyMessagesClassName = "text-center py-10 text-slate-400";
+const deleteMessageButtonClassName = "!h-7 !w-7 !p-0 text-red-400 hover:text-red-700";
+const resolvedStateClassName =
+  "mt-5 rounded-2xl bg-slate-100 p-8 text-center border-2 border-dashed border-slate-300";
+const resolvedStateTextClassName = "text-slate-500 font-semibold";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -393,7 +414,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           <p className={detailsEyebrowClassName}>
             Диалог 
             {currentManager && (
-              <span className="ml-2 text-[10px] bg-slate-200 text-slate-800 px-2 py-0.5 rounded-full">
+              <span className={currentManagerBadgeClassName}>
                 Вы вошли как: <span className="font-bold">{currentManager.displayName}</span> ({currentManager.role})
               </span>
             )}
@@ -404,7 +425,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
               const assignedMgr = allManagers.find(m => m.id === selectedChat.assignedManagerId);
               const roleLabel = assignedMgr?.role?.toUpperCase() ?? "Менеджер";
               return (
-                <span className="mt-2 flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 ring-1 ring-inset ring-indigo-500/20">
+                <span className={assignedManagerBadgeClassName}>
                   {roleLabel}: {selectedChat.assignedManagerName}
                 </span>
               );
@@ -414,13 +435,13 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
             <p className={detailsFullNameClassName}>{selectedChat.fullName}</p>
           ) : null}
           <div className={detailsMetaListClassName}>
-            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
+            <span className={metaChipClassName}>
               сообщений: {messages.length}
             </span>
-            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200">
+            <span className={metaChipClassName}>
               chat_id: {selectedChat.telegramChatId}
             </span>
-            <span className="support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200 font-bold uppercase">
+            <span className={statusMetaChipClassName}>
               status: {selectedChat.status}
             </span>
           </div>
@@ -449,9 +470,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                     Передать
                   </Button>
                   {showTransfer && (
-                    <div className="absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5">
-                      <p className="mb-2 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Выберите менеджера</p>
-                      <div className="max-h-48 overflow-y-auto">
+                    <div className={transferMenuClassName}>
+                      <p className={transferMenuTitleClassName}>Выберите менеджера</p>
+                      <div className={transferMenuListClassName}>
                         {allManagers.map(mgr => (
                           <Button
                             key={mgr.id}
@@ -460,7 +481,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                             className="w-full justify-start rounded-lg px-3 py-2 text-left"
                             size="sm"
                           >
-                            {getManagerFullName(mgr)} <span className="ml-1 text-[10px] text-slate-400">({mgr.role})</span>
+                            {getManagerFullName(mgr)} <span className={transferManagerRoleClassName}>({mgr.role})</span>
                           </Button>
                         ))}
                       </div>
@@ -475,7 +496,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                     value={selectedChat.status}
                     onChange={(e) => handleStatusChange(e.target.value as ChatStatus)}
                     disabled={isPending}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50"
+                    className={statusSelectClassName}
                   >
                     {visibleStatusOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -501,9 +522,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         </div>
       </div>
 
-      <div className={`${messagesWrapperClassName} overflow-y-auto max-h-[400px] min-h-[300px] p-4 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-4 shadow-inner`}>
+      <div className={messagesPanelClassName}>
         {messages.length === 0 && (
-          <div className="text-center py-10 text-slate-400">Сообщений пока нет</div>
+          <div className={emptyMessagesClassName}>Сообщений пока нет</div>
         )}
         {messages.map((message) => (
           <article key={message.id} className={getMessageCardClassName(message)}>
@@ -531,7 +552,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
                     onClick={() => handleDeleteMessage(message.id)}
                     isLoading={isPending}
                     variant="ghost"
-                    className="!h-7 !w-7 !p-0 text-red-400 hover:text-red-700"
+                    className={deleteMessageButtonClassName}
                     title="Удалить сообщение"
                   >
                     🗑️
@@ -556,8 +577,8 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
       )}
       
       {isResolved && (
-        <div className="mt-5 rounded-2xl bg-slate-100 p-8 text-center border-2 border-dashed border-slate-300">
-           <p className="text-slate-500 font-semibold">Диалог завершен. История сохранена в архиве.</p>
+        <div className={resolvedStateClassName}>
+           <p className={resolvedStateTextClassName}>Диалог завершен. История сохранена в архиве.</p>
         </div>
       )}
 

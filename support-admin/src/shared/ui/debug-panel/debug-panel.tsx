@@ -4,14 +4,17 @@ type DebugPanelProps = {
   emptyText?: string;
 };
 
+const panelClassName = "rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600";
+const titleClassName = "mb-2 font-semibold uppercase tracking-[0.18em] text-slate-500";
+
 export function DebugPanel({
   title = "Debug",
   items = [],
   emptyText = "Нет данных для отладки.",
 }: DebugPanelProps) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-      <p className="mb-2 font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <div className={panelClassName}>
+      <p className={titleClassName}>
         {title}
       </p>
       {items.length > 0 ? (

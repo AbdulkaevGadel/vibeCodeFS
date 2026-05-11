@@ -372,6 +372,7 @@ Scope:
 - Global rules apply to the entire repository.
 - Feature-specific rules must live inside the feature or app they belong to.
 - Do not promote feature patterns to global rules without clear cross-feature reuse.
+- For detailed `support-admin` Tailwind/styling rules, follow `support-admin/AGENTS.md`.
 
 MUST:
 - In Next.js App Router, `page.tsx` must act as an orchestration/composition layer.

@@ -13,6 +13,52 @@ type KnowledgeListProps = {
   currentManager: Manager | null;
 };
 
+const listPanelClassName = "flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel";
+const listHeaderClassName = "p-5 border-b border-black/5 flex flex-col gap-4";
+const listTitleClassName = "text-xs font-bold uppercase tracking-widest support-text-muted";
+const searchInputClassName =
+  "w-full bg-white/40 border border-black/5 rounded-2xl px-4 py-2 text-xs support-text-primary outline-none focus:border-indigo-500/30 transition-all font-medium placeholder:text-black/20";
+const searchIconClassName = "absolute right-3 top-1/2 -translate-y-1/2 support-text-muted text-[10px]";
+const scrollAreaClassName = "flex-1 overflow-y-auto custom-scrollbar p-3";
+const emptyTextClassName = "p-4 text-sm support-text-muted italic text-center";
+const articleLinkBaseClassName = "flex flex-col gap-1.5 p-4 rounded-3xl transition-all duration-300";
+const activeArticleLinkClassName = "support-surface-accent scale-[1.02] shadow-lg shadow-black/5";
+const inactiveArticleLinkClassName = "hover:bg-white/40 border border-transparent support-text-primary";
+const articleTitleBaseClassName = "text-sm font-semibold leading-tight";
+const statusBadgeBaseClassName = "text-[10px] uppercase font-black px-2 py-0.5 rounded-full";
+const slugBaseClassName = "text-[10px] truncate";
+const footerClassName = "p-4 border-t border-black/5";
+
+const statusBadgeClassNames: Record<KnowledgeArticle["status"], string> = {
+  published: "bg-emerald-500/10 text-emerald-600",
+  archived: "bg-rose-500/10 text-rose-600",
+  draft: "bg-amber-500/10 text-amber-600",
+};
+
+const statusLabels: Record<KnowledgeArticle["status"], string> = {
+  published: "Live",
+  archived: "Archived",
+  draft: "Draft",
+};
+
+function getArticleLinkClassName(isActive: boolean) {
+  return `${articleLinkBaseClassName} ${
+    isActive ? activeArticleLinkClassName : inactiveArticleLinkClassName
+  }`;
+}
+
+function getArticleTitleClassName(isActive: boolean) {
+  return `${articleTitleBaseClassName} ${isActive ? "text-white" : "support-text-primary"}`;
+}
+
+function getStatusBadgeClassName(status: KnowledgeArticle["status"]) {
+  return `${statusBadgeBaseClassName} ${statusBadgeClassNames[status]}`;
+}
+
+function getSlugClassName(isActive: boolean) {
+  return `${slugBaseClassName} ${isActive ? "text-white/60" : "support-text-muted"}`;
+}
+
 export function KnowledgeList({ articles, selectedId, view, currentManager }: KnowledgeListProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -41,10 +87,10 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel">
-      <div className="p-5 border-b border-black/5 flex flex-col gap-4">
+    <div className={listPanelClassName}>
+      <div className={listHeaderClassName}>
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-widest support-text-muted">
+          <h2 className={listTitleClassName}>
             {isArchiveView ? "Архив" : "Статьи"}
           </h2>
         </div>
@@ -55,17 +101,17 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Поиск по базе..."
-            className="w-full bg-white/40 border border-black/5 rounded-2xl px-4 py-2 text-xs support-text-primary outline-none focus:border-indigo-500/30 transition-all font-medium placeholder:text-black/20"
+            className={searchInputClassName}
           />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 support-text-muted text-[10px]">
+          <div className={searchIconClassName}>
              🔎
           </div>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
+      <div className={scrollAreaClassName}>
         <div className="flex flex-col gap-2">
           {articles.length === 0 ? (
-            <p className="p-4 text-sm support-text-muted italic text-center">
+            <p className={emptyTextClassName}>
               {isArchiveView ? "В архиве пока нет статей." : "Статей пока нет."}
             </p>
           ) : (
@@ -75,26 +121,16 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
                 <Link
                   key={article.id}
                   href={getArticleHref(article)}
-                  className={`
-                    flex flex-col gap-1.5 p-4 rounded-3xl transition-all duration-300
-                    ${isActive 
-                      ? "support-surface-accent scale-[1.02] shadow-lg shadow-black/5" 
-                      : "hover:bg-white/40 border border-transparent support-text-primary"}
-                  `}
+                  className={getArticleLinkClassName(isActive)}
                 >
-                  <p className={`text-sm font-semibold leading-tight ${isActive ? "text-white" : "support-text-primary"}`}>
+                  <p className={getArticleTitleClassName(isActive)}>
                     {article.title}
                   </p>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded-full ${
-                      article.status === 'published' ? 'bg-emerald-500/10 text-emerald-600' :
-                      article.status === 'archived' ? 'bg-rose-500/10 text-rose-600' :
-                      'bg-amber-500/10 text-amber-600'
-                    }`}>
-                      {article.status === 'published' ? 'Live' : 
-                       article.status === 'archived' ? 'Archived' : 'Draft'}
+                    <span className={getStatusBadgeClassName(article.status)}>
+                      {statusLabels[article.status]}
                     </span>
-                    <span className={`text-[10px] truncate ${isActive ? "text-white/60" : "support-text-muted"}`}>
+                    <span className={getSlugClassName(isActive)}>
                       {article.slug}
                     </span>
                   </div>
@@ -106,7 +142,7 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
       </div>
       
 
-      <div className="p-4 border-t border-black/5">
+      <div className={footerClassName}>
         {isArchiveView ? (
           <Button 
             href="/knowledge-base"

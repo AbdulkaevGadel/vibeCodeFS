@@ -31,6 +31,12 @@ type RealtimeMessageRow = {
   created_at: string;
 };
 
+const panelClassName = "support-panel p-4";
+const sectionTitleClassName = "support-text-muted text-xs uppercase tracking-[0.3em]";
+const sectionHeadingClassName = "support-text-primary mt-2 text-xl font-semibold";
+const emptyStateClassName =
+  "support-text-secondary support-surface-muted rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm";
+
 function compareNullableDatesDesc(left: string | null, right: string | null) {
   if (left && right) return new Date(right).getTime() - new Date(left).getTime();
   if (left && !right) return -1;
@@ -239,18 +245,18 @@ export function ChatList({
   }, [selectedChatId]);
 
   return (
-      <aside className="support-panel p-4">
+      <aside className={panelClassName}>
         <div className="mb-4 px-2">
-          <p className="support-text-muted text-xs uppercase tracking-[0.3em]">
+          <p className={sectionTitleClassName}>
             Чаты
           </p>
-          <h2 className="support-text-primary mt-2 text-xl font-semibold">
+          <h2 className={sectionHeadingClassName}>
             Последняя активность
           </h2>
         </div>
 
         {chats.length === 0 ? (
-            <div className="support-text-secondary support-surface-muted rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm">
+            <div className={emptyStateClassName}>
               Для выбранного бота пока нет чатов.
             </div>
         ) : (

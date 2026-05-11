@@ -8,15 +8,18 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 For production UI work in `support-admin`, use this default:
 
-- not pure Tailwind only
-- not pure CSS Modules only
-- use Tailwind for layout/composition
-- use design tokens for colors, radius, shadows, spacing semantics
-- use CSS Modules pointwise when a component layout or styling becomes too noisy in JSX
+- Tailwind remains the default styling tool for React components.
+- Short, obvious one-off utility classes may stay inline in `className`.
+- Long, repeated, or condition-heavy class strings should be extracted into local `const ...ClassName` variables near the component.
+- Reusable UI behavior or repeated visual structures should be extracted into components, not only into class constants.
+- Project-level semantic classes such as `support-panel`, `support-card`, `support-text-muted`, and `support-surface-*` are allowed only for shared visual primitives and design tokens.
+- CSS Modules are reserved for page-level layout or cases where Tailwind is inconvenient, not as the default replacement for Tailwind.
 
 Rule:
 - if a visual value repeats, promote it to a token instead of hardcoding it again
+- do not turn `globals.css` into a dump for component-specific styles
 - do not introduce CSS Modules everywhere by default
+- do not add `clsx`, `cn`, `cva`, or similar helpers until class composition becomes repetitive enough to justify it
 
 ## Support Admin UI Rules
 

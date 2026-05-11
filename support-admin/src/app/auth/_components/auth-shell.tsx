@@ -8,6 +8,9 @@ type AuthShellProps = {
   headerExtra?: ReactNode;
 };
 
+const mainClassName = "flex min-h-screen items-center justify-center bg-slate-100 px-4 py-12";
+const panelClassName = "w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200";
+
 export function AuthShell({
   title,
   description,
@@ -16,8 +19,8 @@ export function AuthShell({
   headerExtra,
 }: AuthShellProps) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-12">
-      <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+    <main className={mainClassName}>
+      <section className={panelClassName}>
         <div className="space-y-6">
           <header className="space-y-2">
             <h1 className="text-2xl font-semibold text-slate-950">{title}</h1>

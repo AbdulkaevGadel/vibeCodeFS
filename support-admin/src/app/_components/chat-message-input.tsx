@@ -10,6 +10,13 @@ type ChatMessageInputProps = {
   onLocalMessage?: (msg: any) => void;
 };
 
+const wrapperClassName = "mt-6 border-t border-slate-200 pt-6";
+const composerClassName = "support-card relative overflow-hidden focus-within:ring-2 focus-within:ring-slate-950/10";
+const textareaClassName =
+  "w-full resize-none bg-transparent p-4 text-sm text-slate-700 placeholder-slate-400 outline-none";
+const toolbarClassName = "flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-4 py-3";
+const toolbarTextClassName = "support-text-muted text-[11px] uppercase tracking-wider";
+
 export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProps) {
   const [text, setText] = useState("");
   const [toast, setToast] = useState<{ id: number; message: string; variant: "error" } | null>(null);
@@ -58,19 +65,19 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
   };
 
   return (
-    <div className="mt-6 border-t border-slate-200 pt-6">
-      <div className="support-card relative overflow-hidden focus-within:ring-2 focus-within:ring-slate-950/10">
+    <div className={wrapperClassName}>
+      <div className={composerClassName}>
         <textarea
           rows={3}
-          className="w-full resize-none bg-transparent p-4 text-sm text-slate-700 placeholder-slate-400 outline-none"
+          className={textareaClassName}
           placeholder="Напишите ответ клиенту... (Cmd + Enter для отправки)"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isPending}
         />
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-4 py-3">
-          <p className="support-text-muted text-[11px] uppercase tracking-wider">
+        <div className={toolbarClassName}>
+          <p className={toolbarTextClassName}>
             Ответ будет отправлен в Telegram
           </p>
           <Button
