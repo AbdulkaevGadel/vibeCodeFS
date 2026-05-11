@@ -9,13 +9,20 @@ import {
   refreshArticleEmbeddingsAction,
 } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
-import { Button } from "../ui/button";
+import { Button } from "@/shared/ui/button";
+import { Toast } from "@/shared/ui/toast";
 
 type KnowledgeDetailsProps = {
   selectedArticle: KnowledgeArticle | null;
   history: KnowledgeArticleHistory[];
   currentManager: Manager | null;
   isCreatingArticle: boolean;
+};
+
+type ToastState = {
+  id: number;
+  message: string;
+  variant: "success" | "error";
 };
 
 export function KnowledgeDetails({ selectedArticle, history, currentManager, isCreatingArticle }: KnowledgeDetailsProps) {
@@ -30,16 +37,21 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const [content, setContent] = useState(selectedArticle?.content ?? "");
   const [slug, setSlug] = useState(selectedArticle?.slug ?? "");
   const [status, setStatus] = useState(selectedArticle?.status ?? "draft");
-  const [error, setError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
   const canManageLifecycle = currentManager?.role === "admin" || currentManager?.role === "supervisor";
 
+  const showToast = (message: string, variant: ToastState["variant"]) => {
+    setToast({
+      id: Date.now(),
+      message,
+      variant,
+    });
+  };
+
   const handleSave = async () => {
-    setError(null);
-    setStatusMessage(null);
     startTransition(async () => {
       const result = await upsertArticleAction(
         selectedArticle?.id ?? null,
@@ -51,9 +63,10 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       );
 
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else {
         setIsEditing(false);
+        showToast("Статья сохранена.", "success");
         if (!selectedArticle && result.data) {
            router.push(`/knowledge-base?article=${result.data.id}`);
         }
@@ -63,13 +76,12 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
   const handleStatusChange = async (newStatus: any) => {
     if (!selectedArticle) return;
-    setError(null);
-    setStatusMessage(null);
     startTransition(async () => {
       const result = await setArticleStatusAction(selectedArticle.id, newStatus, selectedArticle.version);
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else if (result.data) {
+        showToast("Статус статьи изменён.", "success");
         if (newStatus === "archived") {
           router.push("/knowledge-base");
         } else {
@@ -91,14 +103,13 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
     if (!confirmed) return;
 
-    setError(null);
-    setStatusMessage(null);
     startTransition(async () => {
       const result = await deleteArticleAction(selectedArticle.id, selectedArticle.version);
 
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else {
+        showToast("Статья удалена.", "success");
         router.push("/knowledge-base?view=archive");
         router.refresh();
       }
@@ -108,15 +119,13 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const handleRefreshEmbeddings = async () => {
     if (!selectedArticle) return;
 
-    setError(null);
-    setStatusMessage(null);
     startRefreshTransition(async () => {
       const result = await refreshArticleEmbeddingsAction(selectedArticle.id, selectedArticle.version);
 
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else {
-        setStatusMessage(result.message ?? "Обновление знаний ИИ запущено");
+        showToast(result.message ?? "Обновление знаний ИИ запущено", "success");
         router.refresh();
       }
     });
@@ -240,18 +249,6 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="max-w-4xl mx-auto p-10">
-          {error && (
-            <div className="mb-6 p-4 rounded-3xl support-alert-danger text-sm font-medium animate-in fade-in slide-in-from-top-2">
-               {error}
-            </div>
-          )}
-
-          {statusMessage && (
-            <div className="mb-6 p-4 rounded-3xl bg-emerald-50 text-emerald-700 border border-emerald-100 text-sm font-medium animate-in fade-in slide-in-from-top-2">
-               {statusMessage}
-            </div>
-          )}
-
           {showHistory ? (
             <div className="space-y-8">
                <h3 className="text-sm font-black uppercase tracking-widest support-text-muted border-b border-black/5 pb-4">Архив изменений</h3>
@@ -358,6 +355,14 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
           )}
         </div>
       </div>
+      {toast ? (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+        />
+      ) : null}
     </div>
   );
 }

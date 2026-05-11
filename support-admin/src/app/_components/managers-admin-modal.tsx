@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Manager } from "../_lib/page-types";
-import { Button } from "./ui/button";
+import { Button } from "@/shared/ui/button";
 import {
   addManagerAction,
   createAuthUserAction,

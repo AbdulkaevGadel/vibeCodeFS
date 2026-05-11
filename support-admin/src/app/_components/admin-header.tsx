@@ -3,7 +3,7 @@
 import { RefreshButton } from "../refresh-button";
 import { BotOption, Manager } from "../_lib/page-types";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Button } from "./ui/button";
+import { Button } from "@/shared/ui/button";
 import { logoutAction } from "../_actions/logout";
 import { BotTabs } from "./bot-tabs";
 import { ManagersAdminModal } from "./managers-admin-modal";

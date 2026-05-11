@@ -7,6 +7,7 @@ export type KnowledgeBasePageData = {
   selectedArticle: KnowledgeArticle | null;
   history: KnowledgeArticleHistory[];
   currentManager: Manager | null;
+  allManagers: Manager[];
   view: KnowledgeBaseView;
   totalCount: number;
   publishedCount: number;
@@ -22,6 +23,7 @@ export async function getKnowledgeBaseData(
   let selectedArticle: KnowledgeArticle | null = null;
   let history: KnowledgeArticleHistory[] = [];
   let currentManager: Manager | null = null;
+  let allManagers: Manager[] = [];
   let view: KnowledgeBaseView = "active";
   let totalCount = 0;
   let publishedCount = 0;
@@ -34,6 +36,23 @@ export async function getKnowledgeBaseData(
     currentManager = await getCurrentManager().catch(() => null);
     const canManageArchive = currentManager?.role === "admin" || currentManager?.role === "supervisor";
     view = requestedView === "archive" && canManageArchive ? "archive" : "active";
+
+    const { data: managersData, error: managersError } = await supabase
+      .from("managers")
+      .select("id, email, display_name, last_name, role")
+      .order("display_name");
+
+    if (managersError) {
+      console.error("Fetch managers error:", managersError);
+    } else {
+      allManagers = (managersData ?? []).map((manager) => ({
+        id: manager.id,
+        email: manager.email,
+        displayName: manager.display_name,
+        lastName: manager.last_name,
+        role: manager.role,
+      }));
+    }
 
     // 2. Статьи с учетом поиска
     let query = supabase.from("knowledge_base_articles").select("*");
@@ -103,6 +122,7 @@ export async function getKnowledgeBaseData(
     selectedArticle,
     history,
     currentManager,
+    allManagers,
     view,
     totalCount: articles.length,
     publishedCount: articles.filter(a => a.status === "published").length,

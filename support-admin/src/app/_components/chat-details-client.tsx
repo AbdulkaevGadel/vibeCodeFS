@@ -6,7 +6,8 @@ import { ChatMessage, ChatStatus, ChatSummary, Manager } from "../_lib/page-type
 import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatMessageInput } from "./chat-message-input";
-import { Button } from "./ui/button";
+import { Button } from "@/shared/ui/button";
+import { Toast } from "@/shared/ui/toast";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
@@ -35,6 +36,12 @@ type ChatDetailsClientProps = {
   selectedBotKey: string | null;
   allManagers: Manager[];
   currentManager: Manager | null;
+};
+
+type ToastState = {
+  id: number;
+  message: string;
+  variant: "success" | "error";
 };
 
 function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Manager[]) {
@@ -162,7 +169,16 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(() => normalizeMessages(initialMessages));
   const [showTransfer, setShowTransfer] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const lastMarkedReadRef = useRef<string | null>(null);
+
+  const showToast = (message: string, variant: ToastState["variant"]) => {
+    setToast({
+      id: Date.now(),
+      message,
+      variant,
+    });
+  };
 
   // Синхронизация при смене чата + сброс прочитанности
   useEffect(() => {
@@ -269,7 +285,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     startTransition(async () => {
       const result = await takeChatIntoWorkAction(selectedChat.id);
       if (!result.success) {
-        alert("Ошибка: " + result.error);
+        showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось взять чат в работу.", "error");
+      } else {
+        showToast("Чат взят в работу.", "success");
       }
     });
   };
@@ -278,9 +296,10 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     startTransition(async () => {
       const result = await transferChatAction(selectedChat.id, targetManagerId, selectedChat.assignedManagerId);
       if (!result.success) {
-        alert("Ошибка: " + result.error);
+        showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось передать чат.", "error");
       } else {
         setShowTransfer(false);
+        showToast("Чат передан.", "success");
       }
     });
   };
@@ -304,7 +323,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
       const { updateChatStatusAction } = await import("../(protected)/_actions/chat-actions");
       const result = await updateChatStatusAction(selectedChat.id, newStatus, selectedChat.status);
       if (!result.success) {
-        alert("Ошибка: " + result.error);
+        showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось изменить статус чата.", "error");
+      } else {
+        showToast("Статус чата изменён.", "success");
       }
     });
   };
@@ -345,9 +366,10 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     startTransition(async () => {
       const result = await deleteMessageAction(messageId);
       if (!result.success) {
-        alert("Ошибка: " + result.error);
+        showToast(result.error ? `Ошибка удаления: ${result.error}` : "Удаление сообщения не выполнено.", "error");
       } else {
         setMessages(prev => prev.filter(m => m.id !== messageId));
+        showToast("Сообщение удалено.", "success");
       }
     });
   };
@@ -357,7 +379,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     startTransition(async () => {
       const result = await deleteChatAction(selectedChat.id);
       if (!result.success) {
-        alert("Ошибка: " + result.error);
+        showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось удалить чат.", "error");
+      } else {
+        showToast("Чат удалён.", "success");
       }
     });
   };
@@ -536,6 +560,15 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
            <p className="text-slate-500 font-semibold">Диалог завершен. История сохранена в архиве.</p>
         </div>
       )}
+
+      {toast ? (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+        />
+      ) : null}
     </>
   );
 }

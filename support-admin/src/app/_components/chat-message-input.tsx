@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { sendManagerMessageAction } from "../(protected)/_actions/chat-actions";
-import { Button } from "./ui/button";
+import { Button } from "@/shared/ui/button";
+import { Toast } from "@/shared/ui/toast";
 
 type ChatMessageInputProps = {
   chatId: string;
@@ -11,6 +12,7 @@ type ChatMessageInputProps = {
 
 export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProps) {
   const [text, setText] = useState("");
+  const [toast, setToast] = useState<{ id: number; message: string; variant: "error" } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleSend = () => {
@@ -38,7 +40,11 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
       const result = await sendManagerMessageAction(chatId, text, clientMessageId);
 
       if (!result.success) {
-        alert("Ошибка при отправке: " + result.error);
+        setToast({
+          id: Date.now(),
+          message: result.error ? `Ошибка при отправке: ${result.error}` : "Сообщение не отправлено.",
+          variant: "error",
+        });
       }
     });
   };
@@ -78,6 +84,14 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
           </Button>
         </div>
       </div>
+      {toast ? (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+        />
+      ) : null}
     </div>
   );
 }

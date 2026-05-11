@@ -30,7 +30,7 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
           chatCount={0}
           botOptions={[]}
           selectedBotKey={null}
-          allManagers={[]} 
+          allManagers={pageData.allManagers}
           currentManager={pageData.currentManager}
           kbTotalCount={pageData.totalCount}
           kbPublishedCount={pageData.publishedCount}
