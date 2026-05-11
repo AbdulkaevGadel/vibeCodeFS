@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { Button } from "./_components/ui/button";
+import { Button } from "@/shared/ui/button";
 
 export function RefreshButton() {
   const router = useRouter();
@@ -17,6 +17,7 @@ export function RefreshButton() {
         });
       }}
       isLoading={isPending}
+      size="sm"
     >
       {isPending ? "Обновляю..." : "Обновить"}
     </Button>

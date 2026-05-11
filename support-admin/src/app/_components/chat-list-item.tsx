@@ -23,6 +23,11 @@ const inactiveNeedsHelpClassName =
 const activeMetaClassName =
   "mt-4 flex items-center justify-between text-xs text-[color:rgba(255,255,255,0.65)]";
 const inactiveMetaClassName = "support-text-muted mt-4 flex items-center justify-between text-xs";
+const badgesWrapperClassName = "flex flex-col items-end gap-1 pt-1";
+const unreadWrapperClassName = "flex items-center gap-2";
+const unreadLabelClassName = "text-[10px] font-bold uppercase tracking-wider text-blue-500";
+const unreadCountClassName =
+  "flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-white/10 animate-in zoom-in duration-300";
 
 type ChatListItemProps = {
   chat: ChatSummary;
@@ -56,16 +61,16 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
           </p>
         </div>
         {(needsHelp || showUnreadBadge) && (
-          <div className="flex flex-col items-end gap-1 pt-1">
+          <div className={badgesWrapperClassName}>
             {needsHelp && (
               <span className={isActive ? activeNeedsHelpClassName : inactiveNeedsHelpClassName}>
                 Needs help
               </span>
             )}
             {showUnreadBadge && (
-              <span className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">New</span>
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-white/10 animate-in zoom-in duration-300">
+              <span className={unreadWrapperClassName}>
+                <span className={unreadLabelClassName}>New</span>
+                <span className={unreadCountClassName}>
                   {chat.unreadCount}
                 </span>
               </span>

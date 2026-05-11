@@ -9,7 +9,8 @@ import {
   refreshArticleEmbeddingsAction,
 } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
-import { Button } from "../ui/button";
+import { Button } from "@/shared/ui/button";
+import { Toast } from "@/shared/ui/toast";
 
 type KnowledgeDetailsProps = {
   selectedArticle: KnowledgeArticle | null;
@@ -17,6 +18,60 @@ type KnowledgeDetailsProps = {
   currentManager: Manager | null;
   isCreatingArticle: boolean;
 };
+
+type ToastState = {
+  id: number;
+  message: string;
+  variant: "success" | "error";
+};
+
+const emptyStateClassName =
+  "flex h-[calc(100vh-200px)] flex-col items-center justify-center support-panel p-12 text-center";
+const emptyTitleClassName = "support-text-primary mb-2 text-xl font-semibold";
+const emptyDescriptionClassName = "support-text-secondary max-w-xs text-sm";
+const detailsPanelClassName = "flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel";
+const headerClassName = "flex items-center justify-between p-6 border-b border-black/5 bg-white/20";
+const titleInputClassName =
+  "w-full bg-transparent text-2xl font-bold support-text-primary outline-none border-b border-black/10 focus:border-indigo-500 transition-colors";
+const titleClassName = "text-2xl font-bold support-text-primary truncate";
+const actionsClassName = "flex items-center gap-3 ml-6";
+const embeddingBadgeBaseClassName =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-black";
+const contentScrollClassName = "flex-1 overflow-y-auto custom-scrollbar";
+const contentContainerClassName = "max-w-4xl mx-auto p-10";
+const historyTitleClassName =
+  "text-sm font-black uppercase tracking-widest support-text-muted border-b border-black/5 pb-4";
+const historyCardClassName =
+  "p-5 rounded-[2rem] bg-white/40 border border-black/5 hover:bg-white transition-all shadow-sm";
+const historyBadgeClassName =
+  "text-[10px] uppercase tracking-widest font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full";
+const historyDateClassName = "text-[10px] support-text-muted font-bold";
+const historyItemTitleClassName = "text-sm font-bold support-text-primary mb-1";
+const historyItemContentClassName = "text-xs support-text-secondary line-clamp-2 leading-relaxed";
+const editFormClassName = "space-y-8 animate-in fade-in duration-500";
+const editGridClassName = "grid grid-cols-2 gap-8";
+const fieldWrapperClassName = "space-y-3";
+const fieldLabelClassName = "text-[10px] font-black support-text-muted uppercase tracking-widest";
+const fieldInputClassName =
+  "w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all shadow-inner";
+const selectInputClassName =
+  "w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer shadow-inner";
+const selectArrowClassName =
+  "absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none support-text-muted";
+const textareaClassName =
+  "w-full bg-white/50 border border-black/10 rounded-[2.5rem] px-6 py-6 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all leading-relaxed min-h-[500px] shadow-inner";
+const articleViewClassName = "animate-in fade-in slide-in-from-bottom-4 duration-700";
+const articleMetaClassName = "flex items-center gap-4 mb-10";
+const versionBadgeClassName =
+  "support-surface-accent px-4 py-1.5 rounded-2xl text-[10px] uppercase font-black tracking-widest";
+const updatedAtClassName = "text-[10px] uppercase tracking-widest support-text-muted font-bold";
+const articleContentClassName =
+  "whitespace-pre-wrap text-[17px] leading-[1.8] support-text-primary font-medium tracking-tight";
+const lifecycleActionsClassName = "mt-16 pt-10 border-t border-black/5 flex flex-wrap justify-end gap-3";
+
+function getEmbeddingBadgeClassName(className: string) {
+  return `${embeddingBadgeBaseClassName} ${className}`;
+}
 
 export function KnowledgeDetails({ selectedArticle, history, currentManager, isCreatingArticle }: KnowledgeDetailsProps) {
   const router = useRouter();
@@ -30,16 +85,21 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const [content, setContent] = useState(selectedArticle?.content ?? "");
   const [slug, setSlug] = useState(selectedArticle?.slug ?? "");
   const [status, setStatus] = useState(selectedArticle?.status ?? "draft");
-  const [error, setError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
   const canManageLifecycle = currentManager?.role === "admin" || currentManager?.role === "supervisor";
 
+  const showToast = (message: string, variant: ToastState["variant"]) => {
+    setToast({
+      id: Date.now(),
+      message,
+      variant,
+    });
+  };
+
   const handleSave = async () => {
-    setError(null);
-    setStatusMessage(null);
     startTransition(async () => {
       const result = await upsertArticleAction(
         selectedArticle?.id ?? null,
@@ -51,9 +111,10 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       );
 
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else {
         setIsEditing(false);
+        showToast("Статья сохранена.", "success");
         if (!selectedArticle && result.data) {
            router.push(`/knowledge-base?article=${result.data.id}`);
         }
@@ -63,13 +124,12 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
   const handleStatusChange = async (newStatus: any) => {
     if (!selectedArticle) return;
-    setError(null);
-    setStatusMessage(null);
     startTransition(async () => {
       const result = await setArticleStatusAction(selectedArticle.id, newStatus, selectedArticle.version);
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else if (result.data) {
+        showToast("Статус статьи изменён.", "success");
         if (newStatus === "archived") {
           router.push("/knowledge-base");
         } else {
@@ -91,14 +151,13 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
     if (!confirmed) return;
 
-    setError(null);
-    setStatusMessage(null);
     startTransition(async () => {
       const result = await deleteArticleAction(selectedArticle.id, selectedArticle.version);
 
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else {
+        showToast("Статья удалена.", "success");
         router.push("/knowledge-base?view=archive");
         router.refresh();
       }
@@ -108,15 +167,13 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const handleRefreshEmbeddings = async () => {
     if (!selectedArticle) return;
 
-    setError(null);
-    setStatusMessage(null);
     startRefreshTransition(async () => {
       const result = await refreshArticleEmbeddingsAction(selectedArticle.id, selectedArticle.version);
 
       if (result.error) {
-        setError(result.error);
+        showToast(result.error, "error");
       } else {
-        setStatusMessage(result.message ?? "Обновление знаний ИИ запущено");
+        showToast(result.message ?? "Обновление знаний ИИ запущено", "success");
         router.refresh();
       }
     });
@@ -131,9 +188,9 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
   if (!selectedArticle && (!isEditing || !canCreateArticle)) {
     return (
-      <div className="flex h-[calc(100vh-200px)] flex-col items-center justify-center support-panel p-12 text-center">
-        <h3 className="support-text-primary mb-2 text-xl font-semibold">Откройте статью, чтобы прочитать</h3>
-        <p className="support-text-secondary max-w-xs text-sm">
+      <div className={emptyStateClassName}>
+        <h3 className={emptyTitleClassName}>Откройте статью, чтобы прочитать</h3>
+        <p className={emptyDescriptionClassName}>
           Выберите материал из списка слева.
         </p>
       </div>
@@ -141,9 +198,9 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel">
+    <div className={detailsPanelClassName}>
       {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-black/5 bg-white/20">
+      <div className={headerClassName}>
         <div className="flex-1 min-w-0">
           {isEditing ? (
             <input
@@ -151,18 +208,18 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Заголовок статьи..."
-              className="w-full bg-transparent text-2xl font-bold support-text-primary outline-none border-b border-black/10 focus:border-indigo-500 transition-colors"
+              className={titleInputClassName}
             />
           ) : (
-            <h2 className="text-2xl font-bold support-text-primary truncate">{selectedArticle?.title}</h2>
+            <h2 className={titleClassName}>{selectedArticle?.title}</h2>
           )}
         </div>
         
-        <div className="flex items-center gap-3 ml-6">
+        <div className={actionsClassName}>
            {selectedArticle && embeddingUi && !isEditing && !showHistory && (
              <span
                title={embeddingUi.tooltip}
-               className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-black ${embeddingUi.className}`}
+               className={getEmbeddingBadgeClassName(embeddingUi.className)}
              >
                <span className={embeddingUi.isSpinner ? "animate-spin" : ""}>{embeddingUi.icon}</span>
              </span>
@@ -238,103 +295,91 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="max-w-4xl mx-auto p-10">
-          {error && (
-            <div className="mb-6 p-4 rounded-3xl support-alert-danger text-sm font-medium animate-in fade-in slide-in-from-top-2">
-               {error}
-            </div>
-          )}
-
-          {statusMessage && (
-            <div className="mb-6 p-4 rounded-3xl bg-emerald-50 text-emerald-700 border border-emerald-100 text-sm font-medium animate-in fade-in slide-in-from-top-2">
-               {statusMessage}
-            </div>
-          )}
-
+      <div className={contentScrollClassName}>
+        <div className={contentContainerClassName}>
           {showHistory ? (
             <div className="space-y-8">
-               <h3 className="text-sm font-black uppercase tracking-widest support-text-muted border-b border-black/5 pb-4">Архив изменений</h3>
+               <h3 className={historyTitleClassName}>Архив изменений</h3>
                <div className="grid gap-4">
                  {history.length === 0 ? (
                    <p className="support-text-muted italic">История пуста.</p>
                  ) : (
                    history.map((item) => (
-                     <div key={item.id} className="p-5 rounded-[2rem] bg-white/40 border border-black/5 hover:bg-white transition-all shadow-sm">
+                     <div key={item.id} className={historyCardClassName}>
                         <div className="flex items-center justify-between mb-3">
-                           <span className="text-[10px] uppercase tracking-widest font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                           <span className={historyBadgeClassName}>
                              {item.changeType} v{item.version}
                            </span>
-                           <span className="text-[10px] support-text-muted font-bold">
+                           <span className={historyDateClassName}>
                              {new Date(item.changedAt).toLocaleString('ru-RU')}
                            </span>
                         </div>
-                        <p className="text-sm font-bold support-text-primary mb-1">{item.title}</p>
-                        <p className="text-xs support-text-secondary line-clamp-2 leading-relaxed">{item.content}</p>
+                        <p className={historyItemTitleClassName}>{item.title}</p>
+                        <p className={historyItemContentClassName}>{item.content}</p>
                      </div>
                    ))
                  )}
                </div>
             </div>
           ) : isEditing ? (
-            <div className="space-y-8 animate-in fade-in duration-500">
-               <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-3">
-                    <label className="text-[10px] font-black support-text-muted uppercase tracking-widest">Адрес (Slug)</label>
+            <div className={editFormClassName}>
+               <div className={editGridClassName}>
+                <div className={fieldWrapperClassName}>
+                    <label className={fieldLabelClassName}>Адрес (Slug)</label>
                     <input
                         type="text"
                         value={slug}
                         onChange={(e) => setSlug(e.target.value)}
                         placeholder="my-article-url"
-                        className="w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all shadow-inner"
+                        className={fieldInputClassName}
                     />
                 </div>
-                <div className="space-y-3">
-                    <label className="text-[10px] font-black support-text-muted uppercase tracking-widest">Статус</label>
+                <div className={fieldWrapperClassName}>
+                    <label className={fieldLabelClassName}>Статус</label>
                     <div className="relative">
                       <select
                           value={status}
                           onChange={(e) => setStatus(e.target.value as any)}
-                          className="w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer shadow-inner"
+                          className={selectInputClassName}
                       >
                           <option value="draft">Черновик</option>
                           <option value="published">Опубликована</option>
                       </select>
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none support-text-muted">
+                      <div className={selectArrowClassName}>
                         ▼
                       </div>
                     </div>
                 </div>
                </div>
 
-               <div className="space-y-3">
-                 <label className="text-[10px] font-black support-text-muted uppercase tracking-widest">Контент (Markdown)</label>
+               <div className={fieldWrapperClassName}>
+                 <label className={fieldLabelClassName}>Контент (Markdown)</label>
                  <textarea
                    value={content}
                    onChange={(e) => setContent(e.target.value)}
                    rows={20}
                    placeholder="Начните писать здесь..."
-                   className="w-full bg-white/50 border border-black/10 rounded-[2.5rem] px-6 py-6 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all leading-relaxed min-h-[500px] shadow-inner"
+                   className={textareaClassName}
                  />
                </div>
             </div>
           ) : (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <div className="flex items-center gap-4 mb-10">
-                   <div className="support-surface-accent px-4 py-1.5 rounded-2xl text-[10px] uppercase font-black tracking-widest">
+            <div className={articleViewClassName}>
+                <div className={articleMetaClassName}>
+                   <div className={versionBadgeClassName}>
                       v{selectedArticle?.version}
                    </div>
-                   <div className="text-[10px] uppercase tracking-widest support-text-muted font-bold">
+                   <div className={updatedAtClassName}>
                       Обновлено {selectedArticle && new Date(selectedArticle.updatedAt).toLocaleDateString('ru-RU')}
                    </div>
                 </div>
               
-                <div className="whitespace-pre-wrap text-[17px] leading-[1.8] support-text-primary font-medium tracking-tight">
+                <div className={articleContentClassName}>
                    {selectedArticle?.content}
                 </div>
 
                 {canManageLifecycle && selectedArticle && (
-                  <div className="mt-16 pt-10 border-t border-black/5 flex flex-wrap justify-end gap-3">
+                  <div className={lifecycleActionsClassName}>
                      {selectedArticle.status === "archived" ? (
                        <Button 
                          onClick={handleDelete}
@@ -358,6 +403,14 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
           )}
         </div>
       </div>
+      {toast ? (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+        />
+      ) : null}
     </div>
   );
 }

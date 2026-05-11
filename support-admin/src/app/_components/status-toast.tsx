@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { OverlayToast } from "./overlay-toast";
+import { Toast } from "@/shared/ui/toast";
 
 type StatusToastProps = {
   message: string;
@@ -16,5 +16,5 @@ export function StatusToast({ message, variant }: StatusToastProps) {
     });
   }, []);
 
-  return <OverlayToast message={message} variant={variant} />;
+  return <Toast message={message} variant={variant} />;
 }

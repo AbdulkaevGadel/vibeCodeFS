@@ -1,7 +1,7 @@
 import { BotOption } from "../_lib/page-types";
 import { getQueryString } from "../_lib/page-utils";
 
-import { Button } from "./ui/button";
+import { Button } from "@/shared/ui/button";
 
 const tabsWrapperClassName = "mt-6 flex flex-wrap gap-2";
 

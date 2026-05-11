@@ -5,6 +5,9 @@ type AuthSubmitButtonProps = {
   disabled?: boolean;
 };
 
+const buttonClassName =
+  "w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500";
+
 export function AuthSubmitButton({
   children,
   disabled = false,
@@ -13,7 +16,7 @@ export function AuthSubmitButton({
     <button
       type="submit"
       disabled={disabled}
-      className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500"
+      className={buttonClassName}
     >
       {children}
     </button>

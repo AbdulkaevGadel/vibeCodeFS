@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Manager } from "../_lib/page-types";
-import { Button } from "./ui/button";
+import { Button } from "@/shared/ui/button";
 import {
   addManagerAction,
   createAuthUserAction,
@@ -36,6 +36,20 @@ const selectClassName =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const tableHeaderClassName = "text-left text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400";
 const tableCellClassName = "border-t border-slate-100 py-3 pr-3 text-sm text-slate-700";
+const modalDescriptionClassName = "mt-1 text-sm text-slate-500";
+const successMessageClassName =
+  "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700";
+const errorMessageClassName =
+  "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700";
+const sectionsGridClassName = "mt-5 grid gap-4 lg:grid-cols-2";
+const labelClassName = "text-sm font-medium text-slate-700";
+const formFieldClassName = `${inputClassName} mt-1`;
+const formSelectClassName = `${selectClassName} mt-1`;
+const fullRowClassName = "md:col-span-2";
+const spacedSectionClassName = `${sectionClassName} mt-4`;
+const tableWrapperClassName = "mt-4 overflow-x-auto";
+const tableClassName = "w-full border-collapse";
+const editActionsClassName = "flex items-end gap-3";
 
 function getManagerFullName(manager: Manager) {
   return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
@@ -141,7 +155,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
             <div className={modalHeaderClassName}>
               <div>
                 <h2 className={titleClassName}>Менеджеры</h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className={modalDescriptionClassName}>
                   Управление Auth-пользователями и ролями support-домена.
                 </p>
               </div>
@@ -149,36 +163,36 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
 
             <div className={modalBodyClassName}>
               {statusMessage ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                <div className={successMessageClassName}>
                   {statusMessage}
                 </div>
               ) : null}
 
               {errorMessage ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                <div className={errorMessageClassName}>
                   {errorMessage}
                 </div>
               ) : null}
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className={sectionsGridClassName}>
                 <section className={sectionClassName}>
                   <h3 className={sectionTitleClassName}>Создать пользователя</h3>
                   <form className={formGridClassName} onSubmit={handleCreateAuthUser}>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Email
-                      <input name="email" type="email" required className={`${inputClassName} mt-1`} />
+                      <input name="email" type="email" required className={formFieldClassName} />
                     </label>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Пароль
                       <input
                         name="password"
                         type="password"
                         required
                         minLength={6}
-                        className={`${inputClassName} mt-1`}
+                        className={formFieldClassName}
                       />
                     </label>
-                    <div className="md:col-span-2">
+                    <div className={fullRowClassName}>
                       <Button type="submit" isLoading={isPending} variant="primary">
                         Создать пользователя
                       </Button>
@@ -189,27 +203,27 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                 <section className={sectionClassName}>
                   <h3 className={sectionTitleClassName}>Добавить менеджера</h3>
                   <form className={formGridClassName} onSubmit={handleAddManager}>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Email
-                      <input name="email" type="email" required className={`${inputClassName} mt-1`} />
+                      <input name="email" type="email" required className={formFieldClassName} />
                     </label>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Роль
-                      <select name="role" required defaultValue="support" className={`${selectClassName} mt-1`}>
+                      <select name="role" required defaultValue="support" className={formSelectClassName}>
                         <option value="support">support</option>
                         <option value="supervisor">supervisor</option>
                         <option value="admin">admin</option>
                       </select>
                     </label>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Display name
-                      <input name="displayName" className={`${inputClassName} mt-1`} />
+                      <input name="displayName" className={formFieldClassName} />
                     </label>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Фамилия
-                      <input name="lastName" className={`${inputClassName} mt-1`} />
+                      <input name="lastName" className={formFieldClassName} />
                     </label>
-                    <div className="md:col-span-2">
+                    <div className={fullRowClassName}>
                       <Button type="submit" isLoading={isPending} variant="primary">
                         Добавить менеджера
                       </Button>
@@ -218,10 +232,10 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                 </section>
               </div>
 
-              <section className={`${sectionClassName} mt-4`}>
+              <section className={spacedSectionClassName}>
                 <h3 className={sectionTitleClassName}>Текущие менеджеры</h3>
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full border-collapse">
+                <div className={tableWrapperClassName}>
+                  <table className={tableClassName}>
                     <thead>
                       <tr>
                         <th className={tableHeaderClassName}>Имя</th>
@@ -253,35 +267,35 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
               </section>
 
               {editingManager ? (
-                <section key={editingManager.id} className={`${sectionClassName} mt-4`}>
+                <section key={editingManager.id} className={spacedSectionClassName}>
                   <h3 className={sectionTitleClassName}>Редактировать менеджера</h3>
                   <form className={formGridClassName} onSubmit={handleUpdateManager}>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Display name
                       <input
                         name="displayName"
                         required
                         defaultValue={editingManager.displayName}
-                        className={`${inputClassName} mt-1`}
+                        className={formFieldClassName}
                       />
                     </label>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Фамилия
                       <input
                         name="lastName"
                         defaultValue={editingManager.lastName ?? ""}
-                        className={`${inputClassName} mt-1`}
+                        className={formFieldClassName}
                       />
                     </label>
-                    <label className="text-sm font-medium text-slate-700">
+                    <label className={labelClassName}>
                       Роль
-                      <select name="role" required defaultValue={editingManager.role} className={`${selectClassName} mt-1`}>
+                      <select name="role" required defaultValue={editingManager.role} className={formSelectClassName}>
                         <option value="support">support</option>
                         <option value="supervisor">supervisor</option>
                         <option value="admin">admin</option>
                       </select>
                     </label>
-                    <div className="flex items-end gap-3">
+                    <div className={editActionsClassName}>
                       <Button type="submit" isLoading={isPending} variant="primary">
                         Сохранить
                       </Button>
@@ -304,7 +318,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)}>
+      <Button onClick={() => setIsOpen(true)} size="sm">
         Менеджеры
       </Button>
 

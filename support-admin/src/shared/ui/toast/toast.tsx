@@ -1,51 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+
+type ToastVariant = "success" | "error" | "warning";
+
+type ToastProps = {
+  message: ReactNode;
+  variant: ToastVariant;
+  onClose?: () => void;
+  durationMs?: number;
+};
 
 const overlayClassName = "fixed bottom-6 right-6 z-50 w-[min(420px,calc(100vw-2rem))]";
 const containerBaseClassName =
   "rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-sm";
-const successClassName = "support-alert-success";
-const errorClassName = "support-alert-danger";
 const contentClassName = "flex items-start gap-3";
 const bodyClassName = "min-w-0 flex-1";
 const titleClassName = "text-xs uppercase tracking-[0.24em] opacity-70";
 const messageClassName = "mt-1 text-sm font-medium";
 const closeButtonBaseClassName =
   "rounded-full px-2 py-1 text-xs font-semibold transition hover:bg-black/5";
-const closeButtonSuccessClassName = "text-emerald-800";
-const closeButtonErrorClassName = "text-red-800";
 
-type OverlayToastProps = {
-  message: string;
-  variant: "success" | "error";
-  onClose?: () => void;
-  durationMs?: number;
+const variantConfig: Record<ToastVariant, {
+  containerClassName: string;
+  closeButtonClassName: string;
+  title: string;
+  durationMs: number;
+}> = {
+  success: {
+    containerClassName: "support-alert-success",
+    closeButtonClassName: "text-emerald-800",
+    title: "Успешно",
+    durationMs: 4000,
+  },
+  error: {
+    containerClassName: "support-alert-danger",
+    closeButtonClassName: "text-red-800",
+    title: "Ошибка",
+    durationMs: 10000,
+  },
+  warning: {
+    containerClassName: "support-alert-warning",
+    closeButtonClassName: "text-amber-800",
+    title: "Внимание",
+    durationMs: 10000,
+  },
 };
 
-export function OverlayToast({
+export function Toast({
   message,
   variant,
   onClose,
-  durationMs = 3000,
-}: OverlayToastProps) {
+  durationMs,
+}: ToastProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const config = variantConfig[variant];
+  const autoCloseMs = durationMs ?? config.durationMs;
 
   useEffect(() => {
     setIsMounted(true);
 
     const timeoutId = window.setTimeout(() => {
       setIsClosing(true);
-    }, durationMs);
+    }, autoCloseMs);
 
     return () => {
       setIsMounted(false);
       window.clearTimeout(timeoutId);
     };
-  }, [durationMs]);
+  }, [autoCloseMs]);
 
   useEffect(() => {
     if (!isClosing) {
@@ -67,27 +93,21 @@ export function OverlayToast({
     }
   }, [isVisible, onClose]);
 
-  if (!isVisible) {
+  if (!isVisible || !isMounted) {
     return null;
   }
 
-  if (!isMounted) {
-    return null;
-  }
-
-  const containerClassName = `${containerBaseClassName} ${
-    variant === "success" ? successClassName : errorClassName
-  } ${isClosing ? "support-toast-exit" : "support-toast-enter"}`;
-  const closeButtonClassName = `${closeButtonBaseClassName} ${
-    variant === "success" ? closeButtonSuccessClassName : closeButtonErrorClassName
+  const containerClassName = `${containerBaseClassName} ${config.containerClassName} ${
+    isClosing ? "support-toast-exit" : "support-toast-enter"
   }`;
+  const closeButtonClassName = `${closeButtonBaseClassName} ${config.closeButtonClassName}`;
 
   return createPortal(
     <div className={overlayClassName}>
       <div className={containerClassName} role="status" aria-live="polite">
         <div className={contentClassName}>
           <div className={bodyClassName}>
-            <p className={titleClassName}>{variant === "success" ? "Успешно" : "Ошибка"}</p>
+            <p className={titleClassName}>{config.title}</p>
             <p className={messageClassName}>{message}</p>
           </div>
           <button

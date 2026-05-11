@@ -33,6 +33,9 @@
   --support-danger-bg: #fef2f2;
   --support-danger-border: #fecaca;
   --support-danger-text: #b91c1c;
+  --support-warning-bg: #fffbeb;
+  --support-warning-border: #fde68a;
+  --support-warning-text: #b45309;
 }
 
 @theme inline {
@@ -111,6 +114,12 @@ body {
   border: 1px solid var(--support-danger-border);
   background: var(--support-danger-bg);
   color: var(--support-danger-text);
+}
+
+.support-alert-warning {
+  border: 1px solid var(--support-warning-border);
+  background: var(--support-warning-bg);
+  color: var(--support-warning-text);
 }
 
 /* Button */

@@ -30,10 +30,16 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
           chatCount={0}
           botOptions={[]}
           selectedBotKey={null}
-          allManagers={[]} 
+          allManagers={pageData.allManagers}
           currentManager={pageData.currentManager}
-          kbTotalCount={pageData.totalCount}
-          kbPublishedCount={pageData.publishedCount}
+          kbTotalCount={pageData.embeddingSummary.totalCount}
+          kbPublishedCount={pageData.embeddingSummary.publishedCount}
+          kbEmbeddingSummary={pageData.embeddingSummary}
+          kbEmbeddingRefreshBatch={
+            pageData.embeddingRefreshBatch?.status === "running"
+              ? pageData.embeddingRefreshBatch
+              : null
+          }
         />
 
         {pageData.errorMessage ? (
