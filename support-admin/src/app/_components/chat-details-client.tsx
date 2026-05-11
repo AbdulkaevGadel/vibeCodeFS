@@ -47,9 +47,9 @@ const messagesPanelClassName =
   `${messagesWrapperClassName} overflow-y-auto max-h-[400px] min-h-[300px] p-4 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-4 shadow-inner`;
 const emptyMessagesClassName = "text-center py-10 text-slate-400";
 const deleteMessageButtonClassName = "!h-7 !w-7 !p-0 text-red-400 hover:text-red-700";
-const resolvedStateClassName =
+const composerUnavailableClassName =
   "mt-5 rounded-2xl bg-slate-100 p-8 text-center border-2 border-dashed border-slate-300";
-const resolvedStateTextClassName = "text-slate-500 font-semibold";
+const composerUnavailableTextClassName = "text-slate-500 font-semibold";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -63,6 +63,11 @@ type ToastState = {
   id: number;
   message: string;
   variant: "success" | "error";
+};
+
+type ComposerAvailability = {
+  canSend: boolean;
+  unavailableReason: string | null;
 };
 
 function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Manager[]) {
@@ -169,6 +174,69 @@ function getDeliveryBadgeClassName(deliveryStatus: ChatMessage["deliveryStatus"]
   }
 
   return `${deliveryStatusClassName} bg-red-100 text-red-700`;
+}
+
+function getComposerAvailability(selectedChat: ChatSummary, currentManager: Manager | null): ComposerAvailability {
+  if (!currentManager) {
+    return {
+      canSend: false,
+      unavailableReason: "Профиль менеджера не найден. Ответить клиенту нельзя.",
+    };
+  }
+
+  if (selectedChat.status === "resolved" || selectedChat.status === "closed") {
+    return {
+      canSend: false,
+      unavailableReason: "Диалог завершён. История сохранена, новые сообщения отправить нельзя.",
+    };
+  }
+
+  if (currentManager.role === "admin" || currentManager.role === "supervisor") {
+    return {
+      canSend: true,
+      unavailableReason: null,
+    };
+  }
+
+  if (currentManager.role === "support") {
+    if (selectedChat.status === "escalated") {
+      return {
+        canSend: false,
+        unavailableReason: "Чат эскалирован. Ответить может supervisor или admin.",
+      };
+    }
+
+    if (selectedChat.assignedManagerId !== currentManager.id) {
+      if (selectedChat.assignedManagerName) {
+        return {
+          canSend: false,
+          unavailableReason: `Чат закреплён за ${selectedChat.assignedManagerName}. Ответить может назначенный менеджер.`,
+        };
+      }
+
+      if (selectedChat.status !== "open" && selectedChat.status !== "waiting_operator") {
+        return {
+          canSend: false,
+          unavailableReason: "Вы не назначены на этот чат. Ответить может назначенный менеджер.",
+        };
+      }
+
+      return {
+        canSend: false,
+        unavailableReason: "Чтобы ответить клиенту, сначала возьмите чат в работу.",
+      };
+    }
+
+    return {
+      canSend: true,
+      unavailableReason: null,
+    };
+  }
+
+  return {
+    canSend: false,
+    unavailableReason: "Ответ недоступен для вашей роли или текущего состояния чата.",
+  };
 }
 
 type StatusOption = {
@@ -369,6 +437,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     currentManager?.role === "support" && isAssignedToCurrentManager && selectedChat.status !== "escalated";
   const canUseStatusSelector = Boolean(isPrivilegedManager || canSupportChangeStatus);
   const canTransferChat = Boolean(!isResolved && !isClaimable && (isPrivilegedManager || isAssignedToCurrentManager));
+  const composerAvailability = getComposerAvailability(selectedChat, currentManager);
   const visibleStatusOptions = statusOptions.filter((option) => {
     if (option.value === "waiting_operator") {
       return Boolean(isPrivilegedManager && !isResolved);
@@ -567,18 +636,16 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
         <div ref={messagesEndRef} />
       </div>
 
-      {!isResolved && (
+      {composerAvailability.canSend ? (
           <ChatMessageInput
               chatId={selectedChat.id}
               onLocalMessage={(msg) => {
                 setMessages(prev => normalizeMessages([...prev, msg]));
               }}
           />
-      )}
-      
-      {isResolved && (
-        <div className={resolvedStateClassName}>
-           <p className={resolvedStateTextClassName}>Диалог завершен. История сохранена в архиве.</p>
+      ) : (
+        <div className={composerUnavailableClassName}>
+           <p className={composerUnavailableTextClassName}>{composerAvailability.unavailableReason}</p>
         </div>
       )}
 

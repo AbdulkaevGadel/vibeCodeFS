@@ -840,17 +840,19 @@ async function decideBusinessMissBranch(chatId: string, runId: string): Promise<
   if (previousMissCount >= 1) {
     return {
       kind: "handoff",
-      text: isFirstAiMessage
-        ? "На связи ИИ-помощник службы поддержки. Я всё ещё не нашёл достаточно точной информации в базе знаний. Передаю чат оператору службы поддержки."
-        : "ИИ-помощник: Я всё ещё не нашёл достаточно точной информации в базе знаний. Передаю чат оператору службы поддержки.",
+      text: formatAiPrefixedText(
+        "Я всё ещё не нашёл достаточно точной информации в базе знаний. Передаю чат оператору службы поддержки.",
+        isFirstAiMessage,
+      ),
     }
   }
 
   return {
     kind: "clarify",
-    text: isFirstAiMessage
-      ? "На связи ИИ-помощник службы поддержки. Я не нашёл достаточно точной информации в базе знаний. Попробуйте, пожалуйста, переформулировать вопрос или добавить детали."
-      : "ИИ-помощник: Я не нашёл достаточно точной информации в базе знаний. Попробуйте, пожалуйста, переформулировать вопрос или добавить детали.",
+    text: formatAiPrefixedText(
+      "Я не нашёл достаточно точной информации в базе знаний. Попробуйте, пожалуйста, переформулировать вопрос или добавить детали.",
+      isFirstAiMessage,
+    ),
   }
 }
 
@@ -936,11 +938,15 @@ async function formatAnswerText(chatId: string, answerText: string, triggerMessa
   const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
   const finalAnswerText = addGreetingAcknowledgementIfNeeded(answerText, triggerMessageText)
 
-  if (isFirstAiMessage) {
-    return `На связи ИИ-помощник службы поддержки.\n\n${finalAnswerText}`
-  }
+  return formatAiPrefixedText(finalAnswerText, isFirstAiMessage)
+}
 
-  return `ИИ-помощник: ${finalAnswerText}`
+function formatAiPrefixedText(text: string, isFirstAiMessage: boolean) {
+  const prefix = isFirstAiMessage
+    ? "На связи ИИ-помощник службы поддержки."
+    : "ИИ-помощник:"
+
+  return `${prefix}\n${text}`
 }
 
 async function buildIntentResponseBranch(chatId: string, intentType: IntentType): Promise<ResponseBranch> {
@@ -949,9 +955,7 @@ async function buildIntentResponseBranch(chatId: string, intentType: IntentType)
   if (intentType === "manager_request") {
     return {
       kind: "handoff",
-      text: isFirstAiMessage
-        ? "На связи ИИ-помощник службы поддержки. Передаю чат оператору службы поддержки."
-        : "ИИ-помощник: Передаю чат оператору службы поддержки.",
+      text: formatAiPrefixedText("Передаю чат оператору службы поддержки.", isFirstAiMessage),
     }
   }
 
@@ -964,9 +968,7 @@ async function buildIntentResponseBranch(chatId: string, intentType: IntentType)
 
   return {
     kind: "intent_reply",
-    text: isFirstAiMessage
-      ? `На связи ИИ-помощник службы поддержки. ${reply}`
-      : `ИИ-помощник: ${reply}`,
+    text: formatAiPrefixedText(reply, isFirstAiMessage),
   }
 }
 
