@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useTransition, useRef } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChatMessage, ChatStatus, ChatSummary, Manager } from "../_lib/page-types";
-import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
-import { createSupabaseClient } from "@/lib/supabase";
+import { takeChatIntoWorkAction, transferChatAction, deleteMessageAction, deleteChatAction } from "../(protected)/_actions/chat-actions";
 import { ChatMessageInput } from "./chat-message-input";
 import { Toast } from "@/shared/ui/toast";
 import { ChatActionPanel } from "./chat-details/chat-action-panel";
@@ -12,6 +11,14 @@ import { ChatDetailsHeader } from "./chat-details/chat-details-header";
 import { StatusOption } from "./chat-details/chat-status-selector";
 import { ComposerUnavailable } from "./chat-details/composer-unavailable";
 import { MessageTimeline } from "./chat-details/message-timeline";
+import {
+  mergeInsertedMessage,
+  mergeUpdatedDeliveryState,
+  normalizeMessages,
+  useChatDetailsRealtime,
+} from "./chat-details/chat-details-realtime";
+import { useSelectedChatReadState } from "./chat-details/use-selected-chat-read-state";
+import { useScrollToBottom } from "./chat-details/use-scroll-to-bottom";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
@@ -34,20 +41,6 @@ type ComposerAvailability = {
   canSend: boolean;
   unavailableReason: string | null;
 };
-
-function sortMessagesByCreatedAt(messages: ChatMessage[]) {
-  return [...messages].sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-  );
-}
-
-function dedupeMessagesById(messages: ChatMessage[]) {
-  return Array.from(new Map(messages.map((message) => [message.id, message])).values());
-}
-
-function normalizeMessages(messages: ChatMessage[]) {
-  return sortMessagesByCreatedAt(dedupeMessagesById(messages));
-}
 
 function getComposerAvailability(selectedChat: ChatSummary, currentManager: Manager | null): ComposerAvailability {
   if (!currentManager) {
@@ -127,7 +120,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const [messages, setMessages] = useState<ChatMessage[]>(() => normalizeMessages(initialMessages));
   const [showTransfer, setShowTransfer] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const lastMarkedReadRef = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string, variant: ToastState["variant"]) => {
     setToast({
@@ -137,106 +130,43 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     });
   };
 
-  // Синхронизация при смене чата + сброс прочитанности
-  useEffect(() => {
-    setMessages(normalizeMessages(initialMessages));
+  const syncMessages = useCallback((nextMessages: ChatMessage[]) => {
+    setMessages(nextMessages);
+  }, []);
+
+  const closeTransferMenu = useCallback(() => {
     setShowTransfer(false);
+  }, []);
 
-    // Сброс прочитанности в базе при выборе чата (guard: только если есть непрочитанные и мы еще не помечали этот чат в текущей сессии)
-    if (selectedChat.id && selectedChat.unreadCount > 0 && lastMarkedReadRef.current !== selectedChat.id) {
-      lastMarkedReadRef.current = selectedChat.id;
-      markChatAsReadAction(selectedChat.id).catch(err => 
-        console.warn("Failed to mark chat as read:", err)
-      );
-    }
-  }, [initialMessages, selectedChat.id, selectedChat.unreadCount]);
+  const handleRealtimeInsert = useCallback((message: ChatMessage) => {
+    setMessages((currentMessages) => mergeInsertedMessage(currentMessages, message));
+  }, []);
 
-  // Realtime подписка
-  useEffect(() => {
-    const supabase = createSupabaseClient();
-    
-    const channel = supabase
-      .channel(`chat_details:${selectedChat.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "chat_messages",
-          filter: `chat_id=eq.${selectedChat.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newMessage = payload.new as any;
-            if (newMessage.sender_type === "client") {
-              markChatAsReadAction(selectedChat.id).catch(err =>
-                console.warn("Failed to mark chat as read:", err)
-              );
-            }
+  const handleRealtimeDeliveryUpdate = useCallback(
+    (updated: Parameters<typeof mergeUpdatedDeliveryState>[1]) => {
+      setMessages((currentMessages) => mergeUpdatedDeliveryState(currentMessages, updated));
+    },
+    [],
+  );
 
-            setMessages((prev) => {
-              const formatted: ChatMessage = {
-                id: newMessage.id,
-                chatId: newMessage.chat_id,
-                senderType: newMessage.sender_type,
-                managerId: newMessage.manager_id,
-                text: newMessage.text,
-                deliveryStatus: newMessage.delivery_status,
-                deliveryError: newMessage.delivery_error,
-                clientMessageId: newMessage.client_message_id,
-                legacyMessageId: newMessage.legacy_message_id,
-                createdAt: newMessage.created_at,
-              };
+  const refreshDetails = useCallback(() => {
+    router.refresh();
+  }, [router]);
 
-              if (prev.some((message) => message.id === formatted.id)) {
-                return prev;
-              }
+  useSelectedChatReadState({
+    chatId: selectedChat.id,
+    unreadCount: selectedChat.unreadCount,
+    initialMessages,
+    syncMessages,
+    closeTransferMenu,
+  });
 
-              const withoutOptimisticDuplicate = formatted.clientMessageId
-                ? prev.filter((message) => message.clientMessageId !== formatted.clientMessageId)
-                : prev;
-
-              return normalizeMessages([...withoutOptimisticDuplicate, formatted]);
-            });
-          } else if (payload.eventType === "UPDATE") {
-            const updated = payload.new as any;
-            setMessages((prev) =>
-              normalizeMessages(
-                prev.map((m) =>
-                  m.id === updated.id || m.clientMessageId === updated.client_message_id
-                    ? {
-                        ...m,
-                        id: updated.id,
-                        deliveryStatus: updated.delivery_status,
-                        deliveryError: updated.delivery_error,
-                      }
-                    : m
-                ),
-              )
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "chats",
-          filter: `id=eq.${selectedChat.id}`,
-        },
-        () => {
-          // Metadata (status, assigned manager) changed.
-          // Trigger SSR refresh to get new props.
-          router.refresh();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedChat.id]);
+  useChatDetailsRealtime({
+    chatId: selectedChat.id,
+    onInsertMessage: handleRealtimeInsert,
+    onUpdateDeliveryState: handleRealtimeDeliveryUpdate,
+    refreshDetails,
+  });
 
   const handleTakeIntoWork = () => {
     startTransition(async () => {
@@ -287,15 +217,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
     });
   };
 
-  // Авто-скролл вниз при добавлении сообщений
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useScrollToBottom(messagesEndRef, messages);
 
   const isResolved = selectedChat.status === "resolved" || selectedChat.status === "closed";
   const isClaimable = selectedChat.status === "open" || selectedChat.status === "waiting_operator";
