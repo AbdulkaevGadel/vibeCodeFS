@@ -21,6 +21,34 @@ Rule:
 - do not introduce CSS Modules everywhere by default
 - do not add `clsx`, `cn`, `cva`, or similar helpers until class composition becomes repetitive enough to justify it
 
+## UI Reuse Check
+
+Before changing UI in `support-admin`, first check existing shared UI primitives and nearby route-local components.
+
+Check at minimum:
+- `src/shared/ui`
+- nearby `_components`
+- existing component patterns in the same route/page
+
+Rules:
+- Reuse `Button`, `Toast`, modal, form, badge, and card-like patterns when they match the behavior and semantic role.
+- Do not hand-roll a new button, alert, toast, modal, or repeated card layout if an existing component already fits.
+- Do not move UI into `shared` only because Tailwind classes look similar.
+- Prefer local constants or local components for one-route UI.
+- Promote to shared only after real cross-route reuse is clear.
+
+## Support Admin Architecture Boundaries
+
+These rules are permanent for the `support-admin` frontend.
+
+- Support Admin must read support-domain data through approved server-side boundaries.
+- Client Components may subscribe to Supabase Realtime only for UI synchronization.
+- Business mutations must stay behind Server Actions / RPC.
+- React must not own workflow consistency.
+- Backend / DB remains the source of truth for chat status, assignment, unread state, AI state, and message delivery state.
+- Realtime callbacks must not become orchestration logic.
+- Frontend code must not call AI providers, Telegram API, or privileged backend resources directly.
+
 ## Support Admin UI Rules
 
 MUST:

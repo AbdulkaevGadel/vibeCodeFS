@@ -6,48 +6,15 @@ import { ChatMessage, ChatStatus, ChatSummary, Manager } from "../_lib/page-type
 import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
 import { createSupabaseClient } from "@/lib/supabase";
 import { ChatMessageInput } from "./chat-message-input";
-import { Button } from "@/shared/ui/button";
 import { Toast } from "@/shared/ui/toast";
+import { ChatActionPanel } from "./chat-details/chat-action-panel";
+import { ChatDetailsHeader } from "./chat-details/chat-details-header";
+import { StatusOption } from "./chat-details/chat-status-selector";
+import { ComposerUnavailable } from "./chat-details/composer-unavailable";
+import { MessageTimeline } from "./chat-details/message-timeline";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
-const detailsEyebrowClassName = "support-text-muted text-xs uppercase tracking-[0.35em]";
-const detailsTitleClassName = "support-text-primary mt-2 text-2xl font-semibold";
-const detailsFullNameClassName = "support-text-secondary mt-2 text-sm";
-const detailsMetaListClassName = "support-text-secondary mt-3 flex wrap gap-2 text-xs";
-const messagesWrapperClassName = "mt-5 space-y-4";
-const messageCardClassName = "support-card p-4";
-const messageHeaderClassName =
-  "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
-const messageAuthorClassName = "flex items-center gap-3";
-const messageIndexClassName =
-  "flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white";
-const messageAuthorNameClassName = "support-text-primary text-sm font-semibold";
-const messageDateClassName = "support-text-muted mt-1 text-xs";
-const messageBadgeClassName =
-  "support-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em]";
-const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
-const deliveryStatusClassName =
-  "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider";
-const assignedManagerBadgeClassName =
-  "mt-2 flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 ring-1 ring-inset ring-indigo-500/20";
-const metaChipClassName = "support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200";
-const statusMetaChipClassName = `${metaChipClassName} font-bold uppercase`;
-const transferMenuClassName =
-  "absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5";
-const transferMenuTitleClassName =
-  "mb-2 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400";
-const transferMenuListClassName = "max-h-48 overflow-y-auto";
-const transferManagerRoleClassName = "ml-1 text-[10px] text-slate-400";
-const statusSelectClassName =
-  "rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50";
-const messagesPanelClassName =
-  `${messagesWrapperClassName} overflow-y-auto max-h-[400px] min-h-[300px] p-4 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-4 shadow-inner`;
-const emptyMessagesClassName = "text-center py-10 text-slate-400";
-const deleteMessageButtonClassName = "!h-7 !w-7 !p-0 text-red-400 hover:text-red-700";
-const composerUnavailableClassName =
-  "mt-5 rounded-2xl bg-slate-100 p-8 text-center border-2 border-dashed border-slate-300";
-const composerUnavailableTextClassName = "text-slate-500 font-semibold";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -68,30 +35,6 @@ type ComposerAvailability = {
   unavailableReason: string | null;
 };
 
-function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Manager[]) {
-  if (message.senderType === "manager") {
-    if (message.managerId) {
-      const mgr = allManagers.find(m => m.id === message.managerId);
-      if (mgr) return getManagerFullName(mgr);
-    }
-    return "Менеджер";
-  }
-
-  if (message.senderType === "ai") {
-    return "ИИ-помощник";
-  }
-
-  if (message.senderType === "system") {
-    return "Система";
-  }
-
-  return chatTitle;
-}
-
-function getManagerFullName(manager: Manager) {
-  return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
-}
-
 function sortMessagesByCreatedAt(messages: ChatMessage[]) {
   return [...messages].sort(
     (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
@@ -104,74 +47,6 @@ function dedupeMessagesById(messages: ChatMessage[]) {
 
 function normalizeMessages(messages: ChatMessage[]) {
   return sortMessagesByCreatedAt(dedupeMessagesById(messages));
-}
-
-function isOutgoingMessage(message: ChatMessage) {
-  return message.senderType === "manager" || message.senderType === "ai";
-}
-
-function getMessageCardClassName(message: ChatMessage) {
-  const baseClassName = `relative max-w-[80%] ${messageCardClassName} transition hover:shadow-md`;
-
-  if (message.senderType === "manager") {
-    return `${baseClassName} ml-auto border-l-4 border-l-slate-900 bg-white`;
-  }
-
-  if (message.senderType === "ai") {
-    return `${baseClassName} ml-auto border-l-4 border-l-indigo-500 bg-indigo-50 ring-1 ring-indigo-100`;
-  }
-
-  if (message.senderType === "system") {
-    return `${baseClassName} mx-auto max-w-[90%] border-dashed bg-slate-100`;
-  }
-
-  return `${baseClassName} mr-auto bg-slate-50`;
-}
-
-function getSafeDeliveryError(deliveryError: string | null) {
-  if (!deliveryError) return undefined;
-
-  const normalized = deliveryError.replace(/\s+/g, " ").trim();
-  if (!normalized) return undefined;
-
-  const unsafePatterns = [
-    /authorization/i,
-    /bearer\s+[a-z0-9._-]+/i,
-    /token/i,
-    /secret/i,
-    /service[_-]?role/i,
-    /internal_secret/i,
-    /hf_[a-z0-9_]*api/i,
-    /https?:\/\/\S+\?\S+/i,
-    /\bat\s+\S+\s+\(/i,
-  ];
-  const looksStructuredPayload = /^[{[]/.test(normalized);
-  const looksUnsafe = looksStructuredPayload || unsafePatterns.some((pattern) => pattern.test(normalized));
-
-  if (looksUnsafe) {
-    return "Ошибка доставки";
-  }
-
-  const maxLength = 140;
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
-}
-
-function getDeliveryBadgeLabel(deliveryStatus: ChatMessage["deliveryStatus"]) {
-  if (deliveryStatus === "pending") return "⏳ Отправка";
-  if (deliveryStatus === "sent") return "✅ Доставлено";
-  return "❌ Ошибка";
-}
-
-function getDeliveryBadgeClassName(deliveryStatus: ChatMessage["deliveryStatus"]) {
-  if (deliveryStatus === "pending") {
-    return `${deliveryStatusClassName} bg-amber-100 text-amber-700 animate-pulse`;
-  }
-
-  if (deliveryStatus === "sent") {
-    return `${deliveryStatusClassName} bg-emerald-100 text-emerald-700`;
-  }
-
-  return `${deliveryStatusClassName} bg-red-100 text-red-700`;
 }
 
 function getComposerAvailability(selectedChat: ChatSummary, currentManager: Manager | null): ComposerAvailability {
@@ -236,11 +111,6 @@ function getComposerAvailability(selectedChat: ChatSummary, currentManager: Mana
     unavailableReason: "Ответ недоступен для вашей роли или текущего состояния чата.",
   };
 }
-
-type StatusOption = {
-  value: ChatStatus;
-  label: string;
-};
 
 const statusOptions: StatusOption[] = [
   { value: "open", label: "Открыть заново (open)" },
@@ -477,157 +347,34 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   return (
     <>
       <div className={detailsHeaderClassName}>
-        <div className="flex-1">
-          <p className={detailsEyebrowClassName}>
-            Диалог
-          </p>
-          <div className="flex items-center gap-3">
-            <h2 className={detailsTitleClassName}>{selectedChat.title}</h2>
-            {selectedChat.assignedManagerName && (() => {
-              const assignedMgr = allManagers.find(m => m.id === selectedChat.assignedManagerId);
-              const roleLabel = assignedMgr?.role?.toUpperCase() ?? "Менеджер";
-              return (
-                <span className={assignedManagerBadgeClassName}>
-                  {roleLabel}: {selectedChat.assignedManagerName}
-                </span>
-              );
-            })()}
-          </div>
-          {selectedChat.fullName ? (
-            <p className={detailsFullNameClassName}>{selectedChat.fullName}</p>
-          ) : null}
-          <div className={detailsMetaListClassName}>
-            <span className={metaChipClassName}>
-              сообщений: {messages.length}
-            </span>
-            <span className={metaChipClassName}>
-              chat_id: {selectedChat.telegramChatId}
-            </span>
-            <span className={statusMetaChipClassName}>
-              status: {selectedChat.status}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {isClaimable && (
-            <Button
-              onClick={handleTakeIntoWork}
-              isLoading={isPending}
-              variant="primary"
-            >
-              {isPending ? "Обработка..." : "Взять в работу"}
-            </Button>
-          )}
-
-          {(canUseStatusSelector || canTransferChat) && (
-            <>
-              {canTransferChat && (
-                <div className="relative">
-                  <Button
-                    onClick={() => setShowTransfer(!showTransfer)}
-                    isLoading={isPending}
-                    variant="secondary"
-                  >
-                    Передать
-                  </Button>
-                  {showTransfer && (
-                    <div className={transferMenuClassName}>
-                      <p className={transferMenuTitleClassName}>Выберите менеджера</p>
-                      <div className={transferMenuListClassName}>
-                        {allManagers.map(mgr => (
-                          <Button
-                            key={mgr.id}
-                            onClick={() => handleTransfer(mgr.id)}
-                            variant="ghost"
-                            className="w-full justify-start rounded-lg px-3 py-2 text-left"
-                            size="sm"
-                          >
-                            {getManagerFullName(mgr)} <span className={transferManagerRoleClassName}>({mgr.role})</span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {canUseStatusSelector && (
-                <div className="relative">
-                  <select
-                    value={selectedChat.status}
-                    onChange={(e) => handleStatusChange(e.target.value as ChatStatus)}
-                    disabled={isPending}
-                    className={statusSelectClassName}
-                  >
-                    {visibleStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-
-          {isAdmin && (
-            <Button
-              onClick={handleDeleteChat}
-              isLoading={isPending}
-              variant="danger"
-              title="Удалить весь чат (только admin)"
-            >
-              🗑️ Удалить чат
-            </Button>
-          )}
-        </div>
+        <ChatDetailsHeader selectedChat={selectedChat} messagesCount={messages.length} allManagers={allManagers} />
+        <ChatActionPanel
+          allManagers={allManagers}
+          canTransferChat={canTransferChat}
+          canUseStatusSelector={canUseStatusSelector}
+          isAdmin={isAdmin}
+          isClaimable={isClaimable}
+          isPending={isPending}
+          selectedStatus={selectedChat.status}
+          showTransfer={showTransfer}
+          visibleStatusOptions={visibleStatusOptions}
+          onDeleteChat={handleDeleteChat}
+          onStatusChange={handleStatusChange}
+          onTakeIntoWork={handleTakeIntoWork}
+          onToggleTransfer={() => setShowTransfer((current) => !current)}
+          onTransfer={handleTransfer}
+        />
       </div>
 
-      <div className={messagesPanelClassName}>
-        {messages.length === 0 && (
-          <div className={emptyMessagesClassName}>Сообщений пока нет</div>
-        )}
-        {messages.map((message) => (
-          <article key={message.id} className={getMessageCardClassName(message)}>
-            <div className={messageHeaderClassName}>
-              <div className={messageAuthorClassName}>
-                <div>
-                  <p className={messageAuthorNameClassName}>{getSenderLabel(message, selectedChat.title, allManagers)}</p>
-                  <p className={messageDateClassName}>
-                    {new Date(message.createdAt).toLocaleString("ru-RU")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isOutgoingMessage(message) && message.deliveryStatus && (
-                  <span
-                    className={getDeliveryBadgeClassName(message.deliveryStatus)}
-                    title={getSafeDeliveryError(message.deliveryError)}
-                  >
-                    {getDeliveryBadgeLabel(message.deliveryStatus)}
-                  </span>
-                )}
-                {isAdmin && (
-                  <Button
-                    onClick={() => handleDeleteMessage(message.id)}
-                    isLoading={isPending}
-                    variant="ghost"
-                    className={deleteMessageButtonClassName}
-                    title="Удалить сообщение"
-                  >
-                    🗑️
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <p className={messageTextClassName}>{message.text || "Пустое сообщение"}</p>
-          </article>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+      <MessageTimeline
+        allManagers={allManagers}
+        chatTitle={selectedChat.title}
+        isAdmin={isAdmin}
+        isPending={isPending}
+        messages={messages}
+        messagesEndRef={messagesEndRef}
+        onDeleteMessage={handleDeleteMessage}
+      />
 
       {composerAvailability.canSend ? (
           <ChatMessageInput
@@ -637,9 +384,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
               }}
           />
       ) : (
-        <div className={composerUnavailableClassName}>
-           <p className={composerUnavailableTextClassName}>{composerAvailability.unavailableReason}</p>
-        </div>
+        <ComposerUnavailable reason={composerAvailability.unavailableReason} />
       )}
 
       {toast ? (

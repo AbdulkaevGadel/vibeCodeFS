@@ -391,6 +391,25 @@ SHOULD:
 - Before creating a shared component, verify that the duplication is structural and repeated at least 2-3 times.
 - Keep route-local code close to the route until there is a clear reuse case.
 
+### UI Reuse Check
+
+Before writing or changing UI code, the agent MUST do a quick, task-sized check for existing UI primitives, route-local components, and established local patterns.
+
+Priority:
+1. Reuse an existing shared UI primitive when it matches both the behavior and the semantic role.
+2. Reuse a route-local or feature-local component when the pattern belongs only to that route/feature.
+3. Follow an established local markup/styling pattern when extracting a component would not add clarity.
+4. Extend an existing component only when the new behavior naturally belongs to that component.
+5. Create new UI markup when reuse would force the wrong abstraction, hide intent, or make the code harder to understand.
+
+Rules:
+- Do not duplicate buttons, badges, cards, modals, alerts, toasts, inputs, or repeated layout patterns without first checking existing UI code.
+- Visual similarity alone is not enough reason to create or reuse a shared component.
+- Shared components are allowed only when reuse is real across multiple places and the component has a stable semantic role.
+- If an existing component is visually close but semantically wrong, prefer a small local implementation.
+- Keep the check proportional: small UI edits require checking nearby/shared UI, not auditing the whole frontend.
+- For detailed `support-admin` Tailwind/styling rules, follow `support-admin/AGENTS.md`.
+
 ---
 
 ## 17. Project Structure
@@ -401,6 +420,21 @@ Rules:
 - no deep layering without strong reason
 - no complex feature slicing for its own sake
 - structure should reflect actual domain and route boundaries
+
+---
+
+## 17.1 Emerging Project Rules
+
+During refactoring or implementation, if a repeated decision becomes a stable project rule or pattern, the agent must explicitly call it out and propose adding it to the appropriate `AGENTS.md`.
+
+Rules:
+- keep permanent rules in `AGENTS.md` files, not only in `docs/plan/plan.md`
+- global rules belong in the repository root `AGENTS.md`
+- app-specific frontend rules for `support-admin` belong in `support-admin/AGENTS.md`
+- feature-specific rules should stay near the feature unless they apply across the app
+- do not promote a pattern to `AGENTS.md` after one use only
+- before adding a new rule, explain why it is stable and where it should live
+- if the user approves, update the relevant `AGENTS.md` together with the task history
 
 ---
 
@@ -520,7 +554,9 @@ Goal:
 
 Rules:
 - one completed task = one history file
-- filename format: `YYYY-MM-DD-short-task-name.md`
+- filename format: `YYYY-MM-DD-NNN-short-task-name.md`
+- `NNN` is a 3-digit sequence number for completed tasks on the same date
+- before creating a history file, check existing files for the date and use the next sequence number
 - language: Russian
 - include: goal, decisions, migrations, code steps, manual steps, verification, result
 - `docs/plan/plan.md` remains the active roadmap
