@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: PageProps) {
         <AdminHeader
           headerBotLabel={pageData.headerBotLabel}
           messageCount={pageData.botFilteredMessageCount}
-          chatCount={pageData.chatSummaries.length}
+          chatCount={pageData.botFilteredChatCount}
           botOptions={pageData.botOptions}
           selectedBotKey={pageData.selectedBot?.key ?? null}
           allManagers={pageData.allManagers}

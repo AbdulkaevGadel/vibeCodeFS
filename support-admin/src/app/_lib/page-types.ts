@@ -74,6 +74,7 @@ export type SupportAdminPageData = {
   botOptions: BotOption[];
   selectedBot: BotOption | null;
   botFilteredChats: ChatSummary[];
+  botFilteredChatCount: number;
   botFilteredMessageCount: number;
   chatSummaries: ChatSummary[];
   selectedChat: ChatSummary | null;
