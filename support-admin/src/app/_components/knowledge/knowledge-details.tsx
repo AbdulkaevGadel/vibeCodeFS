@@ -10,7 +10,10 @@ import {
 } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
-import { Toast } from "@/shared/ui/toast";
+import { Badge } from "@/shared/ui/badge";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Toast, useToastState } from "@/shared/ui/toast";
 
 type KnowledgeDetailsProps = {
   selectedArticle: KnowledgeArticle | null;
@@ -19,16 +22,7 @@ type KnowledgeDetailsProps = {
   isCreatingArticle: boolean;
 };
 
-type ToastState = {
-  id: number;
-  message: string;
-  variant: "success" | "error";
-};
-
-const emptyStateClassName =
-  "flex h-[calc(100vh-200px)] flex-col items-center justify-center support-panel p-12 text-center";
-const emptyTitleClassName = "support-text-primary mb-2 text-xl font-semibold";
-const emptyDescriptionClassName = "support-text-secondary max-w-xs text-sm";
+const emptyStateClassName = "h-[calc(100vh-200px)]";
 const detailsPanelClassName = "flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel";
 const headerClassName = "flex items-center justify-between p-6 border-b border-black/5 bg-white/20";
 const titleInputClassName =
@@ -43,8 +37,6 @@ const historyTitleClassName =
   "text-sm font-black uppercase tracking-widest support-text-muted border-b border-black/5 pb-4";
 const historyCardClassName =
   "p-5 rounded-[2rem] bg-white/40 border border-black/5 hover:bg-white transition-all shadow-sm";
-const historyBadgeClassName =
-  "text-[10px] uppercase tracking-widest font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full";
 const historyDateClassName = "text-[10px] support-text-muted font-bold";
 const historyItemTitleClassName = "text-sm font-bold support-text-primary mb-1";
 const historyItemContentClassName = "text-xs support-text-secondary line-clamp-2 leading-relaxed";
@@ -62,8 +54,6 @@ const textareaClassName =
   "w-full bg-white/50 border border-black/10 rounded-[2.5rem] px-6 py-6 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all leading-relaxed min-h-[500px] shadow-inner";
 const articleViewClassName = "animate-in fade-in slide-in-from-bottom-4 duration-700";
 const articleMetaClassName = "flex items-center gap-4 mb-10";
-const versionBadgeClassName =
-  "support-surface-accent px-4 py-1.5 rounded-2xl text-[10px] uppercase font-black tracking-widest";
 const updatedAtClassName = "text-[10px] uppercase tracking-widest support-text-muted font-bold";
 const articleContentClassName =
   "whitespace-pre-wrap text-[17px] leading-[1.8] support-text-primary font-medium tracking-tight";
@@ -79,25 +69,18 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const [isRefreshPending, startRefreshTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(isCreatingArticle);
   const [showHistory, setShowHistory] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   // Форма
   const [title, setTitle] = useState(selectedArticle?.title ?? "");
   const [content, setContent] = useState(selectedArticle?.content ?? "");
   const [slug, setSlug] = useState(selectedArticle?.slug ?? "");
   const [status, setStatus] = useState(selectedArticle?.status ?? "draft");
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const { toast, showToast, closeToast } = useToastState<"success" | "error">();
 
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
   const canManageLifecycle = currentManager?.role === "admin" || currentManager?.role === "supervisor";
-
-  const showToast = (message: string, variant: ToastState["variant"]) => {
-    setToast({
-      id: Date.now(),
-      message,
-      variant,
-    });
-  };
 
   const handleSave = async () => {
     startTransition(async () => {
@@ -142,14 +125,11 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
   const handleDelete = async () => {
     if (!selectedArticle) return;
+    setIsDeleteConfirmOpen(true);
+  };
 
-    const confirmed = confirm(
-      `Удалить статью "${selectedArticle.title}" навсегда?\n\n` +
-      "Будет удалена сама статья и вся история изменений.\n" +
-      "Это действие необратимо."
-    );
-
-    if (!confirmed) return;
+  const confirmDelete = async () => {
+    if (!selectedArticle) return;
 
     startTransition(async () => {
       const result = await deleteArticleAction(selectedArticle.id, selectedArticle.version);
@@ -157,6 +137,7 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       if (result.error) {
         showToast(result.error, "error");
       } else {
+        setIsDeleteConfirmOpen(false);
         showToast("Статья удалена.", "success");
         router.push("/knowledge-base?view=archive");
         router.refresh();
@@ -188,12 +169,11 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
 
   if (!selectedArticle && (!isEditing || !canCreateArticle)) {
     return (
-      <div className={emptyStateClassName}>
-        <h3 className={emptyTitleClassName}>Откройте статью, чтобы прочитать</h3>
-        <p className={emptyDescriptionClassName}>
-          Выберите материал из списка слева.
-        </p>
-      </div>
+      <EmptyState
+        className={emptyStateClassName}
+        title="Откройте статью, чтобы прочитать"
+        description="Выберите материал из списка слева."
+      />
     );
   }
 
@@ -307,9 +287,9 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
                    history.map((item) => (
                      <div key={item.id} className={historyCardClassName}>
                         <div className="flex items-center justify-between mb-3">
-                           <span className={historyBadgeClassName}>
+                           <Badge variant="accent" size="sm" className="tracking-widest">
                              {item.changeType} v{item.version}
-                           </span>
+                           </Badge>
                            <span className={historyDateClassName}>
                              {new Date(item.changedAt).toLocaleString('ru-RU')}
                            </span>
@@ -366,9 +346,9 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
           ) : (
             <div className={articleViewClassName}>
                 <div className={articleMetaClassName}>
-                   <div className={versionBadgeClassName}>
+                   <Badge variant="accent" size="md" className="rounded-2xl px-4 py-1.5 text-[10px] uppercase tracking-widest">
                       v{selectedArticle?.version}
-                   </div>
+                   </Badge>
                    <div className={updatedAtClassName}>
                       Обновлено {selectedArticle && new Date(selectedArticle.updatedAt).toLocaleDateString('ru-RU')}
                    </div>
@@ -408,9 +388,23 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
           key={toast.id}
           message={toast.message}
           variant={toast.variant}
-          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+          onClose={() => closeToast(toast.id)}
         />
       ) : null}
+      <ConfirmDialog
+        isOpen={isDeleteConfirmOpen}
+        title="Удалить статью"
+        description={
+          selectedArticle
+            ? `Удалить статью "${selectedArticle.title}" навсегда?\n\nБудет удалена сама статья и вся история изменений.\nЭто действие необратимо.`
+            : ""
+        }
+        confirmLabel="Удалить"
+        variant="danger"
+        isPending={isPending}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

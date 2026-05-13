@@ -1,4 +1,5 @@
 import { Button } from "@/shared/ui/button";
+import { Badge } from "@/shared/ui/badge";
 import { ChatMessage, Manager } from "../../_lib/page-types";
 import { getManagerFullName } from "./chat-details-utils";
 
@@ -7,8 +8,6 @@ const messageHeaderClassName = "flex flex-col gap-3 sm:flex-row sm:items-start s
 const messageAuthorNameClassName = "support-text-primary text-sm font-semibold";
 const messageDateClassName = "support-text-muted mt-1 text-xs";
 const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
-const deliveryStatusClassName =
-  "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider";
 const deleteMessageButtonClassName = "!h-7 !w-7 !p-0 text-red-400 hover:text-red-700";
 
 type MessageBubbleProps = {
@@ -89,16 +88,10 @@ function getDeliveryBadgeLabel(deliveryStatus: ChatMessage["deliveryStatus"]) {
   return "❌ Ошибка";
 }
 
-function getDeliveryBadgeClassName(deliveryStatus: ChatMessage["deliveryStatus"]) {
-  if (deliveryStatus === "pending") {
-    return `${deliveryStatusClassName} bg-amber-100 text-amber-700 animate-pulse`;
-  }
-
-  if (deliveryStatus === "sent") {
-    return `${deliveryStatusClassName} bg-emerald-100 text-emerald-700`;
-  }
-
-  return `${deliveryStatusClassName} bg-red-100 text-red-700`;
+function getDeliveryBadgeVariant(deliveryStatus: ChatMessage["deliveryStatus"]) {
+  if (deliveryStatus === "pending") return "warning";
+  if (deliveryStatus === "sent") return "success";
+  return "danger";
 }
 
 export function MessageBubble({
@@ -119,12 +112,14 @@ export function MessageBubble({
 
         <div className="flex items-center gap-2">
           {isOutgoingMessage(message) && message.deliveryStatus ? (
-            <span
-              className={getDeliveryBadgeClassName(message.deliveryStatus)}
+            <Badge
+              variant={getDeliveryBadgeVariant(message.deliveryStatus)}
+              size="sm"
               title={getSafeDeliveryError(message.deliveryError)}
+              className={message.deliveryStatus === "pending" ? "animate-pulse tracking-wider" : "tracking-wider"}
             >
               {getDeliveryBadgeLabel(message.deliveryStatus)}
-            </span>
+            </Badge>
           ) : null}
 
           {isAdmin ? (

@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
+import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Manager } from "../_lib/page-types";
 import { Button } from "@/shared/ui/button";
+import { Dialog } from "@/shared/ui/dialog";
 import {
   addManagerAction,
   createAuthUserAction,
@@ -17,16 +17,6 @@ type ManagersAdminModalProps = {
 
 type ManagerRole = "admin" | "support" | "supervisor";
 
-const overlayClassName =
-  "fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 p-6 backdrop-blur-sm";
-const modalClassName =
-  "relative flex max-h-[78vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl";
-const modalHeaderClassName =
-  "border-b border-slate-200 bg-white px-6 py-5 pr-16";
-const modalBodyClassName = "overflow-y-auto px-6 py-5";
-const closeButtonClassName =
-  "absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-2xl leading-none text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950";
-const titleClassName = "text-xl font-semibold text-slate-950";
 const sectionClassName = "rounded-xl border border-slate-200 p-4";
 const sectionTitleClassName = "text-sm font-bold uppercase tracking-[0.18em] text-slate-500";
 const formGridClassName = "mt-4 grid gap-3 md:grid-cols-2";
@@ -36,7 +26,6 @@ const selectClassName =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const tableHeaderClassName = "text-left text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400";
 const tableCellClassName = "border-t border-slate-100 py-3 pr-3 text-sm text-slate-700";
-const modalDescriptionClassName = "mt-1 text-sm text-slate-500";
 const successMessageClassName =
   "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700";
 const errorMessageClassName =
@@ -57,16 +46,18 @@ function getManagerFullName(manager: Manager) {
 
 export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
   const router = useRouter();
-  const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const closeModal = () => {
+    setIsOpen(false);
+    setEditingManager(null);
+    setStatusMessage(null);
+    setErrorMessage(null);
+  };
 
   const runAction = (action: () => Promise<{ success: boolean; error: string | null }>, successMessage: string) => {
     setStatusMessage(null);
@@ -136,32 +127,8 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
     );
   };
 
-  const modal = isOpen ? (
-        <div className={overlayClassName} role="dialog" aria-modal="true" aria-label="Менеджеры">
-          <div className={modalClassName}>
-            <button
-              type="button"
-              className={closeButtonClassName}
-              aria-label="Закрыть"
-              onClick={() => {
-                setIsOpen(false);
-                setEditingManager(null);
-                setStatusMessage(null);
-                setErrorMessage(null);
-              }}
-            >
-              ×
-            </button>
-            <div className={modalHeaderClassName}>
-              <div>
-                <h2 className={titleClassName}>Менеджеры</h2>
-                <p className={modalDescriptionClassName}>
-                  Управление Auth-пользователями и ролями support-домена.
-                </p>
-              </div>
-            </div>
-
-            <div className={modalBodyClassName}>
+  const modalContent = (
+            <>
               {statusMessage ? (
                 <div className={successMessageClassName}>
                   {statusMessage}
@@ -311,10 +278,8 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
                   </form>
                 </section>
               ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null;
+            </>
+      );
 
   return (
     <>
@@ -322,7 +287,16 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
         Менеджеры
       </Button>
 
-      {isMounted ? createPortal(modal, document.body) : null}
+      <Dialog
+        isOpen={isOpen}
+        title="Менеджеры"
+        description="Управление Auth-пользователями и ролями support-домена."
+        onClose={closeModal}
+        size="xl"
+        overlayClassName="z-[100] bg-slate-950/65 p-6"
+      >
+        {modalContent}
+      </Dialog>
     </>
   );
 }

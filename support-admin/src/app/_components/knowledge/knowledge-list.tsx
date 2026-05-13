@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { KnowledgeArticle, KnowledgeBaseView, Manager } from "../../_lib/page-types";
 
@@ -25,14 +26,13 @@ const articleLinkBaseClassName = "flex flex-col gap-1.5 p-4 rounded-3xl transiti
 const activeArticleLinkClassName = "support-surface-accent scale-[1.02] shadow-lg shadow-black/5";
 const inactiveArticleLinkClassName = "hover:bg-white/40 border border-transparent support-text-primary";
 const articleTitleBaseClassName = "text-sm font-semibold leading-tight";
-const statusBadgeBaseClassName = "text-[10px] uppercase font-black px-2 py-0.5 rounded-full";
 const slugBaseClassName = "text-[10px] truncate";
 const footerClassName = "p-4 border-t border-black/5";
 
-const statusBadgeClassNames: Record<KnowledgeArticle["status"], string> = {
-  published: "bg-emerald-500/10 text-emerald-600",
-  archived: "bg-rose-500/10 text-rose-600",
-  draft: "bg-amber-500/10 text-amber-600",
+const statusBadgeVariants: Record<KnowledgeArticle["status"], "success" | "danger" | "warning"> = {
+  published: "success",
+  archived: "danger",
+  draft: "warning",
 };
 
 const statusLabels: Record<KnowledgeArticle["status"], string> = {
@@ -49,10 +49,6 @@ function getArticleLinkClassName(isActive: boolean) {
 
 function getArticleTitleClassName(isActive: boolean) {
   return `${articleTitleBaseClassName} ${isActive ? "text-white" : "support-text-primary"}`;
-}
-
-function getStatusBadgeClassName(status: KnowledgeArticle["status"]) {
-  return `${statusBadgeBaseClassName} ${statusBadgeClassNames[status]}`;
 }
 
 function getSlugClassName(isActive: boolean) {
@@ -127,9 +123,13 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
                     {article.title}
                   </p>
                   <div className="flex items-center gap-2">
-                    <span className={getStatusBadgeClassName(article.status)}>
+                    <Badge
+                      variant={statusBadgeVariants[article.status]}
+                      size="sm"
+                      className={isActive ? "bg-white/15 text-white" : ""}
+                    >
                       {statusLabels[article.status]}
-                    </span>
+                    </Badge>
                     <span className={getSlugClassName(isActive)}>
                       {article.slug}
                     </span>

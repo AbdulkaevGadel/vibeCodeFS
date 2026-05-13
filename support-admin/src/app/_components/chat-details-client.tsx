@@ -9,9 +9,11 @@ import {
   markChatAsReadAction,
   takeChatIntoWorkAction,
   transferChatAction,
+  updateChatStatusAction,
 } from "../(protected)/_actions/chat-actions";
 import { ChatMessageInput } from "./chat-message-input";
-import { Toast } from "@/shared/ui/toast";
+import { Toast, useToastState } from "@/shared/ui/toast";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { ChatActionPanel } from "./chat-details/chat-action-panel";
 import { ChatDetailsHeader } from "./chat-details/chat-details-header";
 import { StatusOption } from "./chat-details/chat-status-selector";
@@ -38,11 +40,24 @@ type ChatDetailsClientProps = {
   currentManager: Manager | null;
 };
 
-type ToastState = {
-  id: number;
-  message: string;
-  variant: "success" | "error";
-};
+type ConfirmRequest =
+  | {
+      type: "status";
+      title: string;
+      description: string;
+      status: ChatStatus;
+    }
+  | {
+      type: "delete-message";
+      title: string;
+      description: string;
+      messageId: string;
+    }
+  | {
+      type: "delete-chat";
+      title: string;
+      description: string;
+    };
 
 const statusOptions: StatusOption[] = [
   { value: "open", label: "Открыть заново (open)" },
@@ -58,16 +73,9 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(() => normalizeMessages(initialMessages));
   const [showTransfer, setShowTransfer] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const { toast, showToast, closeToast } = useToastState<"success" | "error">();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const showToast = (message: string, variant: ToastState["variant"]) => {
-    setToast({
-      id: Date.now(),
-      message,
-      variant,
-    });
-  };
 
   const syncMessages = useCallback((nextMessages: ChatMessage[]) => {
     setMessages(nextMessages);
@@ -148,15 +156,21 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
        confirmationMsg = "Завершить этот диалог?";
     }
 
-    if (!confirm(confirmationMsg)) return;
+    setConfirmRequest({
+      type: "status",
+      title: "Изменить статус чата",
+      description: confirmationMsg,
+      status: newStatus,
+    });
+  };
 
+  const confirmStatusChange = (newStatus: ChatStatus) => {
     startTransition(async () => {
-      // Подгружаем новый экшен динамически, чтобы не раздувать импорты в начале (условно)
-      const { updateChatStatusAction } = await import("../(protected)/_actions/chat-actions");
       const result = await updateChatStatusAction(selectedChat.id, newStatus, selectedChat.status);
       if (!result.success) {
         showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось изменить статус чата.", "error");
       } else {
+        setConfirmRequest(null);
         showToast("Статус чата изменён.", "success");
       }
     });
@@ -187,28 +201,61 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const isAdmin = currentManager?.role === "admin";
 
   const handleDeleteMessage = (messageId: string) => {
-    if (!confirm("Удалить это сообщение? Это действие необратимо.")) return;
+    setConfirmRequest({
+      type: "delete-message",
+      title: "Удалить сообщение",
+      description: "Удалить это сообщение? Это действие необратимо.",
+      messageId,
+    });
+  };
+
+  const confirmDeleteMessage = (messageId: string) => {
     startTransition(async () => {
       const result = await deleteMessageAction(messageId);
       if (!result.success) {
         showToast(result.error ? `Ошибка удаления: ${result.error}` : "Удаление сообщения не выполнено.", "error");
       } else {
         setMessages(prev => prev.filter(m => m.id !== messageId));
+        setConfirmRequest(null);
         showToast("Сообщение удалено.", "success");
       }
     });
   };
 
   const handleDeleteChat = () => {
-    if (!confirm(`Удалить чат "${selectedChat.title}" полностью? Все сообщения и история будут уничтожены. Это действие необратимо!`)) return;
+    setConfirmRequest({
+      type: "delete-chat",
+      title: "Удалить чат",
+      description: `Удалить чат "${selectedChat.title}" полностью? Все сообщения и история будут уничтожены. Это действие необратимо!`,
+    });
+  };
+
+  const confirmDeleteChat = () => {
     startTransition(async () => {
       const result = await deleteChatAction(selectedChat.id);
       if (!result.success) {
         showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось удалить чат.", "error");
       } else {
+        setConfirmRequest(null);
         showToast("Чат удалён.", "success");
       }
     });
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmRequest || isPending) return;
+
+    if (confirmRequest.type === "status") {
+      confirmStatusChange(confirmRequest.status);
+      return;
+    }
+
+    if (confirmRequest.type === "delete-message") {
+      confirmDeleteMessage(confirmRequest.messageId);
+      return;
+    }
+
+    confirmDeleteChat();
   };
 
   return (
@@ -259,9 +306,20 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           key={toast.id}
           message={toast.message}
           variant={toast.variant}
-          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+          onClose={() => closeToast(toast.id)}
         />
       ) : null}
+
+      <ConfirmDialog
+        isOpen={confirmRequest !== null}
+        title={confirmRequest?.title ?? ""}
+        description={confirmRequest?.description ?? ""}
+        confirmLabel={confirmRequest?.type === "status" ? "Изменить" : "Удалить"}
+        variant={confirmRequest?.type === "status" ? "default" : "danger"}
+        isPending={isPending}
+        onCancel={() => setConfirmRequest(null)}
+        onConfirm={handleConfirmAction}
+      />
     </>
   );
 }
