@@ -49,6 +49,25 @@ These rules are permanent for the `support-admin` frontend.
 - Realtime callbacks must not become orchestration logic.
 - Frontend code must not call AI providers, Telegram API, or privileged backend resources directly.
 
+## Inbox Pagination Cache
+
+For paginated inbox state in `support-admin`, `sessionStorage` is allowed only as a short-lived UI cache for the current browser tab.
+
+Allowed use:
+- preserve already loaded inbox pages while the manager selects chats in the same tab;
+- keep cache scoped by bot filter / inbox scope;
+- treat cached rows as UI continuity only, never as source of truth.
+
+Forbidden:
+- using `localStorage` for inbox rows, unread state, cursor state, or realtime-derived support data;
+- treating cached inbox rows as authoritative after backend refresh, RPC results, or realtime updates;
+- using browser storage to hide backend unread/read-state bugs.
+
+Reason:
+- inbox ordering, unread counts, and previews are realtime-sensitive;
+- data should not survive across tabs or long-lived browser sessions as if it were canonical;
+- Supabase/RPC/realtime remain the source of truth.
+
 ## Support Admin UI Rules
 
 MUST:

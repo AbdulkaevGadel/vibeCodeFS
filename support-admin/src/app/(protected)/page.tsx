@@ -43,8 +43,11 @@ export default async function Home({ searchParams }: PageProps) {
           <section className={styles.pageGrid}>
             <ChatList
               chatSummaries={pageData.chatSummaries}
+              chatInboxPageInfo={pageData.chatInboxPageInfo}
+              selectedChat={pageData.selectedChat}
               selectedChatId={pageData.selectedChat?.id ?? null}
               selectedBotKey={pageData.selectedBot?.key ?? null}
+              selectedBotUsername={pageData.selectedBot?.value ?? null}
             />
             <ChatDetails
               selectedChat={pageData.selectedChat}

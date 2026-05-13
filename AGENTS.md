@@ -296,6 +296,17 @@ Rules for `docs/plan/TASK.md`:
   - whether an existing migration was already applied in Supabase
   - whether the current migration can still be edited or a new migration is required
 
+After preparing or updating `docs/plan/TASK.md`, the agent MUST write a short summary in chat.
+
+The summary must be in Russian and concise.
+
+It must include:
+- what task was documented;
+- what is included in the task;
+- what is explicitly not included;
+- whether a migration is needed;
+- what manual steps or decisions remain before implementation.
+
 ---
 
 ## 14. Manual Step Rules

@@ -62,6 +62,22 @@ export type ChatSummary = {
   isUnread?: boolean;
 };
 
+export type ChatInboxCursor = {
+  lastMessageAt: string | null;
+  createdAt: string;
+  chatId: string;
+};
+
+export type ChatInboxPageInfo = {
+  hasMore: boolean;
+  nextCursor: ChatInboxCursor | null;
+};
+
+export type ChatInboxPage = {
+  rows: ChatSummary[];
+  pageInfo: ChatInboxPageInfo;
+};
+
 export type Manager = {
   id: string;
   email: string | null;
@@ -77,6 +93,7 @@ export type SupportAdminPageData = {
   botFilteredChatCount: number;
   botFilteredMessageCount: number;
   chatSummaries: ChatSummary[];
+  chatInboxPageInfo: ChatInboxPageInfo;
   selectedChat: ChatSummary | null;
   selectedChatMessages: ChatMessage[];
   allManagers: Manager[];

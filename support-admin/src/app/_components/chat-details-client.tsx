@@ -3,7 +3,13 @@
 import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChatMessage, ChatStatus, ChatSummary, Manager } from "../_lib/page-types";
-import { takeChatIntoWorkAction, transferChatAction, deleteMessageAction, deleteChatAction } from "../(protected)/_actions/chat-actions";
+import {
+  deleteChatAction,
+  deleteMessageAction,
+  markChatAsReadAction,
+  takeChatIntoWorkAction,
+  transferChatAction,
+} from "../(protected)/_actions/chat-actions";
 import { ChatMessageInput } from "./chat-message-input";
 import { Toast } from "@/shared/ui/toast";
 import { ChatActionPanel } from "./chat-details/chat-action-panel";
@@ -73,6 +79,12 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
 
   const handleRealtimeInsert = useCallback((message: ChatMessage) => {
     setMessages((currentMessages) => mergeInsertedMessage(currentMessages, message));
+
+    if (message.senderType === "client") {
+      markChatAsReadAction(message.chatId).catch((error) => {
+        console.warn("Failed to mark realtime message as read:", error);
+      });
+    }
   }, []);
 
   const handleRealtimeDeliveryUpdate = useCallback(

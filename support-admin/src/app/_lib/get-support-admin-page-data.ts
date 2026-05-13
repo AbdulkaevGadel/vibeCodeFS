@@ -3,6 +3,9 @@ import { getCurrentManager } from "./manager-utils";
 import { FlashStatus } from "./flash-cookie";
 import {
   BotOption,
+  ChatInboxCursor,
+  ChatInboxPage,
+  ChatInboxPageInfo,
   ChatMessage,
   ChatStatus,
   ChatSummary,
@@ -22,7 +25,7 @@ import {
   sortChatMessages,
 } from "./page-utils";
 
-const inboxPageLimit = 50;
+export const chatInboxPageLimit = 50;
 
 type InboxSummaryRow = {
   id: string;
@@ -65,6 +68,11 @@ type ChatMessageRow = {
   created_at: string;
 };
 
+const emptyInboxPageInfo: ChatInboxPageInfo = {
+  hasMore: false,
+  nextCursor: null,
+};
+
 function getStatusVariant(status?: FlashStatus) {
   if (status === "delete-error") {
     return "error";
@@ -81,7 +89,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function mapInboxSummary(row: InboxSummaryRow): ChatSummary {
+export function mapInboxSummary(row: InboxSummaryRow): ChatSummary {
   const assignedManagerName = [row.assigned_manager_display_name, row.assigned_manager_last_name]
     .filter(Boolean)
     .join(" ");
@@ -146,12 +154,41 @@ function mapBotStats(rows: BotStatsRow[]) {
     );
 }
 
-function mapInboxPageRows(value: unknown): InboxSummaryRow[] {
-  if (!isRecord(value) || !Array.isArray(value.rows)) {
-    return [];
+function isChatInboxCursor(value: unknown): value is ChatInboxCursor {
+  if (!isRecord(value)) return false;
+
+  return (
+    (typeof value.lastMessageAt === "string" || value.lastMessageAt === null) &&
+    typeof value.createdAt === "string" &&
+    typeof value.chatId === "string"
+  );
+}
+
+function mapInboxPageInfo(value: unknown): ChatInboxPageInfo {
+  if (!isRecord(value) || typeof value.hasMore !== "boolean") {
+    return emptyInboxPageInfo;
   }
 
-  return value.rows as InboxSummaryRow[];
+  const nextCursor = value.nextCursor;
+
+  return {
+    hasMore: value.hasMore,
+    nextCursor: value.hasMore && isChatInboxCursor(nextCursor) ? nextCursor : null,
+  };
+}
+
+export function mapInboxPage(value: unknown): ChatInboxPage {
+  if (!isRecord(value) || !Array.isArray(value.rows)) {
+    return {
+      rows: [],
+      pageInfo: emptyInboxPageInfo,
+    };
+  }
+
+  return {
+    rows: (value.rows as InboxSummaryRow[]).map(mapInboxSummary),
+    pageInfo: mapInboxPageInfo(value.pageInfo),
+  };
 }
 
 function formatErrorMessage(error: unknown) {
@@ -173,6 +210,7 @@ export async function getSupportAdminPageData(
   let chatSummaries: ChatSummary[] = [];
   let selectedChatMessages: ChatMessage[] = [];
   let selectedChat: ChatSummary | null = null;
+  let chatInboxPageInfo: ChatInboxPageInfo = emptyInboxPageInfo;
   let errorMessage: string | null = null;
   let allManagers: Manager[] = [];
   let currentManager: Manager | null = null;
@@ -233,7 +271,7 @@ export async function getSupportAdminPageData(
       const { data: inboxPageData, error: inboxPageError } = await supabase.rpc(
         "get_support_admin_chat_inbox_page",
         {
-          p_limit: inboxPageLimit,
+          p_limit: chatInboxPageLimit,
           p_cursor_last_message_at: null,
           p_cursor_created_at: null,
           p_cursor_chat_id: null,
@@ -245,7 +283,9 @@ export async function getSupportAdminPageData(
         console.error("Fetch support admin inbox page error:", inboxPageError);
         errorMessage = "Не удалось загрузить inbox из read model.";
       } else {
-        chatSummaries = mapInboxPageRows(inboxPageData).map(mapInboxSummary);
+        const inboxPage = mapInboxPage(inboxPageData);
+        chatSummaries = inboxPage.rows;
+        chatInboxPageInfo = inboxPage.pageInfo;
       }
     }
 
@@ -305,6 +345,7 @@ export async function getSupportAdminPageData(
     botFilteredChatCount,
     botFilteredMessageCount,
     chatSummaries,
+    chatInboxPageInfo,
     selectedChat,
     selectedChatMessages,
     allManagers,
