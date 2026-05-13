@@ -11,6 +11,7 @@ import { ChatDetailsHeader } from "./chat-details/chat-details-header";
 import { StatusOption } from "./chat-details/chat-status-selector";
 import { ComposerUnavailable } from "./chat-details/composer-unavailable";
 import { MessageTimeline } from "./chat-details/message-timeline";
+import { getComposerAvailability } from "./chat-details/chat-details-utils";
 import {
   mergeInsertedMessage,
   mergeUpdatedDeliveryState,
@@ -36,74 +37,6 @@ type ToastState = {
   message: string;
   variant: "success" | "error";
 };
-
-type ComposerAvailability = {
-  canSend: boolean;
-  unavailableReason: string | null;
-};
-
-function getComposerAvailability(selectedChat: ChatSummary, currentManager: Manager | null): ComposerAvailability {
-  if (!currentManager) {
-    return {
-      canSend: false,
-      unavailableReason: "Профиль менеджера не найден. Ответить клиенту нельзя.",
-    };
-  }
-
-  if (selectedChat.status === "resolved" || selectedChat.status === "closed") {
-    return {
-      canSend: false,
-      unavailableReason: "Диалог завершён. История сохранена, новые сообщения отправить нельзя.",
-    };
-  }
-
-  if (currentManager.role === "admin" || currentManager.role === "supervisor") {
-    return {
-      canSend: true,
-      unavailableReason: null,
-    };
-  }
-
-  if (currentManager.role === "support") {
-    if (selectedChat.status === "escalated") {
-      return {
-        canSend: false,
-        unavailableReason: "Чат эскалирован. Ответить может supervisor или admin.",
-      };
-    }
-
-    if (selectedChat.assignedManagerId !== currentManager.id) {
-      if (selectedChat.assignedManagerName) {
-        return {
-          canSend: false,
-          unavailableReason: `Чат закреплён за ${selectedChat.assignedManagerName}. Ответить может назначенный менеджер.`,
-        };
-      }
-
-      if (selectedChat.status !== "open" && selectedChat.status !== "waiting_operator") {
-        return {
-          canSend: false,
-          unavailableReason: "Вы не назначены на этот чат. Ответить может назначенный менеджер.",
-        };
-      }
-
-      return {
-        canSend: false,
-        unavailableReason: "Чтобы ответить клиенту, сначала возьмите чат в работу.",
-      };
-    }
-
-    return {
-      canSend: true,
-      unavailableReason: null,
-    };
-  }
-
-  return {
-    canSend: false,
-    unavailableReason: "Ответ недоступен для вашей роли или текущего состояния чата.",
-  };
-}
 
 const statusOptions: StatusOption[] = [
   { value: "open", label: "Открыть заново (open)" },
