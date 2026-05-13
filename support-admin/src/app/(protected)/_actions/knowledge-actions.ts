@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { ArticleStatus } from "../../_lib/page-types";
 import { getCurrentManager } from "../../_lib/manager-utils";
-import { mapEmbeddingRefreshBatch } from "../../_lib/get-knowledge-base-data";
+import { mapEmbeddingRefreshBatch, mapEmbeddingState } from "../../_lib/get-knowledge-base-data";
 
 /**
  * Создает или обновляет статью Базы Знаний.
@@ -43,6 +43,7 @@ export async function upsertArticleAction(
         throw error;
       }
       
+      await invokePendingArticleIngestionIfNeeded(data?.id ?? null);
       revalidatePath("/knowledge-base");
       return { data };
     } else {
@@ -66,6 +67,7 @@ export async function upsertArticleAction(
         throw error;
       }
 
+      await invokePendingArticleIngestionIfNeeded(data?.id ?? null);
       revalidatePath("/knowledge-base");
       return { data };
     }
@@ -221,6 +223,31 @@ export async function refreshArticleEmbeddingsAction(id: string, expectedVersion
   }
 }
 
+export async function getArticleEmbeddingStateAction(id: string) {
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    if (!id) {
+      return { error: "ARTICLE_ID_REQUIRED" };
+    }
+
+    const { data, error } = await supabase.rpc("get_kb_article_embedding_state_v1", {
+      p_article_id: id,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      data: mapEmbeddingState(data),
+    };
+  } catch (err: any) {
+    console.error("Knowledge Base Embedding State Error:", err);
+    return { error: err.message || "Ошибка при загрузке статуса знаний ИИ" };
+  }
+}
+
 export async function startKnowledgeEmbeddingRefreshBatchAction() {
   const supabase = await createSupabaseServerClient();
 
@@ -330,6 +357,35 @@ async function readEmbeddingRefreshBatchState() {
   }
 
   return mapEmbeddingRefreshBatch(data);
+}
+
+async function invokePendingArticleIngestionIfNeeded(articleId: string | null) {
+  if (!articleId) {
+    return;
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("get_kb_article_embedding_state_v1", {
+      p_article_id: articleId,
+    });
+
+    if (error) {
+      console.error("Knowledge Base Post-Save Embedding State Error:", error);
+      return;
+    }
+
+    const state = mapEmbeddingState(data);
+    const chunkSetId = typeof data?.chunk_set_id === "string" ? data.chunk_set_id : null;
+
+    if (state.embeddingStatus !== "updating" || !chunkSetId) {
+      return;
+    }
+
+    await invokeKbIngestion(chunkSetId);
+  } catch (error) {
+    console.error("Knowledge Base Post-Save Ingestion Bootstrap Error:", error);
+  }
 }
 
 async function invokeKbEmbeddingRefreshBatch(batchId: string | null) {

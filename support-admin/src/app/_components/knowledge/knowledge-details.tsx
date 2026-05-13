@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { KnowledgeArticle, KnowledgeArticleHistory, Manager } from "../../_lib/page-types";
 import {
   upsertArticleAction,
   setArticleStatusAction,
   deleteArticleAction,
   refreshArticleEmbeddingsAction,
+  getArticleEmbeddingStateAction,
 } from "../../(protected)/_actions/knowledge-actions";
 import { useRouter } from "next/navigation";
 import { Button } from "@/shared/ui/button";
@@ -58,6 +59,8 @@ const updatedAtClassName = "text-[10px] uppercase tracking-widest support-text-m
 const articleContentClassName =
   "whitespace-pre-wrap text-[17px] leading-[1.8] support-text-primary font-medium tracking-tight";
 const lifecycleActionsClassName = "mt-16 pt-10 border-t border-black/5 flex flex-wrap justify-end gap-3";
+const embeddingRefreshSyncDelayMs = 2500;
+const embeddingRefreshSyncMaxAttempts = 12;
 
 function getEmbeddingBadgeClassName(className: string) {
   return `${embeddingBadgeBaseClassName} ${className}`;
@@ -70,6 +73,9 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const [isEditing, setIsEditing] = useState(isCreatingArticle);
   const [showHistory, setShowHistory] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isEmbeddingRefreshSyncing, setIsEmbeddingRefreshSyncing] = useState(false);
+  const [manualEmbeddingStatus, setManualEmbeddingStatus] = useState<KnowledgeArticle["embeddingStatus"] | null>(null);
+  const embeddingRefreshSyncAttemptsRef = useRef(0);
   
   // Форма
   const [title, setTitle] = useState(selectedArticle?.title ?? "");
@@ -78,9 +84,56 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
   const [status, setStatus] = useState(selectedArticle?.status ?? "draft");
   const { toast, showToast, closeToast } = useToastState<"success" | "error">();
 
+  useEffect(() => {
+    if (!isEmbeddingRefreshSyncing || !selectedArticle) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      embeddingRefreshSyncAttemptsRef.current += 1;
+
+      void getArticleEmbeddingStateAction(selectedArticle.id).then((result) => {
+        if (result.error || !result.data) {
+          if (embeddingRefreshSyncAttemptsRef.current >= embeddingRefreshSyncMaxAttempts) {
+            setIsEmbeddingRefreshSyncing(false);
+          }
+          return;
+        }
+
+        setManualEmbeddingStatus(result.data.embeddingStatus);
+
+        if (result.data.embeddingStatus !== "updating") {
+          setIsEmbeddingRefreshSyncing(false);
+          router.refresh();
+          return;
+        }
+
+        if (embeddingRefreshSyncAttemptsRef.current >= embeddingRefreshSyncMaxAttempts) {
+          setIsEmbeddingRefreshSyncing(false);
+        }
+      });
+
+      if (embeddingRefreshSyncAttemptsRef.current >= embeddingRefreshSyncMaxAttempts) {
+        setIsEmbeddingRefreshSyncing(false);
+      }
+    }, embeddingRefreshSyncDelayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isEmbeddingRefreshSyncing, router, selectedArticle]);
+
+  useEffect(() => {
+    setManualEmbeddingStatus(null);
+  }, [selectedArticle?.id]);
+
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
   const canManageLifecycle = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+
+  const startEmbeddingRefreshSync = () => {
+    embeddingRefreshSyncAttemptsRef.current = 0;
+    setManualEmbeddingStatus("updating");
+    setIsEmbeddingRefreshSyncing(true);
+  };
 
   const handleSave = async () => {
     startTransition(async () => {
@@ -97,7 +150,23 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
         showToast(result.error, "error");
       } else {
         setIsEditing(false);
+        setManualEmbeddingStatus("updating");
         showToast("Статья сохранена.", "success");
+
+        const savedArticleId = result.data?.id ?? selectedArticle?.id ?? null;
+        if (savedArticleId) {
+          const embeddingStateResult = await getArticleEmbeddingStateAction(savedArticleId);
+
+          if (!embeddingStateResult.error && embeddingStateResult.data?.embeddingStatus === "updating") {
+            startEmbeddingRefreshSync();
+          } else if (!embeddingStateResult.error && embeddingStateResult.data) {
+            setManualEmbeddingStatus(embeddingStateResult.data.embeddingStatus);
+            router.refresh();
+          }
+        } else {
+          setManualEmbeddingStatus(null);
+        }
+
         if (!selectedArticle && result.data) {
            router.push(`/knowledge-base?article=${result.data.id}`);
         }
@@ -154,13 +223,29 @@ export function KnowledgeDetails({ selectedArticle, history, currentManager, isC
       if (result.error) {
         showToast(result.error, "error");
       } else {
+        const resultType = result.data?.type;
+
+        if (
+          resultType === "queued"
+          || resultType === "retry_queued"
+          || resultType === "already_updating"
+        ) {
+          startEmbeddingRefreshSync();
+        }
+
         showToast(result.message ?? "Обновление знаний ИИ запущено", "success");
         router.refresh();
       }
     });
   };
 
-  const embeddingUi = selectedArticle ? getEmbeddingUi(selectedArticle) : null;
+  const displayedArticle = selectedArticle
+    ? {
+        ...selectedArticle,
+        embeddingStatus: manualEmbeddingStatus ?? selectedArticle.embeddingStatus,
+      }
+    : null;
+  const embeddingUi = displayedArticle ? getEmbeddingUi(displayedArticle) : null;
   const canRefreshEmbeddings = canManageLifecycle
     && !!selectedArticle
     && !isEditing

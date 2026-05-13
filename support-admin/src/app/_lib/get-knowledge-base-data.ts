@@ -193,7 +193,7 @@ function mapArticle(row: any): KnowledgeArticle {
   };
 }
 
-function mapEmbeddingState(value: any): Pick<KnowledgeArticle, "embeddingStatus" | "embeddingChunkSetId" | "embeddingErrorMessage"> {
+export function mapEmbeddingState(value: any): Pick<KnowledgeArticle, "embeddingStatus" | "embeddingChunkSetId" | "embeddingErrorMessage"> {
   const allowedStatuses = new Set<ArticleEmbeddingStatus>([
     "actual",
     "outdated",
