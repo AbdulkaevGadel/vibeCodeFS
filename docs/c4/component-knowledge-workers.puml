@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Компоненты Knowledge workers
+
+Container_Boundary(kb, "Knowledge ingestion runtime") {
+  Component(articleRpc, "Article RPC boundary", "create/update/archive/restore/delete KB RPC", "Создает версии articles, history и pending chunk sets")
+  Component(ingestionEntry, "Entry point kb-ingestion", "supabase/functions/kb-ingestion/index.ts", "Валидирует internal secret и mode")
+  Component(chunkBuilder, "Построитель chunks", "buildRetrievalChunks", "Строит retrieval chunks из article title/content")
+  Component(embeddingClient, "Embedding client", "Hugging Face embedding API", "Генерирует embeddings размерности 384")
+  Component(chunkSetWorker, "Worker chunk set", "claim/heartbeat/complete/fail RPC", "Владеет processing lifecycle для chunk_set")
+  Component(batchEntry, "Entry point batch worker", "supabase/functions/kb-embedding-refresh-batch/index.ts", "Запускает/возобновляет durable batch worker")
+  Component(batchWorker, "Worker batch item", "claim/request/finish batch RPC", "Обрабатывает refresh items и запускает kb-ingestion")
+}
+
+ContainerDb(db, "Supabase Postgres", "knowledge_base_articles / history / chunk_sets / chunks / batches")
+System_Ext(hf, "Hugging Face Inference API")
+
+Rel(articleRpc, db, "Пишет articles/history; создает pending chunk set")
+Rel(ingestionEntry, chunkSetWorker, "Обрабатывает webhook/sweep payload")
+Rel(chunkSetWorker, db, "claim/heartbeat/complete/fail chunk set")
+Rel(chunkSetWorker, chunkBuilder, "Строит chunks")
+Rel(chunkBuilder, embeddingClient, "Передает batch text inputs")
+Rel(embeddingClient, hf, "Embedding requests")
+Rel(embeddingClient, chunkSetWorker, "Embeddings")
+Rel(batchEntry, batchWorker, "Background/self-resume")
+Rel(batchWorker, db, "claim/request/finish batch item")
+Rel(batchWorker, ingestionEntry, "Запускает kb-ingestion для chunk_set_id")
+
+note bottom of kb
+  Knowledge Base articles - source of truth для retrieval.
+  knowledge_chunks - производные retrieval artifacts.
+end note
+
+@enduml

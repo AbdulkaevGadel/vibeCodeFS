@@ -1,54 +1,43 @@
 @startuml
-title Динамическая диаграмма - Поток webhook
+title Входящее Telegram-сообщение - runtime sequence
 
 actor "Telegram Bot API" as Telegram
-participant "telegram-webhook\nindex.ts" as Entry
-participant "env.ts" as Env
+participant "telegram-webhook\nindex.ts" as Webhook
 participant "parse-update.ts" as Parser
 participant "validate-message.ts" as Validation
 participant "get-bot-username.ts" as BotResolver
 participant "save-incoming-message.ts" as Persistence
-database "messages\nSupabase REST/Postgres" as Db
-participant "get-reply-text.ts" as ReplyBuilder
-participant "send-telegram-message.ts" as Sender
-participant "create-success-response.ts" as Success
+database "Postgres RPC\nprocess_incoming_telegram_message" as Rpc
+database "clients/chats/chat_messages" as Db
+participant "invoke-ai-orchestrator.ts" as InvokeAI
+participant "ai-orchestrator" as AI
 
-Telegram -> Entry: POST webhook update
-Entry -> Env: getBotToken()
-Env --> Entry: botToken
+Telegram -> Webhook: POST update
+Webhook -> Parser: parseUpdate(update)
+Parser --> Webhook: message, chatId, messageText
+Webhook -> Validation: canReplyToMessage / canPersistMessage
 
-alt botToken отсутствует
-  Entry -> Success: createSuccessResponse()
-  Success --> Telegram: HTTP 200
-else botToken присутствует
-Entry -> Parser: parseUpdate(update)
-Parser --> Entry: message, chatId, messageText
-Entry -> Validation: canReplyToMessage(message)
-Validation --> Entry: true/false
+alt invalid или unsupported update
+  Webhook --> Telegram: HTTP 200
+else valid client message
+  Webhook -> BotResolver: getBotUsername(BOT_TOKEN)
+  BotResolver --> Webhook: botUsername
+  Webhook -> Persistence: saveIncomingMessage(message, botUsername)
+  Persistence -> Rpc: POST /rest/v1/rpc/process_incoming_telegram_message
+  Rpc -> Db: upsert client/chat; insert chat_messages(client)
+  Db --> Rpc: persisted или duplicate
+  Rpc --> Persistence: chat_id, message_id, inserted, is_duplicate
+  Persistence --> Webhook: save result
 
-alt chatId отсутствует
-  Entry -> Success: createSuccessResponse()
-  Success --> Telegram: HTTP 200
-else chatId присутствует
-  Entry -> Validation: canPersistMessage(message)
-  Validation --> Entry: true/false
-
-  alt сообщение можно сохранять
-    Entry -> BotResolver: getBotUsername(botToken)
-    BotResolver --> Entry: botUsername
-    Entry -> Persistence: saveIncomingMessage(message, botUsername)
-    Persistence -> Db: insert row into messages
-    Db --> Persistence: результат insert
-    Persistence --> Entry: done
+  alt inserted = true
+    Webhook -> InvokeAI: EdgeRuntime.waitUntil(invokeAiOrchestrator)
+    InvokeAI -> AI: POST chat_id, trigger_message_id, correlation_id
+    AI --> InvokeAI: accepted/rejected
+  else duplicate
+    Webhook -> Webhook: skip AI invoke
   end
 
-  Entry -> ReplyBuilder: getReplyText(messageText)
-  ReplyBuilder --> Entry: replyText
-  Entry -> Sender: sendTelegramMessage(botToken, chatId, replyText)
-  Sender --> Telegram: sendMessage
-  Entry -> Success: createSuccessResponse()
-  Success --> Telegram: HTTP 200
-end
+  Webhook --> Telegram: HTTP 200
 end
 
 @enduml

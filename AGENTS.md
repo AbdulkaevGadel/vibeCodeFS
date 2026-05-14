@@ -442,6 +442,18 @@ Rules:
 
 ---
 
+## 17.0 Architecture Documentation Language
+
+Архитектурная документация и диаграммы проекта должны быть написаны на русском языке.
+
+Rules:
+- названия runtime-сущностей из кода не переводить: таблицы, RPC, Edge Functions, файлы, компоненты, env-переменные;
+- поясняющий текст, заголовки, подписи связей и описания в diagram-as-code писать на русском;
+- если английский термин является техническим стандартом или частью API, оставить его как есть;
+- не смешивать русский и английский без необходимости.
+
+---
+
 ## 17.1 Emerging Project Rules
 
 During refactoring or implementation, if a repeated decision becomes a stable project rule or pattern, the agent must explicitly call it out and propose adding it to the appropriate `AGENTS.md`.

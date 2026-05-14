@@ -1,22 +1,32 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
 
-title Контекст системы SupportBot
+title SupportBot - контекст системы
 
-Person(telegramUser, "Пользователь Telegram", "Пишет сообщение боту")
-Person(admin, "Администратор поддержки", "Входит в защищенную админку, читает сообщения и управляет ими")
+Person(telegramClient, "Клиент в Telegram", "Пишет в поддержку через Telegram bot")
+Person(manager, "Менеджер поддержки", "Работает с чатами, отвечает клиентам, ведет Knowledge Base")
+Person(admin, "Supervisor/Admin", "Управляет жизненным циклом чатов, менеджерами, архивом KB и обновлением embeddings")
 
-System(system, "Система SupportBot", "Принимает сообщения из Telegram, сохраняет их, автоматически отвечает и показывает их в защищенной админке")
+System(system, "SupportBot", "Backend-owned платформа поддержки: Telegram support, admin BFF, relational workflow, AI/RAG, realtime synchronization")
 
-System_Ext(telegramApi, "Telegram Bot API", "Внешняя платформа Telegram")
-System_Ext(supabase, "Supabase", "Платформа Edge Functions, Postgres, REST API и Auth")
-System_Ext(vercel, "Vercel", "Платформа хостинга админки")
+System_Ext(telegramApi, "Telegram Bot API", "Webhook updates, sendMessage, sendChatAction")
+System_Ext(supabase, "Supabase", "Edge Functions, Postgres, Auth, Realtime")
+System_Ext(vercel, "Vercel", "Хостинг Next.js приложения support-admin")
+System_Ext(huggingFace, "Hugging Face Inference API", "Провайдер embeddings и LLM")
 
-Rel(telegramUser, telegramApi, "Отправляет сообщение")
-Rel(telegramApi, system, "Отправляет webhook update")
-Rel(system, telegramApi, "Отправляет ответ бота")
-Rel(admin, system, "Входит в админку и работает с сообщениями")
-Rel(system, supabase, "Сохраняет сообщения, читает их и проверяет сессии")
-Rel(system, vercel, "Размещает UI админки")
+Rel(telegramClient, telegramApi, "Отправляет сообщения боту")
+Rel(telegramApi, system, "Доставляет webhook updates")
+Rel(system, telegramApi, "Отправляет ответы менеджера и AI")
+Rel(manager, system, "Работает в защищенной админке")
+Rel(admin, system, "Выполняет привилегированные admin workflows")
+Rel(system, supabase, "Хранит support/AI/KB state; выполняет RPC; использует Auth/Realtime")
+Rel(system, vercel, "Отдает UI support-admin")
+Rel(system, huggingFace, "Запрашивает embeddings и LLM responses из backend-owned flows")
+
+note right of system
+  Frontend не является владельцем бизнес-логики.
+  Realtime - только транспорт синхронизации.
+  AI orchestration полностью backend-owned.
+end note
 
 @enduml

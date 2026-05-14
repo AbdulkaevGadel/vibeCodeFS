@@ -1,0 +1,46 @@
+@startuml
+title Support workflow и escalation
+
+actor "Клиент" as Client
+actor "Менеджер" as Manager
+participant "telegram-webhook" as Webhook
+database "process_incoming_telegram_message" as IncomingRpc
+participant "ai-orchestrator" as AI
+database "publish_chat_ai_response" as PublishRpc
+database "chats" as Chats
+database "chat_assignments" as Assignment
+database "assignment_history" as AssignmentHistory
+database "chat_status_history" as StatusHistory
+participant "support-admin Server Actions" as Actions
+database "workflow RPC" as WorkflowRpc
+
+Client -> Webhook: client message
+Webhook -> IncomingRpc: persist
+IncomingRpc -> Chats: create/update status open + last_message_at
+Webhook -> AI: invoke
+
+alt AI может ответить или уточнить
+  AI -> PublishRpc: response_kind answer/clarify/intent_reply
+  PublishRpc -> Chats: сохранить AI-eligible status
+else AI handoff
+  AI -> PublishRpc: response_kind handoff
+  PublishRpc -> Chats: status = waiting_operator
+  PublishRpc -> Assignment: очистить current assignment
+  PublishRpc -> StatusHistory: open/in_progress -> waiting_operator
+end
+
+Manager -> Actions: взять чат в работу
+Actions -> WorkflowRpc: take_chat_into_work
+WorkflowRpc -> Assignment: set current_manager_id
+WorkflowRpc -> AssignmentHistory: append assignment event
+WorkflowRpc -> Chats: status = in_progress
+WorkflowRpc -> StatusHistory: append status event
+
+Manager -> Actions: transfer/status/resolve/delete/read/send
+Actions -> WorkflowRpc: transfer_chat / update_chat_status / resolve_chat / delete_* / mark_chat_as_read / process_manager_outcoming_message
+WorkflowRpc -> Chats: mutate workflow/read timestamps
+WorkflowRpc -> Assignment: current assignment state
+WorkflowRpc -> AssignmentHistory: assignment audit
+WorkflowRpc -> StatusHistory: lifecycle audit
+
+@enduml

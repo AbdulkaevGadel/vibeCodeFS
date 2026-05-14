@@ -1,0 +1,39 @@
+@startuml
+title Auth / BFF boundary
+
+actor "Браузер менеджера" as Browser
+participant "Next.js login/reset pages" as AuthPages
+participant "Protected layout" as Layout
+participant "Server Components\npage.tsx" as Pages
+participant "Server Actions" as Actions
+participant "Supabase server client" as ServerClient
+participant "Supabase browser client" as BrowserClient
+database "Supabase Auth" as Auth
+database "Supabase Postgres\nRLS/RPC" as Db
+participant "Supabase Realtime" as Realtime
+
+Browser -> AuthPages: login/recovery/reset
+AuthPages -> ServerClient: server action
+ServerClient -> Auth: signIn/reset/updateUser
+
+Browser -> Layout: protected route
+Layout -> ServerClient: auth.getUser()
+ServerClient -> Auth: validate cookie-backed session
+
+Pages -> ServerClient: read page data
+ServerClient -> Db: authenticated read models / RPC
+
+Browser -> Actions: form/action invocation
+Actions -> ServerClient: authenticated server client
+Actions -> Db: privileged-by-RPC mutation
+
+Browser -> BrowserClient: realtime client
+BrowserClient -> Realtime: postgres_changes subscription
+Db -> Realtime: WAL changes, разрешенные publication/RLS
+
+note bottom
+  BFF владеет request/session boundary.
+  DB/RPC владеет business rules support и KB.
+end note
+
+@enduml

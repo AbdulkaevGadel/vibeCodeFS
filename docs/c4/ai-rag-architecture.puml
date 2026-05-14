@@ -1,0 +1,48 @@
+@startuml
+title AI/RAG архитектура
+
+actor "Клиент в Telegram" as Client
+participant "telegram-webhook" as Webhook
+database "RPC process_incoming_telegram_message" as IncomingRpc
+database "chat_messages(client)" as ClientMessage
+participant "ai-orchestrator" as AI
+database "chat_ai_runs" as Runs
+participant "Hugging Face\nEmbeddings" as Emb
+database "save_chat_ai_retrieval_from_json_v1" as RetrievalRpc
+database "knowledge_chunks\npgvector + FTS/trigram" as Chunks
+database "save_chat_ai_context_prompt_snapshot" as SnapshotRpc
+participant "Hugging Face\nLLM" as LLM
+database "publish_chat_ai_response" as PublishRpc
+database "chat_messages(ai)" as AiMessage
+participant "Telegram Bot API" as Telegram
+
+Client -> Webhook: сообщение клиента
+Webhook -> IncomingRpc: сохранить входящее сообщение
+IncomingRpc -> ClientMessage: insert sender_type=client
+Webhook -> AI: background invoke(chat_id, trigger_message_id)
+AI -> Runs: start + mark processing
+
+alt intent-only branch
+  AI -> Runs: save_chat_ai_intent_result(retrieval_status=skipped)
+else RAG branch
+  AI -> Emb: query embedding
+  AI -> RetrievalRpc: embedding json + query + threshold + top-k
+  RetrievalRpc -> Chunks: hybrid/vector search по active completed chunks
+  RetrievalRpc -> Runs: сохранить retrieval status/chunks/scores
+  AI -> SnapshotRpc: сохранить context_snapshot + prompt_snapshot
+  SnapshotRpc -> Runs: обновить snapshots
+  AI -> LLM: prompt
+end
+
+AI -> PublishRpc: publish response_kind + text
+PublishRpc -> AiMessage: insert sender_type=ai, delivery_status=pending
+PublishRpc -> Runs: complete run + response_message_id
+
+alt response_kind=handoff
+  PublishRpc -> PublishRpc: status чата = waiting_operator; очистить assignment; записать status history
+end
+
+AI -> Telegram: sendMessage
+AI -> AiMessage: update delivery_status sent/failed
+
+@enduml
