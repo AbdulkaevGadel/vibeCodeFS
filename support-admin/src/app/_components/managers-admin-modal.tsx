@@ -2,7 +2,7 @@
 
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Manager } from "../_lib/page-types";
+import { isManagerRole, Manager } from "../_lib/page-types";
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
 import {
@@ -15,15 +15,13 @@ type ManagersAdminModalProps = {
   managers: Manager[];
 };
 
-type ManagerRole = "admin" | "support" | "supervisor";
-
 const sectionClassName = "rounded-xl border border-slate-200 p-4";
 const sectionTitleClassName = "text-sm font-bold uppercase tracking-[0.18em] text-slate-500";
 const formGridClassName = "mt-4 grid gap-3 md:grid-cols-2";
 const inputClassName =
   "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const selectClassName =
-  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
+  "support-interactive w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const tableHeaderClassName = "text-left text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400";
 const tableCellClassName = "border-t border-slate-100 py-3 pr-3 text-sm text-slate-700";
 const successMessageClassName =
@@ -42,6 +40,11 @@ const editActionsClassName = "flex items-end gap-3";
 
 function getManagerFullName(manager: Manager) {
   return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
+}
+
+function readManagerRoleFromForm(formData: FormData) {
+  const role = formData.get("role")?.toString();
+  return isManagerRole(role) ? role : "support";
 }
 
 export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
@@ -93,7 +96,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
   const handleAddManager = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const role = formData.get("role")?.toString() as ManagerRole;
+    const role = readManagerRoleFromForm(formData);
 
     runAction(
       () =>
@@ -113,7 +116,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
     if (!editingManager) return;
 
     const formData = new FormData(event.currentTarget);
-    const role = formData.get("role")?.toString() as ManagerRole;
+    const role = readManagerRoleFromForm(formData);
 
     runAction(
       () =>

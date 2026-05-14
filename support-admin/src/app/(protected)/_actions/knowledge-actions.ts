@@ -6,6 +6,25 @@ import { ArticleStatus } from "../../_lib/page-types";
 import { getCurrentManager } from "../../_lib/manager-utils";
 import { mapEmbeddingRefreshBatch, mapEmbeddingState } from "../../_lib/get-knowledge-base-data";
 
+type JsonObject = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null;
+}
+
+function parseJsonObject(text: string): JsonObject | null {
+  try {
+    const parsed: unknown = text ? JSON.parse(text) : null;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getActionErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 /**
  * Создает или обновляет статью Базы Знаний.
  * Реализует Optimistic Locking через проверку версии.
@@ -71,9 +90,9 @@ export async function upsertArticleAction(
       revalidatePath("/knowledge-base");
       return { data };
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Upsert Error:", err);
-    return { error: err.message || "Произошла внутренняя ошибка" };
+    return { error: getActionErrorMessage(err, "Произошла внутренняя ошибка") };
   }
 }
 
@@ -103,9 +122,9 @@ export async function setArticleStatusAction(id: string, status: ArticleStatus, 
 
     revalidatePath("/knowledge-base");
     return { data };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Status Error:", err);
-    return { error: err.message || "Ошибка при изменении статуса" };
+    return { error: getActionErrorMessage(err, "Ошибка при изменении статуса") };
   }
 }
 
@@ -136,9 +155,9 @@ export async function deleteArticleAction(id: string, expectedVersion: number) {
 
     revalidatePath("/knowledge-base");
     return { data };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Delete Error:", err);
-    return { error: err.message || "Ошибка при удалении статьи" };
+    return { error: getActionErrorMessage(err, "Ошибка при удалении статьи") };
   }
 }
 
@@ -217,9 +236,9 @@ export async function refreshArticleEmbeddingsAction(id: string, expectedVersion
 
     revalidatePath("/knowledge-base");
     return { data: result, message: "Обновление знаний ИИ запущено" };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Embedding Refresh Error:", err);
-    return { error: err.message || "Ошибка при обновлении знаний ИИ" };
+    return { error: getActionErrorMessage(err, "Ошибка при обновлении знаний ИИ") };
   }
 }
 
@@ -242,9 +261,9 @@ export async function getArticleEmbeddingStateAction(id: string) {
     return {
       data: mapEmbeddingState(data),
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Embedding State Error:", err);
-    return { error: err.message || "Ошибка при загрузке статуса знаний ИИ" };
+    return { error: getActionErrorMessage(err, "Ошибка при загрузке статуса знаний ИИ") };
   }
 }
 
@@ -315,9 +334,9 @@ export async function startKnowledgeEmbeddingRefreshBatchAction() {
         ? "Массовое обновление уже выполняется."
         : "Массовое обновление знаний ИИ запущено.",
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Embedding Refresh Batch Error:", err);
-    return { error: err.message || "Ошибка при массовом обновлении знаний ИИ" };
+    return { error: getActionErrorMessage(err, "Ошибка при массовом обновлении знаний ИИ") };
   }
 }
 
@@ -342,9 +361,9 @@ export async function getKnowledgeEmbeddingRefreshBatchStateAction() {
     return {
       data: await readEmbeddingRefreshBatchState(),
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Knowledge Base Embedding Refresh Batch State Error:", err);
-    return { error: err.message || "Ошибка при загрузке прогресса обновления знаний ИИ" };
+    return { error: getActionErrorMessage(err, "Ошибка при загрузке прогресса обновления знаний ИИ") };
   }
 }
 
@@ -409,13 +428,7 @@ async function invokeKbEmbeddingRefreshBatch(batchId: string | null) {
   });
 
   const responseText = await response.text();
-  let body: any = null;
-
-  try {
-    body = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    body = null;
-  }
+  const body = parseJsonObject(responseText);
 
   if (!response.ok || body?.ok === false) {
     console.error("KB embedding refresh batch invocation failed:", {
@@ -452,13 +465,7 @@ async function invokeKbIngestion(chunkSetId: string) {
   });
 
   const responseText = await response.text();
-  let body: any = null;
-
-  try {
-    body = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    body = null;
-  }
+  const body = parseJsonObject(responseText);
 
   if (!response.ok || body?.ok === false) {
     console.error("KB ingestion invocation failed:", {

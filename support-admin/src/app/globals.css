@@ -90,6 +90,16 @@ body {
   background: var(--support-surface-muted);
 }
 
+/* Interaction */
+.support-interactive {
+  cursor: pointer;
+}
+
+.support-interactive:disabled,
+.support-interactive[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Text */
 .support-text-primary {
   color: var(--support-text-primary);

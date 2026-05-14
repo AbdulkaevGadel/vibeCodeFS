@@ -2,12 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { sendManagerMessageAction } from "../(protected)/_actions/chat-actions";
+import { ChatMessage } from "../_lib/page-types";
 import { Button } from "@/shared/ui/button";
 import { Toast, useToastState } from "@/shared/ui/toast";
 
+export type OptimisticManagerMessage = ChatMessage & {
+  senderType: "manager";
+  deliveryStatus: "pending";
+  clientMessageId: string;
+};
+
 type ChatMessageInputProps = {
   chatId: string;
-  onLocalMessage?: (msg: any) => void;
+  onLocalMessage?: (message: OptimisticManagerMessage) => void;
 };
 
 const wrapperClassName = "mt-6 border-t border-slate-200 pt-6";
@@ -26,9 +33,7 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
     if (!text.trim() || isPending) return;
 
     const clientMessageId = crypto.randomUUID();
-
-
-    onLocalMessage?.({
+    const optimisticMessage: OptimisticManagerMessage = {
       id: "temp-" + clientMessageId,
       chatId,
       senderType: "manager",
@@ -39,7 +44,9 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
       clientMessageId,
       legacyMessageId: null,
       createdAt: new Date().toISOString(),
-    });
+    };
+
+    onLocalMessage?.(optimisticMessage);
 
     setText("");
 

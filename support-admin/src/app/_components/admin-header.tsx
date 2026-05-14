@@ -1,135 +1,68 @@
-"use client";
-
-import { useEffect, useState, useTransition } from "react";
-import { RefreshButton } from "../refresh-button";
-import {
-  BotOption,
-  KnowledgeEmbeddingRefreshBatch,
-  KnowledgeEmbeddingSummary,
-  Manager,
-} from "../_lib/page-types";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ReactNode } from "react";
 import { Button } from "@/shared/ui/button";
-import { Dialog } from "@/shared/ui/dialog";
-import { Toast, useToastState } from "@/shared/ui/toast";
 import { logoutAction } from "../_actions/logout";
-import { BotTabs } from "./bot-tabs";
+import { Manager } from "../_lib/page-types";
+import { RefreshButton } from "../refresh-button";
 import { ManagersAdminModal } from "./managers-admin-modal";
-import {
-  getKnowledgeEmbeddingRefreshBatchStateAction,
-  startKnowledgeEmbeddingRefreshBatchAction,
-} from "../(protected)/_actions/knowledge-actions";
 
 const headerClassName = "support-panel-strong p-5 sm:p-6";
-const headerLayoutClassName =
-  "flex flex-col gap-5";
+const headerLayoutClassName = "flex flex-col gap-5";
 const headerTopClassName = "flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between";
 const headerTitleWrapperClassName = "flex flex-wrap items-baseline gap-x-4 gap-y-1";
-const headerBottomClassName = "grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,520px)]";
 const sectionTitleClassName = "support-text-secondary text-xs uppercase tracking-[0.35em]";
 const headerTitleClassName = "support-text-primary text-3xl font-semibold tracking-tight";
 const actionsWrapperClassName = "flex flex-wrap items-center gap-2 lg:justify-end";
-const kbStatsGridClassName = "grid gap-3 sm:grid-cols-2";
-const chatStatsGridClassName = "grid gap-3 md:grid-cols-3";
-const darkStatCardClassName = "support-surface-accent rounded-2xl px-4 py-3";
-const lightStatCardClassName = "support-surface-default rounded-2xl px-4 py-3";
-const statLabelOnDarkClassName = "text-xs uppercase tracking-[0.24em] text-white/60";
-const statLabelClassName = "support-text-muted text-xs uppercase tracking-[0.24em]";
-const darkStatValueClassName = "mt-2 text-lg font-semibold";
-const statValueClassName = "support-text-primary mt-2 text-2xl font-semibold";
-const currentManagerPanelClassName =
-  "support-surface-default rounded-2xl px-4 py-3";
-const currentManagerMetaClassName = statLabelClassName;
-const currentManagerNameClassName = "support-text-primary mt-2 truncate text-lg font-semibold";
-const kbEmbeddingPanelClassName = "support-surface-default rounded-2xl px-4 py-3";
-const kbEmbeddingHeaderClassName = "flex flex-wrap items-center justify-between gap-3";
-const kbEmbeddingTitleWrapperClassName = "flex items-center gap-2";
-const kbEmbeddingHeaderActionsClassName = "flex flex-wrap items-center gap-2";
-const kbEmbeddingTitleClassName = "support-text-muted text-xs font-bold uppercase tracking-[0.22em]";
-const kbEmbeddingHelpClassName =
-  "inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] font-bold text-slate-500";
-const kbEmbeddingStatsClassName = "mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4";
-const kbEmbeddingStatClassName = "min-w-0 rounded-xl border border-slate-100 bg-white/70 px-3 py-2";
-const kbEmbeddingStatLabelClassName = "support-text-muted block truncate text-[10px] font-bold uppercase tracking-[0.12em]";
-const kbEmbeddingStatValueClassName = "support-text-primary mt-1 block text-base font-semibold";
-const kbBatchProgressClassName = "mt-3 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs";
-const kbBatchProgressHeaderClassName = "flex items-center justify-between gap-3";
-const kbBatchProgressTextClassName = "support-text-primary font-semibold";
-const kbBatchProgressMetaClassName = "support-text-muted";
-const kbBatchProgressTrackClassName = "mt-2 h-2 overflow-hidden rounded-full bg-slate-100";
-const kbBatchProgressFillClassName = "h-full rounded-full bg-slate-950 transition-all";
-const kbBatchFooterClassName = "mt-3 flex flex-wrap items-center justify-between gap-2";
-const kbBatchLogBodyClassName = "max-h-[520px] space-y-3 overflow-y-auto";
-const kbBatchLogItemClassName = "rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800";
-const kbBatchLogItemTitleClassName = "font-semibold";
-const kbBatchLogItemMetaClassName = "mt-1 text-xs text-red-700/80";
-const kbBatchLogEmptyClassName = "support-text-muted rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm";
+const headerContentClassName = "grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,520px)]";
 
 type AdminHeaderProps = {
-  headerBotLabel: string;
-  messageCount: number;
-  chatCount: number;
-  botOptions: BotOption[];
-  selectedBotKey: string | null;
-  allManagers: Manager[];
+  title: string;
+  eyebrow?: string;
   currentManager: Manager | null;
-  kbTotalCount?: number;
-  kbPublishedCount?: number;
-  kbEmbeddingSummary?: KnowledgeEmbeddingSummary;
-  kbEmbeddingRefreshBatch?: KnowledgeEmbeddingRefreshBatch | null;
+  allManagers: Manager[];
+  navigationHref: string;
+  navigationLabel: string;
+  navigationActive?: boolean;
+  secondaryActions?: ReactNode;
+  stats: ReactNode;
+  sidePanel?: ReactNode;
+  bottom?: ReactNode;
 };
 
 export function AdminHeader({
-  headerBotLabel,
-  messageCount,
-  chatCount,
-  botOptions,
-  selectedBotKey,
-  allManagers,
+  title,
+  eyebrow = "VibeCode Support",
   currentManager,
-  kbTotalCount = 0,
-  kbPublishedCount = 0,
-  kbEmbeddingSummary,
-  kbEmbeddingRefreshBatch = null,
+  allManagers,
+  navigationHref,
+  navigationLabel,
+  navigationActive = false,
+  secondaryActions,
+  stats,
+  sidePanel,
+  bottom,
 }: AdminHeaderProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const isKnowledgeBase = pathname?.startsWith("/knowledge-base");
-  const isArchiveView = searchParams?.get("view") === "archive";
-  const canManageKnowledgeArchive = currentManager?.role === "admin" || currentManager?.role === "supervisor";
-  const statsGridClassName = isKnowledgeBase ? kbStatsGridClassName : chatStatsGridClassName;
-
   return (
     <header className={headerClassName}>
       <div className={headerLayoutClassName}>
         <div className={headerTopClassName}>
           <div className={headerTitleWrapperClassName}>
-            <p className={sectionTitleClassName}>VibeCode Support</p>
-            <h1 className={headerTitleClassName}>{headerBotLabel}</h1>
+            <p className={sectionTitleClassName}>{eyebrow}</p>
+            <h1 className={headerTitleClassName}>{title}</h1>
           </div>
 
           <div className={actionsWrapperClassName}>
             <RefreshButton />
 
             <Button
-              href={isKnowledgeBase ? "/" : "/knowledge-base"}
+              href={navigationHref}
               variant="secondary"
+              active={navigationActive}
               size="sm"
             >
-              {isKnowledgeBase ? "← Вернуться к чатам" : "База знаний"}
+              {navigationLabel}
             </Button>
 
-            {isKnowledgeBase && canManageKnowledgeArchive ? (
-              <Button
-                href={isArchiveView ? "/knowledge-base" : "/knowledge-base?view=archive"}
-                variant="secondary"
-                active={isArchiveView}
-                size="sm"
-              >
-                {isArchiveView ? "Активные статьи" : "Архив"}
-              </Button>
-            ) : null}
+            {secondaryActions}
 
             {currentManager?.role === "admin" ? (
               <ManagersAdminModal managers={allManagers} />
@@ -150,323 +83,13 @@ export function AdminHeader({
           </div>
         </div>
 
-        <div className={headerBottomClassName}>
-          <div className={statsGridClassName}>
-            {!isKnowledgeBase && (
-              <div className={darkStatCardClassName}>
-                <p className={statLabelOnDarkClassName}>Бот</p>
-                <p className={darkStatValueClassName}>{headerBotLabel}</p>
-              </div>
-            )}
-            <div className={lightStatCardClassName}>
-              <p className={statLabelClassName}>
-                {isKnowledgeBase ? "Всего статей" : "Сообщений"}
-              </p>
-              <p className={statValueClassName}>
-                {isKnowledgeBase ? kbTotalCount : messageCount}
-              </p>
-            </div>
-            <div className={lightStatCardClassName}>
-              <p className={statLabelClassName}>
-                {isKnowledgeBase ? "Опубликовано" : "Чатов"}
-              </p>
-              <p className={statValueClassName}>
-                {isKnowledgeBase ? kbPublishedCount : chatCount}
-              </p>
-            </div>
-          </div>
-
-          {isKnowledgeBase && kbEmbeddingSummary ? (
-            <KbEmbeddingRefreshPanel
-              summary={kbEmbeddingSummary}
-              initialBatch={kbEmbeddingRefreshBatch}
-              canManage={canManageKnowledgeArchive}
-              onSettled={() => router.refresh()}
-            />
-          ) : null}
-
-          {!isKnowledgeBase && currentManager ? (
-            <CurrentManagerPanel manager={currentManager} />
-          ) : null}
+        <div className={headerContentClassName}>
+          {stats}
+          {sidePanel}
         </div>
       </div>
 
-      {!isKnowledgeBase && <BotTabs botOptions={botOptions} selectedBotKey={selectedBotKey} />}
+      {bottom}
     </header>
   );
-}
-
-type CurrentManagerPanelProps = {
-  manager: Manager;
-};
-
-function CurrentManagerPanel({ manager }: CurrentManagerPanelProps) {
-  const managerName = [manager.displayName, manager.lastName].filter(Boolean).join(" ");
-
-  return (
-    <div className={currentManagerPanelClassName}>
-      <p className={currentManagerMetaClassName}>Вы вошли как</p>
-      <p className={currentManagerNameClassName} title={`${managerName || manager.email || "Менеджер"} (${manager.role})`}>
-        {managerName || manager.email || "Менеджер"} ({manager.role})
-      </p>
-    </div>
-  );
-}
-
-type KbEmbeddingRefreshPanelProps = {
-  summary: KnowledgeEmbeddingSummary;
-  initialBatch: KnowledgeEmbeddingRefreshBatch | null;
-  canManage: boolean;
-  onSettled: () => void;
-};
-
-function KbEmbeddingRefreshPanel({
-  summary,
-  initialBatch,
-  canManage,
-  onSettled,
-}: KbEmbeddingRefreshPanelProps) {
-  const [batch, setBatch] = useState(initialBatch);
-  const [logBatch, setLogBatch] = useState<KnowledgeEmbeddingRefreshBatch | null>(() => getVisibleLogBatch(initialBatch));
-  const { toast, showToast, closeToast, clearToast } = useToastState<"success" | "error">();
-  const [isLogOpen, setIsLogOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const isRunning = batch?.status === "running";
-  const logItems = logBatch?.items.filter(isVisibleBatchLogItem) ?? [];
-  const canOpenLog = logItems.length > 0;
-  const canRecoverRunningBatch = isRunning && summary.updatingCount === 0;
-  const canStart = canManage && (
-    (!isRunning && summary.refreshableCount > 0)
-    || canRecoverRunningBatch
-  );
-  const startButtonLabel = isRunning ? "Продолжить" : "Обновить все";
-  const progressPercent = batch && batch.totalCount > 0
-    ? Math.round((batch.processedCount / batch.totalCount) * 100)
-    : 0;
-
-  useEffect(() => {
-    setBatch(initialBatch);
-    setLogBatch((current) => getVisibleLogBatch(initialBatch) ?? current);
-  }, [initialBatch]);
-
-  useEffect(() => {
-    if (!isRunning) {
-      return;
-    }
-
-    const intervalId = window.setInterval(async () => {
-      const result = await getKnowledgeEmbeddingRefreshBatchStateAction();
-
-      if (result.error) {
-        showToast(result.error, "error");
-        return;
-      }
-
-      setBatch(result.data ?? null);
-      setLogBatch((current) => getVisibleLogBatch(result.data ?? null) ?? current);
-
-      if (result.data && result.data.status !== "running") {
-        onSettled();
-      }
-    }, 3000);
-
-    return () => window.clearInterval(intervalId);
-  }, [isRunning, onSettled]);
-
-  const handleStart = () => {
-    clearToast();
-
-    startTransition(async () => {
-      const result = await startKnowledgeEmbeddingRefreshBatchAction();
-
-      if (result.error) {
-        setBatch(result.data ?? null);
-        setLogBatch((current) => getVisibleLogBatch(result.data ?? null) ?? current);
-        showToast(result.error, "error");
-        return;
-      }
-
-      setBatch(result.data ?? null);
-      setLogBatch((current) => getVisibleLogBatch(result.data ?? null) ?? current);
-      showToast(result.message ?? "Массовое обновление знаний ИИ запущено.", "success");
-    });
-  };
-
-  return (
-    <div className={kbEmbeddingPanelClassName}>
-      <div className={kbEmbeddingHeaderClassName}>
-        <div className={kbEmbeddingTitleWrapperClassName}>
-          <p className={kbEmbeddingTitleClassName}>Знания ИИ</p>
-          <span
-            className={kbEmbeddingHelpClassName}
-            title="Знания ИИ — это подготовленные embeddings базы знаний. Они нужны, чтобы ИИ мог находить релевантные статьи при ответе клиенту."
-          >
-            ?
-          </span>
-        </div>
-        <div className={kbEmbeddingHeaderActionsClassName}>
-          {canOpenLog ? (
-            <Button
-              type="button"
-              onClick={() => setIsLogOpen(true)}
-              variant="secondary"
-              size="sm"
-            >
-              Лог
-            </Button>
-          ) : null}
-          {canManage ? (
-            <Button
-              type="button"
-              onClick={handleStart}
-              isLoading={isPending}
-              disabled={!canStart}
-              variant="primary"
-              size="sm"
-            >
-              {startButtonLabel}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className={kbEmbeddingStatsClassName}>
-        <EmbeddingStat label="Актуальны" value={summary.actualCount} />
-        <EmbeddingStat label="К обновлению" value={summary.refreshableCount} />
-        <EmbeddingStat label="В работе" value={summary.updatingCount} />
-        <EmbeddingStat label="Ошибки" value={summary.failedCount} />
-      </div>
-
-      {batch ? (
-        <div className={kbBatchProgressClassName}>
-          <div className={kbBatchProgressHeaderClassName}>
-            <span className={kbBatchProgressTextClassName}>
-              Обработано {batch.processedCount} из {batch.totalCount}
-            </span>
-            <span className={kbBatchProgressMetaClassName}>
-              {batch.status === "running" ? "В работе" : getBatchStatusLabel(batch.status)}
-            </span>
-          </div>
-          <div className={kbBatchProgressTrackClassName}>
-            <div
-              className={kbBatchProgressFillClassName}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <p className={kbBatchProgressMetaClassName}>
-            Успешно: {batch.completedCount} · Ошибок: {batch.failedCount} · Пропущено: {batch.skippedCount}
-          </p>
-
-          {canOpenLog ? (
-            <div className={kbBatchFooterClassName}>
-              <span className={kbBatchProgressMetaClassName}>
-                Ошибок и пропусков в логе: {logItems.length}
-              </span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {toast ? (
-        <Toast
-          key={toast.id}
-          message={toast.message}
-          variant={toast.variant}
-          onClose={() => closeToast(toast.id)}
-        />
-      ) : null}
-
-      {logBatch && isLogOpen ? (
-        <KbBatchLogModal
-          items={logItems}
-          onClose={() => setIsLogOpen(false)}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-type EmbeddingStatProps = {
-  label: string;
-  value: number;
-};
-
-function EmbeddingStat({ label, value }: EmbeddingStatProps) {
-  return (
-    <div className={kbEmbeddingStatClassName}>
-      <span className={kbEmbeddingStatLabelClassName}>{label}</span>
-      <span className={kbEmbeddingStatValueClassName}>{value}</span>
-    </div>
-  );
-}
-
-type KbBatchLogModalProps = {
-  items: KnowledgeEmbeddingRefreshBatch["items"];
-  onClose: () => void;
-};
-
-function KbBatchLogModal({ items, onClose }: KbBatchLogModalProps) {
-  return (
-    <Dialog
-      isOpen
-      title="Лог обновления знаний ИИ"
-      description="Ошибки и пропущенные статьи последнего batch."
-      onClose={onClose}
-      size="md"
-      bodyClassName={kbBatchLogBodyClassName}
-      overlayClassName="bg-slate-950/30"
-    >
-      {items.length === 0 ? (
-        <p className={kbBatchLogEmptyClassName}>Лог пуст.</p>
-      ) : (
-        items.map((item) => (
-          <div key={item.id} className={kbBatchLogItemClassName}>
-            <p className={kbBatchLogItemTitleClassName}>{item.articleTitle}</p>
-            <p className={kbBatchLogItemMetaClassName}>
-              {item.resultType ?? item.status}
-              {item.errorMessage ? `: ${item.errorMessage}` : ""}
-            </p>
-            {item.processedAt ? (
-              <p className={kbBatchLogItemMetaClassName}>
-                {new Date(item.processedAt).toLocaleString("ru-RU")}
-              </p>
-            ) : null}
-          </div>
-        ))
-      )}
-    </Dialog>
-  );
-}
-
-function isVisibleBatchLogItem(item: KnowledgeEmbeddingRefreshBatch["items"][number]) {
-  return item.status === "failed"
-    || (
-      item.status === "skipped"
-      && item.resultType !== "INGESTION_ALREADY_PROCESSING"
-      && item.resultType !== "ALREADY_ACTUAL"
-    );
-}
-
-function getVisibleLogBatch(batch: KnowledgeEmbeddingRefreshBatch | null) {
-  if (!batch) {
-    return null;
-  }
-
-  return batch.items.some(isVisibleBatchLogItem) ? batch : null;
-}
-
-function getBatchStatusLabel(status: KnowledgeEmbeddingRefreshBatch["status"]) {
-  if (status === "completed") {
-    return "Готово";
-  }
-
-  if (status === "completed_with_errors") {
-    return "Готово с ошибками";
-  }
-
-  if (status === "failed") {
-    return "Ошибка";
-  }
-
-  return "В работе";
 }

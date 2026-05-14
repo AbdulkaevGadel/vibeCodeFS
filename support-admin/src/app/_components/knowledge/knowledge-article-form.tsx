@@ -16,7 +16,7 @@ const fieldLabelClassName = "text-[10px] font-black support-text-muted uppercase
 const fieldInputClassName =
   "w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all shadow-inner";
 const selectInputClassName =
-  "w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer shadow-inner";
+  "support-interactive w-full bg-white/50 border border-black/10 rounded-2xl px-5 py-3 text-sm support-text-primary outline-none focus:border-indigo-500 transition-all appearance-none shadow-inner";
 const selectArrowClassName =
   "absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none support-text-muted";
 const textareaClassName =

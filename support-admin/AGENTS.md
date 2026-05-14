@@ -20,6 +20,9 @@ Rule:
 - do not turn `globals.css` into a dump for component-specific styles
 - do not introduce CSS Modules everywhere by default
 - do not add `clsx`, `cn`, `cva`, or similar helpers until class composition becomes repetitive enough to justify it
+- enabled interactive elements must use the project semantic `support-interactive` cursor behavior when they are not already covered by a shared primitive
+- shared primitives such as `Button`, `Dialog`, tooltip triggers, and reusable links should include `support-interactive` centrally
+- do not add one-off `cursor-pointer` / `disabled:cursor-not-allowed` classes when the element can use `support-interactive` or an existing shared primitive
 
 ## UI Reuse Check
 
@@ -53,6 +56,10 @@ Rules:
 - do not move logic to `shared` unless it has real cross-domain reuse;
 - keep business mutations in Server Actions / RPC, not in React hooks;
 - keep hooks focused on UI state and synchronization, not backend authority.
+- For React component files, keep the exported/main component as the final meaningful block whenever practical.
+- Place imports, types, constants, local helpers, and small private subcomponents above the exported/main component so the file can be read top-down.
+- Prefer separate route-local or feature-local modules for extracted components with a standalone UI role, especially when the parent file is already large.
+- Avoid leaving React subcomponents, type blocks, or helper functions below the main component unless there is a strong local reason.
 
 ## Async UI Sync Rule
 

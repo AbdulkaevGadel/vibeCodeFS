@@ -3,9 +3,9 @@ import { ChatSummary } from "../_lib/page-types";
 import { getQueryString } from "../_lib/page-utils";
 
 const activeItemClassName =
-  "support-surface-accent block rounded-2xl px-4 py-4 shadow-lg";
+  "support-interactive support-surface-accent block rounded-2xl px-4 py-4 shadow-lg";
 const inactiveItemClassName =
-  "support-surface-default support-text-primary block rounded-2xl px-4 py-4 transition hover:-translate-y-0.5 hover:border-slate-950 hover:shadow-md";
+  "support-interactive support-surface-default support-text-primary block rounded-2xl px-4 py-4 transition hover:-translate-y-0.5 hover:border-slate-950 hover:shadow-md";
 const itemContentClassName = "flex items-start justify-between gap-3";
 const itemBodyClassName = "min-w-0";
 const itemTitleClassName = "truncate text-base font-semibold";

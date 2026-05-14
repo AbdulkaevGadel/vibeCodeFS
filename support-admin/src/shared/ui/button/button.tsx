@@ -26,7 +26,7 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center rounded-full font-bold transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100";
+  const baseStyles = "support-interactive inline-flex items-center justify-center rounded-full font-bold transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:active:scale-100";
 
   const variants = {
     primary: "support-surface-accent text-white shadow-sm hover:shadow-md hover:scale-[1.01]",

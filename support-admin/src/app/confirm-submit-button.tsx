@@ -15,10 +15,12 @@ export function ConfirmSubmitButton({
   disabled,
   onConfirm,
 }: ConfirmSubmitButtonProps) {
+  const buttonClassName = `support-interactive ${className}`;
+
   return (
     <button
       type={onConfirm ? "button" : "submit"}
-      className={className}
+      className={buttonClassName}
       disabled={disabled}
       onClick={(event) => {
         if (!window.confirm(message)) {

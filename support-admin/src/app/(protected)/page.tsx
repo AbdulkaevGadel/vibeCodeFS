@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
 import { AdminHeader } from "../_components/admin-header";
+import {
+  ChatHeaderStats,
+  ChatHeaderTabs,
+  CurrentManagerPanel,
+} from "../_components/chat-header-content";
 import { ChatDetails } from "../_components/chat-details";
 import { ChatList } from "../_components/chat-list";
 import { ErrorAlert } from "../_components/error-alert";
@@ -21,13 +26,27 @@ export default async function Home({ searchParams }: PageProps) {
     <main className={styles.pageMain}>
       <div className={styles.pageContent}>
         <AdminHeader
-          headerBotLabel={pageData.headerBotLabel}
-          messageCount={pageData.botFilteredMessageCount}
-          chatCount={pageData.botFilteredChatCount}
-          botOptions={pageData.botOptions}
-          selectedBotKey={pageData.selectedBot?.key ?? null}
+          title={pageData.headerBotLabel}
           allManagers={pageData.allManagers}
           currentManager={pageData.currentManager}
+          navigationHref="/knowledge-base"
+          navigationLabel="База знаний"
+          stats={(
+            <ChatHeaderStats
+              botLabel={pageData.headerBotLabel}
+              messageCount={pageData.botFilteredMessageCount}
+              chatCount={pageData.botFilteredChatCount}
+            />
+          )}
+          sidePanel={pageData.currentManager ? (
+            <CurrentManagerPanel manager={pageData.currentManager} />
+          ) : null}
+          bottom={(
+            <ChatHeaderTabs
+              botOptions={pageData.botOptions}
+              selectedBotKey={pageData.selectedBot?.key ?? null}
+            />
+          )}
         />
 
         {pageData.statusMessage && pageData.statusVariant ? (

@@ -13,6 +13,7 @@ import {
   MessageSenderType,
   PageProps,
   SupportAdminPageData,
+  coerceManagerRole,
 } from "./page-types";
 import {
   getBotKey,
@@ -241,7 +242,7 @@ export async function getSupportAdminPageData(
         email: manager.email,
         displayName: manager.display_name,
         lastName: manager.last_name,
-        role: manager.role,
+        role: coerceManagerRole(manager.role),
       }));
     }
 

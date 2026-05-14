@@ -1,3 +1,4 @@
+import { TooltipMarker } from "@/shared/ui/tooltip-marker";
 import { ArticleEmbeddingStatus, KnowledgeArticle } from "../../_lib/page-types";
 
 type KnowledgeEmbeddingStatusProps = {
@@ -8,18 +9,15 @@ type EmbeddingUi = {
   icon: string;
   tooltip: string;
   buttonTitle: string;
-  className: string;
+  tone: "muted" | "success" | "warning" | "danger" | "info";
   isSpinner: boolean;
 };
-
-const embeddingBadgeBaseClassName =
-  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-black";
 
 const unavailableEmbeddingUi: EmbeddingUi = {
   icon: "-",
   tooltip: "Embeddings недоступны для этой статьи",
   buttonTitle: "Embeddings недоступны для этой статьи",
-  className: "border-slate-200 bg-slate-50 text-slate-400",
+  tone: "muted",
   isSpinner: false,
 };
 
@@ -27,7 +25,7 @@ const draftEmbeddingUi: EmbeddingUi = {
   icon: "!",
   tooltip: "Для появления в базе ИИ опубликуйте статью",
   buttonTitle: "Для появления в базе ИИ опубликуйте статью",
-  className: "border-amber-200 bg-amber-50 text-amber-600",
+  tone: "warning",
   isSpinner: false,
 };
 
@@ -37,35 +35,31 @@ const embeddingUiByStatus: Record<ArticleEmbeddingStatus, EmbeddingUi> = {
     icon: "✓",
     tooltip: "Embeddings актуальны",
     buttonTitle: "Embeddings уже актуальны",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-600",
+    tone: "success",
     isSpinner: false,
   },
   updating: {
     icon: "◌",
     tooltip: "Идёт обновление embeddings",
     buttonTitle: "Идёт обновление embeddings",
-    className: "border-sky-200 bg-sky-50 text-sky-600",
+    tone: "info",
     isSpinner: true,
   },
   failed: {
     icon: "⚠",
     tooltip: "Последнее обновление embeddings завершилось ошибкой. Попробуйте снова",
     buttonTitle: "Повторить обновление embeddings",
-    className: "border-red-200 bg-red-50 text-red-600",
+    tone: "danger",
     isSpinner: false,
   },
   outdated: {
     icon: "⚠",
     tooltip: "Embeddings устарели, требуется обновление",
     buttonTitle: "Обновить embeddings для текущей версии статьи",
-    className: "border-amber-200 bg-amber-50 text-amber-600",
+    tone: "warning",
     isSpinner: false,
   },
 };
-
-function getEmbeddingBadgeClassName(className: string) {
-  return `${embeddingBadgeBaseClassName} ${className}`;
-}
 
 export function getEmbeddingUi(article: {
   status: KnowledgeArticle["status"];
@@ -86,11 +80,12 @@ export function KnowledgeEmbeddingStatus({ article }: KnowledgeEmbeddingStatusPr
   const embeddingUi = getEmbeddingUi(article);
 
   return (
-    <span
-      title={embeddingUi.tooltip}
-      className={getEmbeddingBadgeClassName(embeddingUi.className)}
-    >
-      <span className={embeddingUi.isSpinner ? "animate-spin" : ""}>{embeddingUi.icon}</span>
-    </span>
+    <TooltipMarker
+      content={embeddingUi.tooltip}
+      label={embeddingUi.icon}
+      size="md"
+      tone={embeddingUi.tone}
+      labelClassName={embeddingUi.isSpinner ? "animate-spin" : ""}
+    />
   );
 }
