@@ -1,0 +1,34 @@
+@startuml
+title Realtime / event-driven синхронизация
+
+database "Supabase Postgres" as Db
+database "chats" as Chats
+database "chat_messages" as Messages
+participant "Supabase Realtime\npostgres_changes" as Realtime
+participant "Chat list hook\nuseChatListRealtime" as ListHook
+participant "Chat details hook\nuseChatDetailsRealtime" as DetailsHook
+participant "support-admin UI" as UI
+participant "DB trigger\ntr_message_deliver" as Trigger
+participant "telegram-outcoming" as Outcoming
+participant "Telegram Bot API" as Telegram
+
+Db -> Chats: INSERT/UPDATE/DELETE из RPC/AI/workflow
+Db -> Messages: INSERT/UPDATE из RPC/AI/delivery
+Chats -> Realtime: WAL event
+Messages -> Realtime: WAL event
+Realtime -> ListHook: chats * events; chat_messages INSERT
+Realtime -> DetailsHook: selected chat_messages INSERT/UPDATE; selected chat UPDATE
+ListHook -> UI: patch inbox list или refresh page
+DetailsHook -> UI: merge timeline/delivery state или refresh details
+
+Messages -> Trigger: только manager pending message
+Trigger -> Outcoming: pg_net HTTP POST
+Outcoming -> Telegram: sendMessage
+Outcoming -> Messages: delivery_status sent/failed
+
+note bottom
+  Realtime - слой синхронизации.
+  Он не владеет workflow decisions, AI orchestration или delivery side effects.
+end note
+
+@enduml

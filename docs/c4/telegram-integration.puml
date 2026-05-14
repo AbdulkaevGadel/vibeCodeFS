@@ -1,0 +1,35 @@
+@startuml
+title Интеграция с Telegram
+
+actor "Клиент в Telegram" as Client
+participant "Telegram Bot API" as Telegram
+participant "telegram-webhook" as Webhook
+database "Postgres RPC/schema" as Db
+participant "ai-orchestrator" as AI
+participant "telegram-outcoming" as Outcoming
+
+Client -> Telegram: отправляет сообщение боту
+Telegram -> Webhook: POST webhook update
+Webhook -> Db: process_incoming_telegram_message
+Webhook -> AI: background invoke для нового client message
+Webhook --> Telegram: HTTP 200
+
+group Доставка AI response
+  AI -> Db: publish_chat_ai_response inserts chat_messages(ai)
+  AI -> Telegram: sendMessage напрямую
+  AI -> Db: PATCH delivery_status
+end
+
+group Доставка manager response
+  Db -> Db: process_manager_outcoming_message inserts chat_messages(manager, pending)
+  Db -> Outcoming: pg_net HTTP trigger
+  Outcoming -> Telegram: sendMessage
+  Outcoming -> Db: update delivery_status
+end
+
+note bottom
+  Persistence входящих и исходящих сообщений принадлежит DB/RPC.
+  Delivery сейчас имеет разные runtime paths для manager и AI messages.
+end note
+
+@enduml

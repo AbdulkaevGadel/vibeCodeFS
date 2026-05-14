@@ -1,0 +1,43 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title ai-orchestrator Edge Function - компоненты
+
+Container_Boundary(ai, "ai-orchestrator") {
+  Component(entry, "HTTP entry point", "index.ts", "Валидирует method, internal secret и payload; запускает background processing")
+  Component(runLifecycle, "Жизненный цикл AI run", "start/mark/finish/recover RPC calls", "Создает, claim-ит, восстанавливает и завершает chat_ai_runs")
+  Component(stageDiagnostics, "Stage diagnostics", "update_chat_ai_run_stage", "Сохраняет current_stage/stage_error observability")
+  Component(intent, "Intent branch", "intent detection logic", "Обрабатывает greetings/intent-only ветки без retrieval")
+  Component(retrieval, "Retrieval pipeline", "embedding + save_chat_ai_retrieval_from_json_v1", "Генерирует query embedding и сохраняет retrieval result")
+  Component(contextPrompt, "Context/prompt builder", "buildContextAndPrompt", "Собирает recent history + KB fragments snapshots")
+  Component(llm, "LLM caller", "callLlmWithRetry", "Вызывает provider для финального текста RAG branch")
+  Component(publisher, "Publish boundary", "publish_chat_ai_response", "Создает ровно одно видимое AI chat_message и обрабатывает handoff")
+  Component(delivery, "AI Telegram delivery", "sendTelegramMessage + delivery status PATCH", "Отправляет AI message и обновляет chat_messages delivery state")
+}
+
+ContainerDb(db, "Supabase Postgres", "chat_ai_runs / chat_messages / knowledge_chunks / RPC")
+System_Ext(telegramApi, "Telegram Bot API")
+System_Ext(hf, "Hugging Face Inference API")
+
+Rel(entry, runLifecycle, "Запускает background flow")
+Rel(runLifecycle, db, "start_chat_ai_run / mark_chat_ai_run_processing / finish_chat_ai_run / recover_stale_chat_ai_runs")
+Rel(stageDiagnostics, db, "update_chat_ai_run_stage")
+Rel(retrieval, hf, "Embedding request")
+Rel(retrieval, db, "save_chat_ai_retrieval_from_json_v1")
+Rel(contextPrompt, db, "Читает trigger/history/KB fragments; сохраняет snapshots")
+Rel(llm, hf, "LLM request")
+Rel(publisher, db, "publish_chat_ai_response")
+Rel(delivery, telegramApi, "sendMessage")
+Rel(delivery, db, "PATCH chat_messages delivery_status")
+Rel(intent, publisher, "Публикует intent_reply/handoff, если применимо")
+Rel(retrieval, contextPrompt, "Retrieval hit собирает prompt context")
+Rel(contextPrompt, llm, "Prompt snapshot")
+Rel(llm, publisher, "Answer/clarify/handoff text")
+Rel(publisher, delivery, "Delivery payload")
+
+note bottom of ai
+  AI orchestration полностью backend-owned.
+  chat_ai_runs - execution/audit state, не пользовательский message stream.
+end note
+
+@enduml

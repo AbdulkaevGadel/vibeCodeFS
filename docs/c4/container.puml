@@ -1,32 +1,47 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title Диаграмма контейнеров SupportBot
+title SupportBot - диаграмма контейнеров
 
-Person(telegramUser, "Пользователь Telegram")
-Person(admin, "Администратор поддержки")
-System_Ext(telegramApi, "Telegram Bot API", "Внешняя платформа обмена сообщениями")
-System_Ext(supabase, "Supabase", "Платформа Postgres, REST API и Auth")
-System_Ext(vercel, "Vercel", "Платформа хостинга frontend")
+Person(telegramClient, "Клиент в Telegram")
+Person(manager, "Менеджер / Supervisor / Admin")
+System_Ext(telegramApi, "Telegram Bot API")
+System_Ext(huggingFace, "Hugging Face Inference API")
+System_Ext(vercel, "Vercel")
 
-System_Boundary(system, "Система SupportBot") {
-  Container(edgeFn, "telegram-webhook Edge Function", "Supabase Edge Functions / Deno", "Принимает webhook-запросы от Telegram, валидирует update, сохраняет сообщения и отправляет ответы")
-  ContainerDb(db, "messages storage", "Supabase Postgres / REST API", "Хранит входящие сообщения поддержки")
-  Container(webApp, "support-admin web app", "Next.js App Router / React / Tailwind CSS / @supabase/ssr", "Отдает auth-страницы и защищенную админку, показывает сообщения и чаты")
-  Container(routeHandlers, "admin mutation endpoints", "Next.js Route Handlers", "Удаляет отдельные сообщения или целые чаты через service role key")
-  Container(authFlow, "auth actions and routes", "Next.js Server Actions / Route Handlers / Supabase Auth", "Выполняет login, logout, recovery и reset password flow")
+System_Boundary(system, "SupportBot") {
+  Container(webApp, "support-admin", "Next.js App Router / React / Tailwind", "BFF + UI: server components, server actions, protected routes, realtime UI synchronization")
+  Container(webhook, "telegram-webhook", "Supabase Edge Function / Deno", "Принимает Telegram updates, сохраняет входящие сообщения клиента через RPC, планирует AI orchestrator")
+  Container(ai, "ai-orchestrator", "Supabase Edge Function / Deno", "Backend-owned AI run lifecycle, intent/RAG orchestration, publish и AI delivery")
+  Container(outcoming, "telegram-outcoming", "Supabase Edge Function / Deno", "Доставляет сообщения менеджера по запросу DB trigger и обновляет delivery status")
+  Container(kbIngestion, "kb-ingestion", "Supabase Edge Function / Deno", "Claim-ит Knowledge Base chunk sets, режет контент на chunks, генерирует embeddings, завершает ingestion")
+  Container(kbBatch, "kb-embedding-refresh-batch", "Supabase Edge Function / Deno", "Durable batch worker для массового обновления embeddings")
+  ContainerDb(db, "Supabase Postgres", "Postgres / pgvector / RPC / RLS / pg_net", "Support domain, KB domain, AI run state, read models, triggers, retrieval")
+  Container(auth, "Supabase Auth", "Auth", "Auth users менеджеров и проверка сессий")
+  Container(realtime, "Supabase Realtime", "WAL/postgres_changes", "Транспорт синхронизации для chats и chat_messages")
 }
 
-Rel(telegramUser, telegramApi, "Пишет боту")
-Rel(telegramApi, edgeFn, "POST webhook")
-Rel(edgeFn, telegramApi, "sendMessage")
-Rel(edgeFn, db, "Вставляет сообщение через REST API")
-Rel(admin, webApp, "Использует в браузере")
-Rel(webApp, authFlow, "Выполняет login, logout и recovery flow")
-Rel(authFlow, supabase, "Работает с Auth и сессией")
-Rel(webApp, db, "Читает сообщения через anon key")
-Rel(webApp, routeHandlers, "Отправляет действия на удаление")
-Rel(routeHandlers, db, "Удаляет сообщение/чат через service role key")
-Rel(webApp, vercel, "Размещается на")
+Rel(telegramClient, telegramApi, "Пишет боту")
+Rel(telegramApi, webhook, "POST webhook")
+Rel(webhook, db, "RPC process_incoming_telegram_message", "service_role")
+Rel(webhook, ai, "Background invoke", "internal secret + service_role")
+Rel(ai, db, "AI lifecycle/retrieval/publish RPC + REST PATCH", "service_role")
+Rel(ai, telegramApi, "sendMessage / sendChatAction")
+Rel(ai, huggingFace, "Embeddings + LLM calls")
+Rel(manager, webApp, "Работает в защищенном UI")
+Rel(webApp, auth, "Login/session/recovery")
+Rel(webApp, db, "Read models + RPC через server actions", "authenticated/server")
+Rel(webApp, kbIngestion, "Запускает article ingestion", "internal secret")
+Rel(webApp, kbBatch, "Запускает batch worker", "internal secret")
+Rel(db, outcoming, "pg_net HTTP trigger для сообщений менеджера")
+Rel(outcoming, telegramApi, "sendMessage")
+Rel(outcoming, db, "Обновляет chat_messages.delivery_status", "service_role")
+Rel(kbIngestion, db, "Claim/heartbeat/complete/fail ingestion RPC", "service_role")
+Rel(kbIngestion, huggingFace, "Embedding calls")
+Rel(kbBatch, db, "Claim/finish batch item RPC", "service_role")
+Rel(kbBatch, kbIngestion, "Запускает chunk-set ingestion")
+Rel(webApp, realtime, "Подписывается на chats/chat_messages")
+Rel(db, realtime, "Публикует WAL changes")
+Rel(vercel, webApp, "Хостит")
 
 @enduml

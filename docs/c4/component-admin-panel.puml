@@ -1,37 +1,54 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
-title Компоненты support-admin
+title support-admin - компоненты
 
-Container_Boundary(webApp, "support-admin web app") {
-  Component(protectedLayout, "Protected Layout Guard", "src/app/(protected)/layout.tsx", "Проверяет сессию через Supabase Auth и защищает админку")
-  Component(homePage, "Protected Home Page", "src/app/(protected)/page.tsx", "Читает flash status, собирает экран админки и рендерит список чатов и сообщения")
-  Component(pageData, "Support Admin Page Data", "src/app/_lib/get-support-admin-page-data.ts", "Загружает сообщения, строит фильтры по ботам и выбирает активный чат")
-  Component(adminUi, "Admin UI Components", "src/app/_components/*", "Рендерят header, chat list, chat details и статусы")
-  Component(readClient, "Supabase Read Client", "src/lib/supabase.ts", "Создает Supabase-клиент с anon key")
-  Component(serverClient, "Supabase Server Client", "src/lib/supabase-server.ts", "Создает server-side Supabase-клиент с cookie-backed session")
-  Component(adminClient, "Supabase Admin Client", "src/lib/supabase-admin.ts", "Создает Supabase-клиент с service role key")
-  Component(authFlow, "Auth Pages and Actions", "src/app/login/*, forgot-password/*, reset-password/*, _actions/logout.ts", "Выполняют login, logout, recovery и reset password flow")
-  Component(confirmRoute, "Recovery Confirm Route", "src/app/auth/confirm/route.ts", "Подтверждает recovery token через Supabase Auth")
-  Component(deleteMessageRoute, "Delete Message Route", "src/app/api/messages/delete/route.ts", "Удаляет одно сообщение по id")
-  Component(deleteChatRoute, "Delete Chat Route", "src/app/api/chats/delete/route.ts", "Удаляет все сообщения выбранного чата")
+Container_Boundary(webApp, "support-admin Next.js App Router") {
+  Component(protectedLayout, "Защищенный layout", "src/app/(protected)/layout.tsx", "Server-side auth guard")
+  Component(homePage, "Страница inbox", "src/app/(protected)/page.tsx", "Собирает UI support inbox")
+  Component(kbPage, "Страница Knowledge Base", "src/app/(protected)/knowledge-base/page.tsx", "Собирает UI управления KB")
+  Component(adminData, "Данные support-admin", "src/app/_lib/get-support-admin-page-data.ts", "Читает managers, bot stats, inbox page RPC и сообщения выбранного чата")
+  Component(kbData, "Данные Knowledge Base", "src/app/_lib/get-knowledge-base-data.ts", "Читает articles, history и embedding states")
+  Component(chatActions, "Server actions для чатов", "src/app/(protected)/_actions/chat-actions.ts", "Вызывает support workflow RPC")
+  Component(kbActions, "Server actions для Knowledge Base", "src/app/(protected)/_actions/knowledge-actions.ts", "Вызывает KB RPC и запускает ingestion workers")
+  Component(inboxActions, "Server actions пагинации inbox", "src/app/(protected)/_actions/chat-inbox-actions.ts", "Вызывает get_support_admin_chat_inbox_page")
+  Component(realtimeHooks, "Realtime client hooks", "src/app/_components/*realtime.ts", "Патчат UI из postgres_changes")
+  Component(authFlow, "Auth pages/actions", "login, forgot-password, reset-password, auth/confirm", "Supabase Auth login/recovery/reset")
+  Component(serverClient, "Supabase server client", "src/lib/supabase-server.ts", "Cookie-backed authenticated server client")
+  Component(browserClient, "Supabase browser client", "src/lib/supabase.ts", "Anon/browser realtime client")
+  Component(adminClient, "Supabase admin client", "src/lib/supabase-admin.ts", "Service-role admin client для server-only paths")
 }
 
-ContainerDb(db, "messages storage", "Supabase Postgres")
-System_Ext(supabaseAuth, "Supabase Auth")
+ContainerDb(db, "Supabase Postgres", "Tables / Views / RPC")
+Container(auth, "Supabase Auth", "Auth")
+Container(realtime, "Supabase Realtime", "postgres_changes")
+Container(kbIngestion, "kb-ingestion", "Edge Function")
+Container(kbBatch, "kb-embedding-refresh-batch", "Edge Function")
 
-Rel(protectedLayout, serverClient, "Проверяет текущего пользователя")
-Rel(homePage, pageData, "Запрашивает данные страницы")
-Rel(pageData, readClient, "Создает read client")
-Rel(pageData, db, "Читает сообщения")
-Rel(homePage, adminUi, "Собирает UI")
-Rel(adminUi, deleteMessageRoute, "Отправляет удаление сообщения")
-Rel(adminUi, deleteChatRoute, "Отправляет удаление чата")
-Rel(deleteMessageRoute, adminClient, "Создает admin client")
-Rel(deleteChatRoute, adminClient, "Создает admin client")
-Rel(adminClient, db, "Удаляет данные")
-Rel(authFlow, serverClient, "Работает с сессией")
-Rel(confirmRoute, serverClient, "Проверяет recovery token")
-Rel(serverClient, supabaseAuth, "Читает и обновляет auth session")
+Rel(protectedLayout, serverClient, "auth.getUser")
+Rel(authFlow, serverClient, "Auth server actions")
+Rel(serverClient, auth, "Операции сессии")
+Rel(homePage, adminData, "Загружает данные support page")
+Rel(kbPage, kbData, "Загружает данные KB page")
+Rel(adminData, serverClient, "Создает server client")
+Rel(kbData, serverClient, "Создает server client")
+Rel(adminData, db, "Читает views/RPC/chat_messages")
+Rel(kbData, db, "Читает KB tables/RPC")
+Rel(chatActions, serverClient, "Authenticated RPC")
+Rel(chatActions, db, "take/transfer/status/delete/read/outgoing RPC")
+Rel(kbActions, serverClient, "Authenticated RPC")
+Rel(kbActions, db, "KB article и embedding RPC")
+Rel(kbActions, kbIngestion, "Запускает chunk-set ingestion")
+Rel(kbActions, kbBatch, "Запускает batch worker")
+Rel(inboxActions, db, "get_support_admin_chat_inbox_page")
+Rel(realtimeHooks, browserClient, "Создает browser client")
+Rel(realtimeHooks, realtime, "Подписывается на chats/chat_messages")
+Rel(db, realtime, "Публикует WAL changes")
+Rel(adminClient, db, "Server-only service_role, где используется")
+
+note bottom of webApp
+  support-admin - это BFF/UI.
+  Business rules живут в RPC, Edge Functions и DB constraints.
+end note
 
 @enduml

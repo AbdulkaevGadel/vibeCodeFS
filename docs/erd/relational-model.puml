@@ -4,6 +4,10 @@ hide circle
 hide methods
 skinparam linetype ortho
 
+entity "auth.users" as auth_users {
+  * id : uuid <<PK>>
+}
+
 entity "clients" as clients {
   * id : uuid <<PK>>
   --
@@ -11,8 +15,6 @@ entity "clients" as clients {
   username : varchar
   first_name : varchar
   last_name : varchar
-  created_at : timestamptz
-  updated_at : timestamptz
 }
 
 entity "managers" as managers {
@@ -21,9 +23,8 @@ entity "managers" as managers {
   auth_user_id : uuid <<UK, FK>>
   email : varchar
   display_name : varchar
-  role : varchar
-  created_at : timestamptz
-  updated_at : timestamptz
+  last_name : varchar
+  role : admin|support|supervisor
 }
 
 entity "chats" as chats {
@@ -32,21 +33,24 @@ entity "chats" as chats {
   telegram_chat_id : bigint
   client_id : uuid <<FK>>
   bot_username : varchar
-  status : varchar
+  status : open|waiting_operator|in_progress|escalated|resolved|closed
   subject : varchar
-  created_at : timestamptz
-  updated_at : timestamptz
+  last_message_at : timestamptz
+  last_read_at : timestamptz
 }
 
-entity "messages" as messages {
+entity "chat_messages" as chat_messages {
   * id : uuid <<PK>>
   --
   chat_id : uuid <<FK>>
-  sender_type : varchar
+  sender_type : client|manager|ai|system
   manager_id : uuid <<FK, nullable>>
   text : text
   telegram_message_id : bigint <<nullable>>
   legacy_message_id : bigint <<nullable>>
+  delivery_status : pending|sent|failed
+  delivery_error : text
+  client_message_id : uuid <<UK, nullable>>
   created_at : timestamptz
 }
 
@@ -55,8 +59,6 @@ entity "chat_assignments" as chat_assignments {
   --
   current_manager_id : uuid <<FK>>
   assigned_by_manager_id : uuid <<FK, nullable>>
-  created_at : timestamptz
-  updated_at : timestamptz
 }
 
 entity "assignment_history" as assignment_history {
@@ -66,32 +68,138 @@ entity "assignment_history" as assignment_history {
   from_manager_id : uuid <<FK, nullable>>
   to_manager_id : uuid <<FK>>
   assigned_by_manager_id : uuid <<FK, nullable>>
-  created_at : timestamptz
 }
 
+entity "chat_status_history" as chat_status_history {
+  * id : uuid <<PK>>
+  --
+  chat_id : uuid <<FK>>
+  from_status : varchar <<nullable>>
+  to_status : varchar
+  changed_by_manager_id : uuid <<FK, nullable>>
+}
+
+entity "chat_ai_runs" as chat_ai_runs {
+  * id : uuid <<PK>>
+  --
+  chat_id : uuid <<FK>>
+  trigger_message_id : uuid <<FK>>
+  response_message_id : uuid <<FK, nullable>>
+  status : pending|processing|completed|failed|obsolete|ignored
+  retrieval_status : not_started|hit|miss|empty|failed|skipped
+  response_kind : none|answer|clarify|handoff|intent_reply
+  intent_type : text
+  retrieval_chunks : jsonb
+  context_snapshot : jsonb
+  prompt_snapshot : jsonb
+  processing_token : text
+}
+
+entity "knowledge_base_articles" as articles {
+  * id : uuid <<PK>>
+  --
+  slug : text <<active UK>>
+  title : text
+  content : text
+  status : draft|published|archived
+  version : int
+  created_by_id : uuid <<FK>>
+  updated_by_id : uuid <<FK>>
+  archived_by_id : uuid <<FK, nullable>>
+  search_vector : tsvector
+}
+
+entity "knowledge_base_history" as kb_history {
+  * id : uuid <<PK>>
+  --
+  article_id : uuid <<FK>>
+  version : int
+  change_type : create|update|publish|unpublish|archive|restore
+  changed_by_id : uuid <<FK, nullable>>
+}
+
+entity "knowledge_chunk_sets" as chunk_sets {
+  * id : uuid <<PK>>
+  --
+  article_id : uuid <<FK>>
+  content_checksum : text
+  ingestion_pipeline_version : text
+  embedding_provider : text
+  embedding_model : text
+  embedding_dimension : 384
+  status : pending|processing|completed|failed
+  is_active : boolean
+  processing_token : text
+}
+
+entity "knowledge_chunks" as chunks {
+  * id : uuid <<PK>>
+  --
+  chunk_set_id : uuid <<FK>>
+  article_id : uuid <<FK>>
+  chunk_index : int
+  chunk_text : text
+  embedding : vector(384)
+  embedding_status : pending|processing|completed|failed
+}
+
+entity "knowledge_embedding_refresh_batches" as batches {
+  * id : uuid <<PK>>
+  --
+  requested_by_id : uuid <<FK>>
+  status : running|completed|completed_with_errors|failed
+  total_count : int
+  processed_count : int
+}
+
+entity "knowledge_embedding_refresh_batch_items" as batch_items {
+  * id : uuid <<PK>>
+  --
+  batch_id : uuid <<FK>>
+  article_id : uuid <<FK>>
+  article_version : int
+  status : pending|processing|completed|failed|skipped
+  chunk_set_id : uuid <<FK, nullable>>
+  processing_token : text
+}
+
+auth_users ||--o| managers
 clients ||--o{ chats
-chats ||--o{ messages
-chats ||--|| chat_assignments
+chats ||--o{ chat_messages
+chats ||--o| chat_assignments
 chats ||--o{ assignment_history
-managers ||--o{ messages
-managers ||--o{ chat_assignments : current_manager
-managers ||--o{ chat_assignments : assigned_by
-managers ||--o{ assignment_history : from_manager
-managers ||--o{ assignment_history : to_manager
-managers ||--o{ assignment_history : assigned_by
+chats ||--o{ chat_status_history
+chats ||--o{ chat_ai_runs
+chat_messages ||--o{ chat_ai_runs : trigger
+chat_messages ||--o{ chat_ai_runs : response
+managers ||--o{ chat_messages
+managers ||--o{ chat_assignments
+managers ||--o{ assignment_history
+managers ||--o{ chat_status_history
+managers ||--o{ articles
+managers ||--o{ kb_history
+managers ||--o{ batches
+articles ||--o{ kb_history
+articles ||--o{ chunk_sets
+articles ||--o{ chunks
+chunk_sets ||--o{ chunks
+batches ||--o{ batch_items
+articles ||--o{ batch_items
+chunk_sets ||--o{ batch_items
 
 note right of chats
-  chat is the central support-processing entity
-  bot_username is immutable per chat
-  status is the workflow state
+  Центральная сущность support workflow.
+  waiting_operator - состояние AI handoff / human takeover.
 end note
 
-note right of chat_assignments
-  stores only the current assignment state
+note right of chat_ai_runs
+  Backend-only execution/audit state.
+  Не является видимым message flow.
 end note
 
-note right of assignment_history
-  stores every assignment change event
+note right of chunk_sets
+  Один active completed set на article.
+  chunks - производные retrieval artifacts.
 end note
 
 @enduml

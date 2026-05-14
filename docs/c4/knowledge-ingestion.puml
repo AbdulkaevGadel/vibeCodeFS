@@ -1,0 +1,38 @@
+@startuml
+title Жизненный цикл Knowledge ingestion
+
+actor "Менеджер / Supervisor / Admin" as Manager
+participant "support-admin Server Action" as Action
+database "KB article RPC" as ArticleRpc
+database "knowledge_base_articles" as Articles
+database "knowledge_base_history" as History
+database "knowledge_chunk_sets" as ChunkSets
+participant "kb-ingestion" as Ingestion
+participant "Hugging Face Embeddings" as HF
+database "knowledge_chunks" as Chunks
+participant "kb-embedding-refresh-batch" as Batch
+database "knowledge_embedding_refresh_batches/items" as BatchTables
+
+Manager -> Action: create/update/publish article
+Action -> ArticleRpc: create_kb_article_v1 / update_kb_article_v1
+ArticleRpc -> Articles: write article version
+ArticleRpc -> History: append history
+ArticleRpc -> ChunkSets: ensure pending chunk set, если article не archived
+Action -> Ingestion: invoke mode=webhook, chunk_set_id
+
+Ingestion -> ChunkSets: claim + heartbeat
+Ingestion -> Ingestion: build retrieval chunks
+Ingestion -> HF: embedding batches
+HF --> Ingestion: vector(384) arrays
+Ingestion -> Chunks: complete_kb_chunk_set_ingestion writes chunks
+Ingestion -> ChunkSets: mark completed and switch active set
+
+Manager -> Action: start mass refresh
+Action -> BatchTables: create_kb_embedding_refresh_batch_v1
+Action -> Batch: invoke batch worker
+Batch -> BatchTables: claim item
+Batch -> ChunkSets: request/reuse pending chunk set
+Batch -> Ingestion: invoke chunk-set ingestion
+Batch -> BatchTables: finish item + recalculate totals
+
+@enduml
