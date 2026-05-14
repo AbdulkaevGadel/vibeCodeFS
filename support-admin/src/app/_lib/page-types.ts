@@ -22,13 +22,27 @@ export type MessageSenderType = "client" | "manager" | "ai" | "system";
 
 export type ChatStatus = "open" | "waiting_operator" | "in_progress" | "escalated" | "resolved" | "closed";
 
+export type MessageDeliveryStatus = "pending" | "sent" | "failed";
+
+export type ManagerRole = "admin" | "support" | "supervisor";
+
+export const managerRoles = ["admin", "support", "supervisor"] as const satisfies readonly ManagerRole[];
+
+export function isManagerRole(value: unknown): value is ManagerRole {
+  return typeof value === "string" && managerRoles.includes(value as ManagerRole);
+}
+
+export function coerceManagerRole(value: unknown): ManagerRole {
+  return isManagerRole(value) ? value : "support";
+}
+
 export type ChatMessage = {
   id: string;
   chatId: string;
   senderType: MessageSenderType;
   managerId: string | null;
   text: string;
-  deliveryStatus: "pending" | "sent" | "failed" | null;
+  deliveryStatus: MessageDeliveryStatus | null;
   deliveryError: string | null;
   clientMessageId: string | null;
   legacyMessageId: number | null;
@@ -83,7 +97,7 @@ export type Manager = {
   email: string | null;
   displayName: string;
   lastName: string | null;
-  role: string;
+  role: ManagerRole;
 };
 
 export type SupportAdminPageData = {

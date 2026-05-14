@@ -4,6 +4,10 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentManagerId } from "../../_lib/manager-utils";
 import { revalidatePath } from "next/cache";
 
+function getActionErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error occurred";
+}
+
 export async function takeChatIntoWorkAction(chatId: string) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -18,9 +22,9 @@ export async function takeChatIntoWorkAction(chatId: string) {
 
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to take chat into work:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -41,9 +45,9 @@ export async function sendManagerMessageAction(chatId: string, text: string, cli
     }
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to send manager message:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -62,9 +66,9 @@ export async function resolveChatAction(chatId: string, expectedStatus?: string 
 
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to resolve chat:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -84,9 +88,9 @@ export async function transferChatAction(chatId: string, targetManagerId: string
 
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to transfer chat:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -106,9 +110,9 @@ export async function updateChatStatusAction(chatId: string, newStatus: string, 
 
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to update chat status:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -126,9 +130,9 @@ export async function deleteMessageAction(messageId: string) {
 
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to delete message:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -146,9 +150,9 @@ export async function deleteChatAction(chatId: string) {
 
     revalidatePath("/");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to delete chat:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }
 
@@ -168,8 +172,8 @@ export async function markChatAsReadAction(chatId: string) {
     // unless we want to force a server recount.
     // However, the realtime UPDATE on 'chats' will handle the UI reset.
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to mark chat as read:", err);
-    return { success: false, error: err.message || "Unknown error occurred" };
+    return { success: false, error: getActionErrorMessage(err) };
   }
 }

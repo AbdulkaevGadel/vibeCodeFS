@@ -1,6 +1,6 @@
 import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { Manager } from "./page-types";
+import { coerceManagerRole, isManagerRole, Manager } from "./page-types";
 
 export async function getCurrentManagerId(): Promise<string> {
   const manager = await getCurrentManager();
@@ -26,11 +26,18 @@ export async function getCurrentManager(): Promise<Manager> {
     throw new Error("Профиль менеджера не найден. Обратитесь к администратору.");
   }
 
+  if (!isManagerRole(manager.role)) {
+    console.warn("Unknown manager role received from DB; falling back to least-privileged support role.", {
+      managerId: manager.id,
+      role: manager.role,
+    });
+  }
+
   return {
     id: manager.id,
     email: manager.email,
     displayName: manager.display_name,
     lastName: manager.last_name,
-    role: manager.role as any,
+    role: coerceManagerRole(manager.role),
   };
 }

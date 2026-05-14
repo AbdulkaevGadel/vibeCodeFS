@@ -2,12 +2,16 @@ import {createSupabaseServerClient} from "@/lib/supabase-server";
 import {getCurrentManager} from "./manager-utils";
 import {
   ArticleEmbeddingStatus,
+  ArticleStatus,
+  KnowledgeEmbeddingRefreshBatchItemStatus,
+  KnowledgeEmbeddingRefreshBatchStatus,
   KnowledgeArticle,
   KnowledgeArticleHistory,
   KnowledgeBaseView,
   KnowledgeEmbeddingRefreshBatch,
   KnowledgeEmbeddingSummary,
   Manager,
+  coerceManagerRole,
 } from "./page-types";
 
 export type KnowledgeBasePageData = {
@@ -33,6 +37,69 @@ const emptyEmbeddingSummary: KnowledgeEmbeddingSummary = {
   failedCount: 0,
   unavailableCount: 0,
   refreshableCount: 0,
+};
+
+const articleEmbeddingStatuses = [
+  "actual",
+  "outdated",
+  "updating",
+  "failed",
+  "unavailable",
+] as const satisfies readonly ArticleEmbeddingStatus[];
+
+type KnowledgeArticleRow = {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  status: ArticleStatus;
+  version: number;
+  created_by_id: string | null;
+  updated_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  archived_by_id: string | null;
+};
+
+type KnowledgeArticleHistoryRow = {
+  id: string;
+  article_id: string;
+  title: string;
+  content: string;
+  version: number;
+  change_type: KnowledgeArticleHistory["changeType"];
+  changed_by_id: string | null;
+  changed_at: string;
+};
+
+type EmbeddingRefreshBatchRow = {
+  id: string;
+  status: KnowledgeEmbeddingRefreshBatchStatus;
+  total_count: number;
+  processed_count: number;
+  completed_count: number;
+  failed_count: number;
+  skipped_count: number;
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+};
+
+type EmbeddingRefreshBatchItemRow = {
+  id: string;
+  article_id: string;
+  article_title: string;
+  article_version: number;
+  status: KnowledgeEmbeddingRefreshBatchItemStatus;
+  result_type: string | null;
+  error_message: string | null;
+  processed_at: string | null;
+};
+
+type EmbeddingRefreshBatchRpcResponse = {
+  batch?: EmbeddingRefreshBatchRow | null;
+  items?: EmbeddingRefreshBatchItemRow[] | null;
 };
 
 export async function getKnowledgeBaseData(
@@ -73,7 +140,7 @@ export async function getKnowledgeBaseData(
         email: manager.email,
         displayName: manager.display_name,
         lastName: manager.last_name,
-        role: manager.role,
+        role: coerceManagerRole(manager.role),
       }));
     }
 
@@ -153,7 +220,7 @@ export async function getKnowledgeBaseData(
         }
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("KB Data loading error:", err);
     errorMessage = "Ошибка при загрузке данных Базы Знаний.";
   }
@@ -173,7 +240,7 @@ export async function getKnowledgeBaseData(
   };
 }
 
-function mapArticle(row: any): KnowledgeArticle {
+function mapArticle(row: KnowledgeArticleRow): KnowledgeArticle {
   return {
     id: row.id,
     slug: row.slug,
@@ -193,47 +260,44 @@ function mapArticle(row: any): KnowledgeArticle {
   };
 }
 
-export function mapEmbeddingState(value: any): Pick<KnowledgeArticle, "embeddingStatus" | "embeddingChunkSetId" | "embeddingErrorMessage"> {
-  const allowedStatuses = new Set<ArticleEmbeddingStatus>([
-    "actual",
-    "outdated",
-    "updating",
-    "failed",
-    "unavailable",
-  ]);
-  const rawStatus = value?.embedding_status;
-  const embeddingStatus = allowedStatuses.has(rawStatus) ? rawStatus : "unavailable";
+export function mapEmbeddingState(value: unknown): Pick<KnowledgeArticle, "embeddingStatus" | "embeddingChunkSetId" | "embeddingErrorMessage"> {
+  const state = isRecord(value) ? value : null;
+  const rawStatus = state?.embedding_status;
+  const embeddingStatus = isArticleEmbeddingStatus(rawStatus) ? rawStatus : "unavailable";
 
   return {
     embeddingStatus,
-    embeddingChunkSetId: typeof value?.chunk_set_id === "string" ? value.chunk_set_id : null,
-    embeddingErrorMessage: typeof value?.error_message === "string" && value.error_message.trim()
-      ? value.error_message
+    embeddingChunkSetId: typeof state?.chunk_set_id === "string" ? state.chunk_set_id : null,
+    embeddingErrorMessage: typeof state?.error_message === "string" && state.error_message.trim()
+      ? state.error_message
       : null,
   };
 }
 
-export function mapEmbeddingSummary(value: any): KnowledgeEmbeddingSummary {
+export function mapEmbeddingSummary(value: unknown): KnowledgeEmbeddingSummary {
+  const summary = isRecord(value) ? value : null;
+
   return {
-    totalCount: readNumber(value?.total_count),
-    publishedCount: readNumber(value?.published_count),
-    actualCount: readNumber(value?.actual_count),
-    outdatedCount: readNumber(value?.outdated_count),
-    updatingCount: readNumber(value?.updating_count),
-    failedCount: readNumber(value?.failed_count),
-    unavailableCount: readNumber(value?.unavailable_count),
-    refreshableCount: readNumber(value?.refreshable_count),
+    totalCount: readNumber(summary?.total_count),
+    publishedCount: readNumber(summary?.published_count),
+    actualCount: readNumber(summary?.actual_count),
+    outdatedCount: readNumber(summary?.outdated_count),
+    updatingCount: readNumber(summary?.updating_count),
+    failedCount: readNumber(summary?.failed_count),
+    unavailableCount: readNumber(summary?.unavailable_count),
+    refreshableCount: readNumber(summary?.refreshable_count),
   };
 }
 
-export function mapEmbeddingRefreshBatch(value: any): KnowledgeEmbeddingRefreshBatch | null {
-  const batch = value?.batch;
+export function mapEmbeddingRefreshBatch(value: unknown): KnowledgeEmbeddingRefreshBatch | null {
+  const response = isEmbeddingRefreshBatchRpcResponse(value) ? value : null;
+  const batch = response?.batch;
 
   if (!batch || typeof batch !== "object") {
     return null;
   }
 
-  const items = Array.isArray(value?.items) ? value.items : [];
+  const items = response.items ?? [];
 
   return {
     id: String(batch.id),
@@ -246,7 +310,7 @@ export function mapEmbeddingRefreshBatch(value: any): KnowledgeEmbeddingRefreshB
     startedAt: String(batch.started_at),
     completedAt: typeof batch.completed_at === "string" ? batch.completed_at : null,
     errorMessage: typeof batch.error_message === "string" ? batch.error_message : null,
-    items: items.map((item: any) => ({
+    items: items.map((item) => ({
       id: String(item.id),
       articleId: String(item.article_id),
       articleTitle: String(item.article_title),
@@ -263,16 +327,33 @@ function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function formatSupabaseError(error: any) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isArticleEmbeddingStatus(value: unknown): value is ArticleEmbeddingStatus {
+  return typeof value === "string" && articleEmbeddingStatuses.includes(value as ArticleEmbeddingStatus);
+}
+
+function isEmbeddingRefreshBatchRpcResponse(value: unknown): value is EmbeddingRefreshBatchRpcResponse {
+  if (!isRecord(value)) return false;
+
+  const items = value.items;
+  return items === undefined || items === null || Array.isArray(items);
+}
+
+function formatSupabaseError(error: unknown) {
+  const record = isRecord(error) ? error : null;
+
   return {
-    code: error?.code,
-    message: error?.message,
-    details: error?.details,
-    hint: error?.hint,
+    code: record?.code,
+    message: record?.message,
+    details: record?.details,
+    hint: record?.hint,
   };
 }
 
-function mapHistory(row: any): KnowledgeArticleHistory {
+function mapHistory(row: KnowledgeArticleHistoryRow): KnowledgeArticleHistory {
   return {
     id: row.id,
     articleId: row.article_id,

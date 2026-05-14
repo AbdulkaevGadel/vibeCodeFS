@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-
-type ManagerRole = "admin" | "support" | "supervisor";
+import { isManagerRole, ManagerRole } from "../../_lib/page-types";
 
 type ActionResult = {
   success: boolean;
@@ -32,7 +31,6 @@ type UpdateManagerInput = {
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const allowedRoles = new Set<ManagerRole>(["admin", "support", "supervisor"]);
 
 function createErrorResult(error: string): ActionResult {
   return {
@@ -55,10 +53,6 @@ function normalizeEmail(email: string) {
 function normalizeNullableText(value: string) {
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
-}
-
-function isManagerRole(role: string): role is ManagerRole {
-  return allowedRoles.has(role as ManagerRole);
 }
 
 async function requireCurrentAdmin() {
