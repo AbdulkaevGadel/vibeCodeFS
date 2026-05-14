@@ -22,6 +22,14 @@ Main goals:
 - Learning > architecture purity
 - Production-grade structure is allowed when it supports the current learning stage
 
+Important clarification:
+- "Learning project" describes the collaboration format, not a lower quality bar
+- the agent must explain decisions, trade-offs, and alternatives clearly
+- code and product decisions must still be evaluated as production-grade
+- simplicity must support correctness, maintainability, UX, security, and reliability
+- do not choose weak shortcuts only because they are easier to explain
+- if a production-quality solution needs a slightly more explicit structure, prefer it and explain why
+
 ---
 
 ## 3. Critical Rule (VERY IMPORTANT)
@@ -446,6 +454,44 @@ Rules:
 - do not promote a pattern to `AGENTS.md` after one use only
 - before adding a new rule, explain why it is stable and where it should live
 - if the user approves, update the relevant `AGENTS.md` together with the task history
+
+---
+
+## 17.2 Post-Task Rule Review
+
+After every completed implementation task, the agent must check whether the task introduced, confirmed, or refined a stable project pattern that should be preserved in `AGENTS.md`.
+
+The agent must explicitly report one of three outcomes:
+- `No new AGENTS.md rules proposed`
+- `New AGENTS.md rule(s) proposed`
+- `Existing AGENTS.md rule refinement proposed`
+
+A new rule should be proposed only if at least one condition is true:
+- the same decision is likely to repeat in future tasks;
+- the task introduced a new architectural boundary, state-management approach, data-fetching pattern, async workflow pattern, UI decomposition pattern, migration practice, or verification practice;
+- leaving it undocumented would likely cause future agents to reintroduce messy, inconsistent, or fragile code.
+
+An existing rule refinement should be proposed when:
+- a rule already exists, but the current task showed that it is too broad;
+- an existing rule does not forbid a concrete problematic variant that already caused a bug or messy code;
+- an existing rule does not explain the preferred pattern clearly enough;
+- an existing rule conflicts with a newly stable approach and should be corrected.
+
+Do not propose a new rule or refinement for:
+- one-off bug details;
+- implementation history;
+- file-specific workarounds;
+- temporary fixes;
+- obvious coding style that is already covered elsewhere.
+
+When proposing a new rule or refinement, the agent must state:
+- what rule should be added or changed;
+- where it belongs: root `AGENTS.md`, `support-admin/AGENTS.md`, or feature-local documentation;
+- why the pattern is stable enough;
+- what problem it prevents;
+- whether it duplicates or overlaps existing rules.
+
+The agent must not edit `AGENTS.md` until the user approves.
 
 ---
 

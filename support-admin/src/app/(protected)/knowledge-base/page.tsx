@@ -50,6 +50,7 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
                articles={pageData.articles} 
                selectedId={selectedArticleId} 
                view={pageData.view}
+               initialSearchQuery={searchQuery ?? ""}
                currentManager={pageData.currentManager}
             />
             <KnowledgeDetails 

@@ -37,6 +37,34 @@ Rules:
 - Prefer local constants or local components for one-route UI.
 - Promote to shared only after real cross-route reuse is clear.
 
+## Component Decomposition Rule
+
+When a `support-admin` Client Component grows beyond a simple view, decompose it before adding more behavior.
+
+Preferred split:
+- presentational subcomponents for repeated or visually distinct UI blocks;
+- local helper functions for pure formatting, mapping, and conditional UI decisions;
+- local hooks for stateful workflows, polling, timers, subscriptions, and multi-step async UI logic;
+- route-local `_lib` helpers when logic is reused across components in the same route/domain.
+
+Rules:
+- do not keep unrelated workflows inside one large component;
+- do not extract only because code is long if the extracted piece has no clear role;
+- do not move logic to `shared` unless it has real cross-domain reuse;
+- keep business mutations in Server Actions / RPC, not in React hooks;
+- keep hooks focused on UI state and synchronization, not backend authority.
+
+## Async UI Sync Rule
+
+For UI flows that start DB-side or Edge Function async work, do not rely on repeated full-route `router.refresh()` as the primary synchronization mechanism.
+
+Preferred pattern:
+- start the primary mutation via Server Action;
+- show a local optimistic transitional state when async work is expected;
+- poll a narrow Server Action/RPC that returns the specific entity/job state;
+- run one final `router.refresh()` only after the entity/job reaches a terminal state;
+- best-effort background bootstrap errors must be logged but must not turn a successful primary mutation into a false user-facing failure.
+
 ## Support Admin Architecture Boundaries
 
 These rules are permanent for the `support-admin` frontend.

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -11,6 +11,7 @@ type KnowledgeListProps = {
   articles: KnowledgeArticle[];
   selectedId: string | null;
   view: KnowledgeBaseView;
+  initialSearchQuery: string;
   currentManager: Manager | null;
 };
 
@@ -55,11 +56,27 @@ function getSlugClassName(isActive: boolean) {
   return `${slugBaseClassName} ${isActive ? "text-white/60" : "support-text-muted"}`;
 }
 
-export function KnowledgeList({ articles, selectedId, view, currentManager }: KnowledgeListProps) {
+function getKnowledgeBaseHref(params: URLSearchParams) {
+  const query = params.toString();
+
+  return query ? `/knowledge-base?${query}` : "/knowledge-base";
+}
+
+export function KnowledgeList({
+  articles,
+  selectedId,
+  view,
+  initialSearchQuery,
+  currentManager,
+}: KnowledgeListProps) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearchQuery);
   const isArchiveView = view === "archive";
   const canCreateArticle = !!currentManager;
+
+  useEffect(() => {
+    setSearch(initialSearchQuery);
+  }, [initialSearchQuery]);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -67,9 +84,8 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
 
     if (isArchiveView) params.set("view", "archive");
     if (val) params.set("search", val);
-    
-    // Используем плавный переход без полной перезагрузки
-    router.replace(`/knowledge-base?${params.toString()}`);
+
+    router.replace(getKnowledgeBaseHref(params));
   };
 
   const getArticleHref = (article: KnowledgeArticle) => {
@@ -79,7 +95,7 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
     if (article.status === "archived") params.set("view", "archive");
     if (search) params.set("search", search);
 
-    return `/knowledge-base?${params.toString()}`;
+    return getKnowledgeBaseHref(params);
   };
 
   return (
