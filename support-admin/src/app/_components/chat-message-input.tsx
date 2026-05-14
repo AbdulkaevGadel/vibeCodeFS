@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { sendManagerMessageAction } from "../(protected)/_actions/chat-actions";
 import { Button } from "@/shared/ui/button";
-import { Toast } from "@/shared/ui/toast";
+import { Toast, useToastState } from "@/shared/ui/toast";
 
 type ChatMessageInputProps = {
   chatId: string;
@@ -19,7 +19,7 @@ const toolbarTextClassName = "support-text-muted text-[11px] uppercase tracking-
 
 export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProps) {
   const [text, setText] = useState("");
-  const [toast, setToast] = useState<{ id: number; message: string; variant: "error" } | null>(null);
+  const { toast, showToast, closeToast } = useToastState<"error">();
   const [isPending, startTransition] = useTransition();
 
   const handleSend = () => {
@@ -47,11 +47,7 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
       const result = await sendManagerMessageAction(chatId, text, clientMessageId);
 
       if (!result.success) {
-        setToast({
-          id: Date.now(),
-          message: result.error ? `Ошибка при отправке: ${result.error}` : "Сообщение не отправлено.",
-          variant: "error",
-        });
+        showToast(result.error ? `Ошибка при отправке: ${result.error}` : "Сообщение не отправлено.", "error");
       }
     });
   };
@@ -96,7 +92,7 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
           key={toast.id}
           message={toast.message}
           variant={toast.variant}
-          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+          onClose={() => closeToast(toast.id)}
         />
       ) : null}
     </div>

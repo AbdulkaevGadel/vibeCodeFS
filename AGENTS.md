@@ -22,6 +22,14 @@ Main goals:
 - Learning > architecture purity
 - Production-grade structure is allowed when it supports the current learning stage
 
+Important clarification:
+- "Learning project" describes the collaboration format, not a lower quality bar
+- the agent must explain decisions, trade-offs, and alternatives clearly
+- code and product decisions must still be evaluated as production-grade
+- simplicity must support correctness, maintainability, UX, security, and reliability
+- do not choose weak shortcuts only because they are easier to explain
+- if a production-quality solution needs a slightly more explicit structure, prefer it and explain why
+
 ---
 
 ## 3. Critical Rule (VERY IMPORTANT)
@@ -296,6 +304,17 @@ Rules for `docs/plan/TASK.md`:
   - whether an existing migration was already applied in Supabase
   - whether the current migration can still be edited or a new migration is required
 
+After preparing or updating `docs/plan/TASK.md`, the agent MUST write a short summary in chat.
+
+The summary must be in Russian and concise.
+
+It must include:
+- what task was documented;
+- what is included in the task;
+- what is explicitly not included;
+- whether a migration is needed;
+- what manual steps or decisions remain before implementation.
+
 ---
 
 ## 14. Manual Step Rules
@@ -391,6 +410,25 @@ SHOULD:
 - Before creating a shared component, verify that the duplication is structural and repeated at least 2-3 times.
 - Keep route-local code close to the route until there is a clear reuse case.
 
+### UI Reuse Check
+
+Before writing or changing UI code, the agent MUST do a quick, task-sized check for existing UI primitives, route-local components, and established local patterns.
+
+Priority:
+1. Reuse an existing shared UI primitive when it matches both the behavior and the semantic role.
+2. Reuse a route-local or feature-local component when the pattern belongs only to that route/feature.
+3. Follow an established local markup/styling pattern when extracting a component would not add clarity.
+4. Extend an existing component only when the new behavior naturally belongs to that component.
+5. Create new UI markup when reuse would force the wrong abstraction, hide intent, or make the code harder to understand.
+
+Rules:
+- Do not duplicate buttons, badges, cards, modals, alerts, toasts, inputs, or repeated layout patterns without first checking existing UI code.
+- Visual similarity alone is not enough reason to create or reuse a shared component.
+- Shared components are allowed only when reuse is real across multiple places and the component has a stable semantic role.
+- If an existing component is visually close but semantically wrong, prefer a small local implementation.
+- Keep the check proportional: small UI edits require checking nearby/shared UI, not auditing the whole frontend.
+- For detailed `support-admin` Tailwind/styling rules, follow `support-admin/AGENTS.md`.
+
 ---
 
 ## 17. Project Structure
@@ -401,6 +439,59 @@ Rules:
 - no deep layering without strong reason
 - no complex feature slicing for its own sake
 - structure should reflect actual domain and route boundaries
+
+---
+
+## 17.1 Emerging Project Rules
+
+During refactoring or implementation, if a repeated decision becomes a stable project rule or pattern, the agent must explicitly call it out and propose adding it to the appropriate `AGENTS.md`.
+
+Rules:
+- keep permanent rules in `AGENTS.md` files, not only in `docs/plan/plan.md`
+- global rules belong in the repository root `AGENTS.md`
+- app-specific frontend rules for `support-admin` belong in `support-admin/AGENTS.md`
+- feature-specific rules should stay near the feature unless they apply across the app
+- do not promote a pattern to `AGENTS.md` after one use only
+- before adding a new rule, explain why it is stable and where it should live
+- if the user approves, update the relevant `AGENTS.md` together with the task history
+
+---
+
+## 17.2 Post-Task Rule Review
+
+After every completed implementation task, the agent must check whether the task introduced, confirmed, or refined a stable project pattern that should be preserved in `AGENTS.md`.
+
+The agent must explicitly report one of three outcomes:
+- `No new AGENTS.md rules proposed`
+- `New AGENTS.md rule(s) proposed`
+- `Existing AGENTS.md rule refinement proposed`
+
+A new rule should be proposed only if at least one condition is true:
+- the same decision is likely to repeat in future tasks;
+- the task introduced a new architectural boundary, state-management approach, data-fetching pattern, async workflow pattern, UI decomposition pattern, migration practice, or verification practice;
+- leaving it undocumented would likely cause future agents to reintroduce messy, inconsistent, or fragile code.
+
+An existing rule refinement should be proposed when:
+- a rule already exists, but the current task showed that it is too broad;
+- an existing rule does not forbid a concrete problematic variant that already caused a bug or messy code;
+- an existing rule does not explain the preferred pattern clearly enough;
+- an existing rule conflicts with a newly stable approach and should be corrected.
+
+Do not propose a new rule or refinement for:
+- one-off bug details;
+- implementation history;
+- file-specific workarounds;
+- temporary fixes;
+- obvious coding style that is already covered elsewhere.
+
+When proposing a new rule or refinement, the agent must state:
+- what rule should be added or changed;
+- where it belongs: root `AGENTS.md`, `support-admin/AGENTS.md`, or feature-local documentation;
+- why the pattern is stable enough;
+- what problem it prevents;
+- whether it duplicates or overlaps existing rules.
+
+The agent must not edit `AGENTS.md` until the user approves.
 
 ---
 
@@ -520,7 +611,9 @@ Goal:
 
 Rules:
 - one completed task = one history file
-- filename format: `YYYY-MM-DD-short-task-name.md`
+- filename format: `YYYY-MM-DD-NNN-short-task-name.md`
+- `NNN` is a 3-digit sequence number for completed tasks on the same date
+- before creating a history file, check existing files for the date and use the next sequence number
 - language: Russian
 - include: goal, decisions, migrations, code steps, manual steps, verification, result
 - `docs/plan/plan.md` remains the active roadmap

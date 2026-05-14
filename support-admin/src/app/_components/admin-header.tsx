@@ -10,7 +10,8 @@ import {
 } from "../_lib/page-types";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/shared/ui/button";
-import { Toast } from "@/shared/ui/toast";
+import { Dialog } from "@/shared/ui/dialog";
+import { Toast, useToastState } from "@/shared/ui/toast";
 import { logoutAction } from "../_actions/logout";
 import { BotTabs } from "./bot-tabs";
 import { ManagersAdminModal } from "./managers-admin-modal";
@@ -43,6 +44,7 @@ const currentManagerNameClassName = "support-text-primary mt-2 truncate text-lg 
 const kbEmbeddingPanelClassName = "support-surface-default rounded-2xl px-4 py-3";
 const kbEmbeddingHeaderClassName = "flex flex-wrap items-center justify-between gap-3";
 const kbEmbeddingTitleWrapperClassName = "flex items-center gap-2";
+const kbEmbeddingHeaderActionsClassName = "flex flex-wrap items-center gap-2";
 const kbEmbeddingTitleClassName = "support-text-muted text-xs font-bold uppercase tracking-[0.22em]";
 const kbEmbeddingHelpClassName =
   "inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] font-bold text-slate-500";
@@ -57,12 +59,7 @@ const kbBatchProgressMetaClassName = "support-text-muted";
 const kbBatchProgressTrackClassName = "mt-2 h-2 overflow-hidden rounded-full bg-slate-100";
 const kbBatchProgressFillClassName = "h-full rounded-full bg-slate-950 transition-all";
 const kbBatchFooterClassName = "mt-3 flex flex-wrap items-center justify-between gap-2";
-const kbBatchLogOverlayClassName = "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm";
-const kbBatchLogPanelClassName = "max-h-[min(720px,calc(100vh-4rem))] w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl";
-const kbBatchLogHeaderClassName = "flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4";
-const kbBatchLogTitleClassName = "support-text-primary text-sm font-bold";
-const kbBatchLogDescriptionClassName = "support-text-muted mt-1 text-xs";
-const kbBatchLogBodyClassName = "max-h-[520px] space-y-3 overflow-y-auto p-5";
+const kbBatchLogBodyClassName = "max-h-[520px] space-y-3 overflow-y-auto";
 const kbBatchLogItemClassName = "rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800";
 const kbBatchLogItemTitleClassName = "font-semibold";
 const kbBatchLogItemMetaClassName = "mt-1 text-xs text-red-700/80";
@@ -223,12 +220,6 @@ type KbEmbeddingRefreshPanelProps = {
   onSettled: () => void;
 };
 
-type KbEmbeddingToastState = {
-  id: number;
-  message: string;
-  variant: "success" | "error";
-};
-
 function KbEmbeddingRefreshPanel({
   summary,
   initialBatch,
@@ -236,13 +227,13 @@ function KbEmbeddingRefreshPanel({
   onSettled,
 }: KbEmbeddingRefreshPanelProps) {
   const [batch, setBatch] = useState(initialBatch);
-  const [toast, setToast] = useState<KbEmbeddingToastState | null>(null);
+  const [logBatch, setLogBatch] = useState<KnowledgeEmbeddingRefreshBatch | null>(() => getVisibleLogBatch(initialBatch));
+  const { toast, showToast, closeToast, clearToast } = useToastState<"success" | "error">();
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isRunning = batch?.status === "running";
-  const logItems = batch?.items.filter(isVisibleBatchLogItem) ?? [];
-  const hasBatchLog = logItems.length > 0;
-  const canOpenLog = hasBatchLog && !isRunning;
+  const logItems = logBatch?.items.filter(isVisibleBatchLogItem) ?? [];
+  const canOpenLog = logItems.length > 0;
   const canRecoverRunningBatch = isRunning && summary.updatingCount === 0;
   const canStart = canManage && (
     (!isRunning && summary.refreshableCount > 0)
@@ -255,6 +246,7 @@ function KbEmbeddingRefreshPanel({
 
   useEffect(() => {
     setBatch(initialBatch);
+    setLogBatch((current) => getVisibleLogBatch(initialBatch) ?? current);
   }, [initialBatch]);
 
   useEffect(() => {
@@ -271,6 +263,7 @@ function KbEmbeddingRefreshPanel({
       }
 
       setBatch(result.data ?? null);
+      setLogBatch((current) => getVisibleLogBatch(result.data ?? null) ?? current);
 
       if (result.data && result.data.status !== "running") {
         onSettled();
@@ -281,27 +274,21 @@ function KbEmbeddingRefreshPanel({
   }, [isRunning, onSettled]);
 
   const handleStart = () => {
-    setToast(null);
+    clearToast();
 
     startTransition(async () => {
       const result = await startKnowledgeEmbeddingRefreshBatchAction();
 
       if (result.error) {
         setBatch(result.data ?? null);
+        setLogBatch((current) => getVisibleLogBatch(result.data ?? null) ?? current);
         showToast(result.error, "error");
         return;
       }
 
       setBatch(result.data ?? null);
+      setLogBatch((current) => getVisibleLogBatch(result.data ?? null) ?? current);
       showToast(result.message ?? "Массовое обновление знаний ИИ запущено.", "success");
-    });
-  };
-
-  const showToast = (message: string, variant: KbEmbeddingToastState["variant"]) => {
-    setToast({
-      id: Date.now(),
-      message,
-      variant,
     });
   };
 
@@ -317,18 +304,30 @@ function KbEmbeddingRefreshPanel({
             ?
           </span>
         </div>
-        {canManage ? (
-          <Button
-            type="button"
-            onClick={handleStart}
-            isLoading={isPending}
-            disabled={!canStart}
-            variant="primary"
-            size="sm"
-          >
-            {startButtonLabel}
-          </Button>
-        ) : null}
+        <div className={kbEmbeddingHeaderActionsClassName}>
+          {canOpenLog ? (
+            <Button
+              type="button"
+              onClick={() => setIsLogOpen(true)}
+              variant="secondary"
+              size="sm"
+            >
+              Лог
+            </Button>
+          ) : null}
+          {canManage ? (
+            <Button
+              type="button"
+              onClick={handleStart}
+              isLoading={isPending}
+              disabled={!canStart}
+              variant="primary"
+              size="sm"
+            >
+              {startButtonLabel}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className={kbEmbeddingStatsClassName}>
@@ -361,16 +360,8 @@ function KbEmbeddingRefreshPanel({
           {canOpenLog ? (
             <div className={kbBatchFooterClassName}>
               <span className={kbBatchProgressMetaClassName}>
-                Лог: {logItems.length}
+                Ошибок и пропусков в логе: {logItems.length}
               </span>
-              <Button
-                type="button"
-                onClick={() => setIsLogOpen(true)}
-                variant="secondary"
-                size="sm"
-              >
-                Лог
-              </Button>
             </div>
           ) : null}
         </div>
@@ -381,13 +372,12 @@ function KbEmbeddingRefreshPanel({
           key={toast.id}
           message={toast.message}
           variant={toast.variant}
-          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+          onClose={() => closeToast(toast.id)}
         />
       ) : null}
 
-      {batch && isLogOpen ? (
+      {logBatch && isLogOpen ? (
         <KbBatchLogModal
-          batch={batch}
           items={logItems}
           onClose={() => setIsLogOpen(false)}
         />
@@ -411,49 +401,40 @@ function EmbeddingStat({ label, value }: EmbeddingStatProps) {
 }
 
 type KbBatchLogModalProps = {
-  batch: KnowledgeEmbeddingRefreshBatch;
   items: KnowledgeEmbeddingRefreshBatch["items"];
   onClose: () => void;
 };
 
 function KbBatchLogModal({ items, onClose }: KbBatchLogModalProps) {
   return (
-    <div className={kbBatchLogOverlayClassName} role="dialog" aria-modal="true">
-      <div className={kbBatchLogPanelClassName}>
-        <div className={kbBatchLogHeaderClassName}>
-          <div>
-            <p className={kbBatchLogTitleClassName}>Лог обновления знаний ИИ</p>
-            <p className={kbBatchLogDescriptionClassName}>
-              Ошибки и пропущенные статьи последнего batch.
+    <Dialog
+      isOpen
+      title="Лог обновления знаний ИИ"
+      description="Ошибки и пропущенные статьи последнего batch."
+      onClose={onClose}
+      size="md"
+      bodyClassName={kbBatchLogBodyClassName}
+      overlayClassName="bg-slate-950/30"
+    >
+      {items.length === 0 ? (
+        <p className={kbBatchLogEmptyClassName}>Лог пуст.</p>
+      ) : (
+        items.map((item) => (
+          <div key={item.id} className={kbBatchLogItemClassName}>
+            <p className={kbBatchLogItemTitleClassName}>{item.articleTitle}</p>
+            <p className={kbBatchLogItemMetaClassName}>
+              {item.resultType ?? item.status}
+              {item.errorMessage ? `: ${item.errorMessage}` : ""}
             </p>
+            {item.processedAt ? (
+              <p className={kbBatchLogItemMetaClassName}>
+                {new Date(item.processedAt).toLocaleString("ru-RU")}
+              </p>
+            ) : null}
           </div>
-          <Button type="button" onClick={onClose} variant="secondary" size="sm">
-            Закрыть
-          </Button>
-        </div>
-
-        <div className={kbBatchLogBodyClassName}>
-          {items.length === 0 ? (
-            <p className={kbBatchLogEmptyClassName}>Лог пуст.</p>
-          ) : (
-            items.map((item) => (
-              <div key={item.id} className={kbBatchLogItemClassName}>
-                <p className={kbBatchLogItemTitleClassName}>{item.articleTitle}</p>
-                <p className={kbBatchLogItemMetaClassName}>
-                  {item.resultType ?? item.status}
-                  {item.errorMessage ? `: ${item.errorMessage}` : ""}
-                </p>
-                {item.processedAt ? (
-                  <p className={kbBatchLogItemMetaClassName}>
-                    {new Date(item.processedAt).toLocaleString("ru-RU")}
-                  </p>
-                ) : null}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
+        ))
+      )}
+    </Dialog>
   );
 }
 
@@ -464,6 +445,14 @@ function isVisibleBatchLogItem(item: KnowledgeEmbeddingRefreshBatch["items"][num
       && item.resultType !== "INGESTION_ALREADY_PROCESSING"
       && item.resultType !== "ALREADY_ACTUAL"
     );
+}
+
+function getVisibleLogBatch(batch: KnowledgeEmbeddingRefreshBatch | null) {
+  if (!batch) {
+    return null;
+  }
+
+  return batch.items.some(isVisibleBatchLogItem) ? batch : null;
 }
 
 function getBatchStatusLabel(status: KnowledgeEmbeddingRefreshBatch["status"]) {

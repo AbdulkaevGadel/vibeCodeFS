@@ -1,3 +1,4 @@
+import { Badge } from "@/shared/ui/badge";
 import { ChatSummary } from "../_lib/page-types";
 import { getQueryString } from "../_lib/page-utils";
 
@@ -16,18 +17,13 @@ const activeCountClassName =
   "rounded-full bg-white/12 px-2 py-1 text-xs font-medium text-white";
 const inactiveCountClassName =
   "support-surface-muted support-text-secondary rounded-full px-2 py-1 text-xs font-medium";
-const activeNeedsHelpClassName =
-  "rounded-full bg-amber-300/95 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-950 shadow-sm";
-const inactiveNeedsHelpClassName =
-  "rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-700 ring-1 ring-amber-200";
 const activeMetaClassName =
   "mt-4 flex items-center justify-between text-xs text-[color:rgba(255,255,255,0.65)]";
 const inactiveMetaClassName = "support-text-muted mt-4 flex items-center justify-between text-xs";
 const badgesWrapperClassName = "flex flex-col items-end gap-1 pt-1";
 const unreadWrapperClassName = "flex items-center gap-2";
 const unreadLabelClassName = "text-[10px] font-bold uppercase tracking-wider text-blue-500";
-const unreadCountClassName =
-  "flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-white/10 animate-in zoom-in duration-300";
+const unreadCountClassName = "animate-in zoom-in duration-300";
 
 type ChatListItemProps = {
   chat: ChatSummary;
@@ -63,16 +59,20 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
         {(needsHelp || showUnreadBadge) && (
           <div className={badgesWrapperClassName}>
             {needsHelp && (
-              <span className={isActive ? activeNeedsHelpClassName : inactiveNeedsHelpClassName}>
+              <Badge
+                variant={isActive ? "inverse" : "warning"}
+                size="sm"
+                className={isActive ? "bg-amber-300/95 text-slate-950 shadow-sm tracking-wider" : "tracking-wider"}
+              >
                 Needs help
-              </span>
+              </Badge>
             )}
             {showUnreadBadge && (
               <span className={unreadWrapperClassName}>
                 <span className={unreadLabelClassName}>New</span>
-                <span className={unreadCountClassName}>
+                <Badge variant="info" size="icon" className={unreadCountClassName}>
                   {chat.unreadCount}
-                </span>
+                </Badge>
               </span>
             )}
           </div>

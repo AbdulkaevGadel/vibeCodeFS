@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { KnowledgeArticle, KnowledgeBaseView, Manager } from "../../_lib/page-types";
 
@@ -10,6 +11,7 @@ type KnowledgeListProps = {
   articles: KnowledgeArticle[];
   selectedId: string | null;
   view: KnowledgeBaseView;
+  initialSearchQuery: string;
   currentManager: Manager | null;
 };
 
@@ -25,14 +27,13 @@ const articleLinkBaseClassName = "flex flex-col gap-1.5 p-4 rounded-3xl transiti
 const activeArticleLinkClassName = "support-surface-accent scale-[1.02] shadow-lg shadow-black/5";
 const inactiveArticleLinkClassName = "hover:bg-white/40 border border-transparent support-text-primary";
 const articleTitleBaseClassName = "text-sm font-semibold leading-tight";
-const statusBadgeBaseClassName = "text-[10px] uppercase font-black px-2 py-0.5 rounded-full";
 const slugBaseClassName = "text-[10px] truncate";
 const footerClassName = "p-4 border-t border-black/5";
 
-const statusBadgeClassNames: Record<KnowledgeArticle["status"], string> = {
-  published: "bg-emerald-500/10 text-emerald-600",
-  archived: "bg-rose-500/10 text-rose-600",
-  draft: "bg-amber-500/10 text-amber-600",
+const statusBadgeVariants: Record<KnowledgeArticle["status"], "success" | "danger" | "warning"> = {
+  published: "success",
+  archived: "danger",
+  draft: "warning",
 };
 
 const statusLabels: Record<KnowledgeArticle["status"], string> = {
@@ -51,19 +52,31 @@ function getArticleTitleClassName(isActive: boolean) {
   return `${articleTitleBaseClassName} ${isActive ? "text-white" : "support-text-primary"}`;
 }
 
-function getStatusBadgeClassName(status: KnowledgeArticle["status"]) {
-  return `${statusBadgeBaseClassName} ${statusBadgeClassNames[status]}`;
-}
-
 function getSlugClassName(isActive: boolean) {
   return `${slugBaseClassName} ${isActive ? "text-white/60" : "support-text-muted"}`;
 }
 
-export function KnowledgeList({ articles, selectedId, view, currentManager }: KnowledgeListProps) {
+function getKnowledgeBaseHref(params: URLSearchParams) {
+  const query = params.toString();
+
+  return query ? `/knowledge-base?${query}` : "/knowledge-base";
+}
+
+export function KnowledgeList({
+  articles,
+  selectedId,
+  view,
+  initialSearchQuery,
+  currentManager,
+}: KnowledgeListProps) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearchQuery);
   const isArchiveView = view === "archive";
   const canCreateArticle = !!currentManager;
+
+  useEffect(() => {
+    setSearch(initialSearchQuery);
+  }, [initialSearchQuery]);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -71,9 +84,8 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
 
     if (isArchiveView) params.set("view", "archive");
     if (val) params.set("search", val);
-    
-    // Используем плавный переход без полной перезагрузки
-    router.replace(`/knowledge-base?${params.toString()}`);
+
+    router.replace(getKnowledgeBaseHref(params));
   };
 
   const getArticleHref = (article: KnowledgeArticle) => {
@@ -83,7 +95,7 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
     if (article.status === "archived") params.set("view", "archive");
     if (search) params.set("search", search);
 
-    return `/knowledge-base?${params.toString()}`;
+    return getKnowledgeBaseHref(params);
   };
 
   return (
@@ -127,9 +139,13 @@ export function KnowledgeList({ articles, selectedId, view, currentManager }: Kn
                     {article.title}
                   </p>
                   <div className="flex items-center gap-2">
-                    <span className={getStatusBadgeClassName(article.status)}>
+                    <Badge
+                      variant={statusBadgeVariants[article.status]}
+                      size="sm"
+                      className={isActive ? "bg-white/15 text-white" : ""}
+                    >
                       {statusLabels[article.status]}
-                    </span>
+                    </Badge>
                     <span className={getSlugClassName(isActive)}>
                       {article.slug}
                     </span>

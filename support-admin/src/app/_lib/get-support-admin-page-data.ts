@@ -2,6 +2,10 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentManager } from "./manager-utils";
 import { FlashStatus } from "./flash-cookie";
 import {
+  BotOption,
+  ChatInboxCursor,
+  ChatInboxPage,
+  ChatInboxPageInfo,
   ChatMessage,
   ChatStatus,
   ChatSummary,
@@ -11,9 +15,8 @@ import {
   SupportAdminPageData,
 } from "./page-types";
 import {
-  buildBotOptions,
-  buildChatMessagesByChatId,
   getBotKey,
+  getBotLabel,
   getFullName,
   getMessagePreview,
   getPersonName,
@@ -22,43 +25,34 @@ import {
   sortChatMessages,
 } from "./page-utils";
 
-type ChatRow = {
+export const chatInboxPageLimit = 50;
+
+type InboxSummaryRow = {
   id: string;
   telegram_chat_id: number;
   bot_username: string;
   status: ChatStatus;
-  last_message_at: string | null;
-  last_read_at: string | null;
-  created_at: string;
-  updated_at: string;
-  clients: {
-    telegram_user_id: number;
-    username: string | null;
-    first_name: string | null;
-    last_name: string | null;
-  } | null;
+  client_telegram_user_id: number;
+  client_username: string | null;
+  client_first_name: string | null;
+  client_last_name: string | null;
   assigned_manager_id: string | null;
-  assigned_manager_name: string | null;
-};
-
-type ClientResponse = {
-  telegram_user_id: number;
-  username: string | null;
-  first_name: string | null;
-  last_name: string | null;
-};
-
-type ChatRowResponse = {
-  id: string;
-  telegram_chat_id: number;
-  bot_username: string;
-  status: ChatStatus;
+  assigned_manager_display_name: string | null;
+  assigned_manager_last_name: string | null;
   last_message_at: string | null;
+  last_message_text: string | null;
+  last_message_sender_type: MessageSenderType | null;
   last_read_at: string | null;
+  unread_count: number;
+  message_count: number;
   created_at: string;
   updated_at: string;
-  clients: ClientResponse[] | ClientResponse | null;
-  chat_assignments: Array<{ current_manager_id: string }> | { current_manager_id: string } | null;
+};
+
+type BotStatsRow = {
+  bot_username: string;
+  chat_count: number;
+  message_count: number;
 };
 
 type ChatMessageRow = {
@@ -74,6 +68,11 @@ type ChatMessageRow = {
   created_at: string;
 };
 
+const emptyInboxPageInfo: ChatInboxPageInfo = {
+  hasMore: false,
+  nextCursor: null,
+};
+
 function getStatusVariant(status?: FlashStatus) {
   if (status === "delete-error") {
     return "error";
@@ -86,101 +85,118 @@ function getStatusVariant(status?: FlashStatus) {
   return null;
 }
 
-function getManagerLabel(manager: Pick<Manager, "displayName" | "lastName">) {
-  return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-function buildChatSummaries(chats: ChatRow[], messagesByChatId: Record<string, ChatMessage[]>) {
-  return chats
-    .map<ChatSummary>((chat) => {
-      const client = chat.clients;
-      const messages = sortChatMessages(messagesByChatId[chat.id] ?? []);
-      const latestMessage = messages[messages.length - 1] ?? null;
+export function mapInboxSummary(row: InboxSummaryRow): ChatSummary {
+  const assignedManagerName = [row.assigned_manager_display_name, row.assigned_manager_last_name]
+    .filter(Boolean)
+    .join(" ");
 
-      return {
-        id: chat.id,
-        telegramChatId: chat.telegram_chat_id,
-        botUsername: chat.bot_username,
-        status: chat.status,
-        title: getPersonName({
-          username: client?.username ?? null,
-          firstName: client?.first_name ?? null,
-          lastName: client?.last_name ?? null,
-        }),
-        fullName: getFullName({
-          firstName: client?.first_name ?? null,
-          lastName: client?.last_name ?? null,
-        }),
-        subtitle: getMessagePreview(latestMessage?.text ?? null),
-        username: client?.username ?? null,
-        assignedManagerId: chat.assigned_manager_id,
-        assignedManagerName: chat.assigned_manager_name,
-        telegramUserId: client?.telegram_user_id ?? 0,
-        lastMessageAt: chat.last_message_at,
-        lastReadAt: chat.last_read_at,
-        unreadCount: messages.filter(
-          (m) =>
-            m.senderType === "client" &&
-            new Date(m.createdAt).getTime() > new Date(chat.last_read_at || "1970-01-01").getTime(),
-        ).length,
-        messageCount: messages.length,
-        createdAt: chat.created_at,
-        updatedAt: chat.updated_at,
-      };
-    })
-    .sort((left, right) => {
-      if (left.lastMessageAt && right.lastMessageAt) {
-        const timeCompare =
-          new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime();
-
-        if (timeCompare !== 0) {
-          return timeCompare;
-        }
-      }
-
-      if (left.lastMessageAt && !right.lastMessageAt) {
-        return -1;
-      }
-
-      if (!left.lastMessageAt && right.lastMessageAt) {
-        return 1;
-      }
-
-      const titleCompare = left.title.localeCompare(right.title, "ru", { sensitivity: "base" });
-
-      if (titleCompare !== 0) {
-        return titleCompare;
-      }
-
-      return left.telegramChatId - right.telegramChatId;
-    });
+  return {
+    id: row.id,
+    telegramChatId: row.telegram_chat_id,
+    botUsername: row.bot_username,
+    status: row.status,
+    title: getPersonName({
+      username: row.client_username,
+      firstName: row.client_first_name,
+      lastName: row.client_last_name,
+    }),
+    fullName: getFullName({
+      firstName: row.client_first_name,
+      lastName: row.client_last_name,
+    }),
+    subtitle: getMessagePreview(row.last_message_text),
+    username: row.client_username,
+    assignedManagerId: row.assigned_manager_id,
+    assignedManagerName: assignedManagerName || null,
+    telegramUserId: row.client_telegram_user_id,
+    lastMessageAt: row.last_message_at,
+    lastReadAt: row.last_read_at,
+    unreadCount: row.unread_count,
+    messageCount: row.message_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
-function normalizeChatRows(rows: ChatRowResponse[], managersMap: Record<string, Manager>) {
-  return rows.map<ChatRow>((row) => {
-    // Безопасное извлечение назначения
-    const rawAssignment = row.chat_assignments;
-    const assignment = Array.isArray(rawAssignment) ? rawAssignment[0] : rawAssignment;
-    const mgrId = assignment?.current_manager_id;
-    
-    // Безопасное извлечение клиента
-    const rawClient = row.clients;
-    const client = Array.isArray(rawClient) ? rawClient[0] : rawClient;
-    
+function mapChatMessage(row: ChatMessageRow): ChatMessage {
+  return {
+    id: row.id,
+    chatId: row.chat_id,
+    senderType: row.sender_type,
+    managerId: row.manager_id,
+    text: row.text,
+    deliveryStatus: row.delivery_status,
+    deliveryError: row.delivery_error,
+    clientMessageId: row.client_message_id,
+    legacyMessageId: row.legacy_message_id,
+    createdAt: row.created_at,
+  };
+}
+
+function mapBotStats(rows: BotStatsRow[]) {
+  return rows
+    .map((row) => ({
+      botUsername: row.bot_username,
+      chatCount: row.chat_count,
+      messageCount: row.message_count,
+      option: {
+        key: getBotKey(row.bot_username),
+        label: getBotLabel(row.bot_username),
+        value: row.bot_username,
+      } satisfies BotOption,
+    }))
+    .sort((left, right) =>
+      left.option.label.localeCompare(right.option.label, "ru", { sensitivity: "base" }),
+    );
+}
+
+function isChatInboxCursor(value: unknown): value is ChatInboxCursor {
+  if (!isRecord(value)) return false;
+
+  return (
+    (typeof value.lastMessageAt === "string" || value.lastMessageAt === null) &&
+    typeof value.createdAt === "string" &&
+    typeof value.chatId === "string"
+  );
+}
+
+function mapInboxPageInfo(value: unknown): ChatInboxPageInfo {
+  if (!isRecord(value) || typeof value.hasMore !== "boolean") {
+    return emptyInboxPageInfo;
+  }
+
+  const nextCursor = value.nextCursor;
+
+  return {
+    hasMore: value.hasMore,
+    nextCursor: value.hasMore && isChatInboxCursor(nextCursor) ? nextCursor : null,
+  };
+}
+
+export function mapInboxPage(value: unknown): ChatInboxPage {
+  if (!isRecord(value) || !Array.isArray(value.rows)) {
     return {
-      id: row.id,
-      telegram_chat_id: row.telegram_chat_id,
-      bot_username: row.bot_username,
-      status: row.status,
-      last_message_at: row.last_message_at,
-      last_read_at: row.last_read_at,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      clients: (client as ClientResponse) || null,
-      assigned_manager_id: mgrId ?? null,
-      assigned_manager_name: mgrId && managersMap[mgrId] ? getManagerLabel(managersMap[mgrId]) : null,
+      rows: [],
+      pageInfo: emptyInboxPageInfo,
     };
-  });
+  }
+
+  return {
+    rows: (value.rows as InboxSummaryRow[]).map(mapInboxSummary),
+    pageInfo: mapInboxPageInfo(value.pageInfo),
+  };
+}
+
+function formatErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Неизвестная ошибка";
 }
 
 export async function getSupportAdminPageData(
@@ -191,127 +207,130 @@ export async function getSupportAdminPageData(
   const selectedBotParam = getSingleValue(params.bot);
   const selectedChatParam = getSingleValue(params.chat);
 
-  let chats: ChatRow[] = [];
-  let chatMessages: ChatMessage[] = [];
+  let chatSummaries: ChatSummary[] = [];
+  let selectedChatMessages: ChatMessage[] = [];
+  let selectedChat: ChatSummary | null = null;
+  let chatInboxPageInfo: ChatInboxPageInfo = emptyInboxPageInfo;
   let errorMessage: string | null = null;
   let allManagers: Manager[] = [];
   let currentManager: Manager | null = null;
+  let botOptions: BotOption[] = [];
+  let selectedBot: BotOption | null = null;
+  let botFilteredChatCount = 0;
+  let botFilteredMessageCount = 0;
 
   try {
     const supabase = await createSupabaseServerClient();
-    
-    // 0. Fetch current manager
+
     try {
       currentManager = await getCurrentManager();
-    } catch (e: any) {
-      errorMessage = `Ошибка авторизации: ${e.message}`;
+    } catch (error) {
+      errorMessage = `Ошибка авторизации: ${formatErrorMessage(error)}`;
     }
 
-    // 1. Fetch ALL managers
     const { data: managersAllData, error: managersAllError } = await supabase
       .from("managers")
       .select("id, email, display_name, last_name, role")
       .order("display_name");
 
-    if (!managersAllError && managersAllData) {
-      allManagers = managersAllData.map(m => ({
-        id: m.id,
-        email: m.email,
-        displayName: m.display_name,
-        lastName: m.last_name,
-        role: m.role
+    if (managersAllError) {
+      console.error("Fetch managers error:", managersAllError);
+    } else {
+      allManagers = (managersAllData ?? []).map((manager) => ({
+        id: manager.id,
+        email: manager.email,
+        displayName: manager.display_name,
+        lastName: manager.last_name,
+        role: manager.role,
       }));
     }
 
-    // 2. Fetch chats
-    const { data: chatsData, error: chatsError } = await supabase
-      .from("chats")
-      .select(
-        `
-          id,
-          telegram_chat_id,
-          bot_username,
-          status,
-          last_message_at,
-          last_read_at,
-          created_at,
-          updated_at,
-          clients!inner(
-            telegram_user_id,
-            username,
-            first_name,
-            last_name
-          ),
-          chat_assignments(
-            current_manager_id
-          )
-        `,
-      )
-      .order("last_message_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false });
+    const { data: botStatsData, error: botStatsError } = await supabase
+      .from("support_admin_bot_stats")
+      .select("bot_username, chat_count, message_count")
+      .order("bot_username");
 
-    if (chatsError) {
-      errorMessage = "Не удалось загрузить чаты из relational модели.";
-      console.error(chatsError);
+    if (botStatsError) {
+      console.error("Fetch support admin bot stats error:", botStatsError);
+      errorMessage = errorMessage ?? "Не удалось загрузить статистику inbox.";
     } else {
-      const chatRows = (chatsData ?? []) as ChatRowResponse[];
-      
-      const managerIds = new Set<string>();
-      chatRows.forEach((row) => {
-        const rawAsgn = row.chat_assignments;
-        const asgn = Array.isArray(rawAsgn) ? rawAsgn[0] : rawAsgn;
-        const mgrId = asgn?.current_manager_id;
-        if (mgrId) managerIds.add(mgrId);
-      });
+      const botStats = mapBotStats((botStatsData ?? []) as BotStatsRow[]);
+      botOptions = botStats.map((stat) => stat.option);
+      selectedBot =
+        botOptions.find((bot) => bot.key === selectedBotParam) ?? botOptions[0] ?? null;
 
-      let managersMap: Record<string, Manager> = {};
-      if (managerIds.size > 0) {
-        const { data: managersData, error: managersError } = await supabase
-          .from("managers")
-          .select("id, email, display_name, last_name, role")
-          .in("id", Array.from(managerIds));
-
-        if (!managersError && managersData) {
-          managersMap = managersData.reduce((acc, mgr) => {
-            acc[mgr.id] = {
-              id: mgr.id,
-              email: mgr.email,
-              displayName: mgr.display_name,
-              lastName: mgr.last_name,
-              role: mgr.role,
-            };
-            return acc;
-          }, {} as Record<string, Manager>);
-        }
-      }
-
-      chats = normalizeChatRows(chatRows, managersMap);
+      const selectedBotKey = selectedBot?.key ?? null;
+      const selectedBotStats = selectedBotKey
+        ? botStats.find((stat) => stat.option.key === selectedBotKey) ?? null
+        : null;
+      botFilteredChatCount = selectedBotStats?.chatCount ?? 0;
+      botFilteredMessageCount = selectedBotStats?.messageCount ?? 0;
     }
 
-    if (!errorMessage && chats.length > 0) {
-      const chatIds = chats.map((chat) => chat.id);
+    if (!errorMessage) {
+      const { data: inboxPageData, error: inboxPageError } = await supabase.rpc(
+        "get_support_admin_chat_inbox_page",
+        {
+          p_limit: chatInboxPageLimit,
+          p_cursor_last_message_at: null,
+          p_cursor_created_at: null,
+          p_cursor_chat_id: null,
+          p_bot_username: selectedBot?.value ?? null,
+        },
+      );
+
+      if (inboxPageError) {
+        console.error("Fetch support admin inbox page error:", inboxPageError);
+        errorMessage = "Не удалось загрузить inbox из read model.";
+      } else {
+        const inboxPage = mapInboxPage(inboxPageData);
+        chatSummaries = inboxPage.rows;
+        chatInboxPageInfo = inboxPage.pageInfo;
+      }
+    }
+
+    if (selectedChatParam && !errorMessage) {
+      selectedChat = chatSummaries.find((chat) => chat.id === selectedChatParam) ?? null;
+
+      if (!selectedChat) {
+        let selectedChatQuery = supabase
+          .from("support_admin_chat_inbox_summary")
+          .select("*")
+          .eq("id", selectedChatParam)
+          .limit(1);
+
+        if (selectedBot?.value) {
+          selectedChatQuery = selectedChatQuery.eq("bot_username", selectedBot.value);
+        }
+
+        const { data: selectedChatData, error: selectedChatError } = await selectedChatQuery;
+
+        if (selectedChatError) {
+          console.error("Fetch selected chat summary error:", selectedChatError);
+          errorMessage = "Не удалось загрузить выбранный чат.";
+        } else {
+          const row = (selectedChatData ?? [])[0] as InboxSummaryRow | undefined;
+          selectedChat = row ? mapInboxSummary(row) : null;
+        }
+      }
+    }
+
+    if (selectedChat && !errorMessage) {
       const { data: chatMessagesData, error: chatMessagesError } = await supabase
         .from("chat_messages")
-        .select("id, chat_id, sender_type, manager_id, text, delivery_status, delivery_error, client_message_id, legacy_message_id, created_at")
-        .in("chat_id", chatIds)
+        .select(
+          "id, chat_id, sender_type, manager_id, text, delivery_status, delivery_error, client_message_id, legacy_message_id, created_at",
+        )
+        .eq("chat_id", selectedChat.id)
         .order("created_at", { ascending: true });
 
       if (chatMessagesError) {
-        errorMessage = "Не удалось загрузить сообщения из relational модели.";
-        console.error(chatMessagesError);
+        console.error("Fetch selected chat messages error:", chatMessagesError);
+        errorMessage = "Не удалось загрузить сообщения выбранного чата.";
       } else {
-        chatMessages = ((chatMessagesData ?? []) as ChatMessageRow[]).map((message) => ({
-          id: message.id,
-          chatId: message.chat_id,
-          senderType: message.sender_type,
-          managerId: message.manager_id,
-          text: message.text,
-          deliveryStatus: message.delivery_status,
-          deliveryError: message.delivery_error,
-          clientMessageId: message.client_message_id,
-          legacyMessageId: message.legacy_message_id,
-          createdAt: message.created_at,
-        }));
+        selectedChatMessages = sortChatMessages(
+          ((chatMessagesData ?? []) as ChatMessageRow[]).map(mapChatMessage),
+        );
       }
     }
   } catch (error) {
@@ -319,31 +338,14 @@ export async function getSupportAdminPageData(
     console.error(error);
   }
 
-  const messagesByChatId = buildChatMessagesByChatId(chatMessages);
-  const allChatSummaries = buildChatSummaries(chats, messagesByChatId);
-  const botOptions = buildBotOptions(allChatSummaries);
-  const selectedBot =
-    botOptions.find((bot) => bot.key === selectedBotParam) ?? botOptions[0] ?? null;
-  const botFilteredChats = selectedBot
-    ? allChatSummaries.filter((chat) => getBotKey(chat.botUsername) === selectedBot.key)
-    : allChatSummaries;
-  const selectedChat = selectedChatParam
-    ? botFilteredChats.find((chat) => chat.id === selectedChatParam) ?? null
-    : null;
-  const selectedChatMessages = selectedChat
-    ? sortChatMessages(messagesByChatId[selectedChat.id] ?? [])
-    : [];
-  const botFilteredMessageCount = botFilteredChats.reduce(
-    (total, chat) => total + chat.messageCount,
-    0,
-  );
-
   return {
     botOptions,
     selectedBot,
-    botFilteredChats,
+    botFilteredChats: chatSummaries,
+    botFilteredChatCount,
     botFilteredMessageCount,
-    chatSummaries: botFilteredChats,
+    chatSummaries,
+    chatInboxPageInfo,
     selectedChat,
     selectedChatMessages,
     allManagers,

@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: PageProps) {
         <AdminHeader
           headerBotLabel={pageData.headerBotLabel}
           messageCount={pageData.botFilteredMessageCount}
-          chatCount={pageData.chatSummaries.length}
+          chatCount={pageData.botFilteredChatCount}
           botOptions={pageData.botOptions}
           selectedBotKey={pageData.selectedBot?.key ?? null}
           allManagers={pageData.allManagers}
@@ -43,8 +43,11 @@ export default async function Home({ searchParams }: PageProps) {
           <section className={styles.pageGrid}>
             <ChatList
               chatSummaries={pageData.chatSummaries}
+              chatInboxPageInfo={pageData.chatInboxPageInfo}
+              selectedChat={pageData.selectedChat}
               selectedChatId={pageData.selectedChat?.id ?? null}
               selectedBotKey={pageData.selectedBot?.key ?? null}
+              selectedBotUsername={pageData.selectedBot?.value ?? null}
             />
             <ChatDetails
               selectedChat={pageData.selectedChat}

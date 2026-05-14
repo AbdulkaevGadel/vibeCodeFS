@@ -1,53 +1,36 @@
 "use client";
 
-import { useState, useEffect, useTransition, useRef } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChatMessage, ChatStatus, ChatSummary, Manager } from "../_lib/page-types";
-import { takeChatIntoWorkAction, resolveChatAction, transferChatAction, deleteMessageAction, deleteChatAction, markChatAsReadAction } from "../(protected)/_actions/chat-actions";
-import { createSupabaseClient } from "@/lib/supabase";
+import {
+  deleteChatAction,
+  deleteMessageAction,
+  markChatAsReadAction,
+  takeChatIntoWorkAction,
+  transferChatAction,
+  updateChatStatusAction,
+} from "../(protected)/_actions/chat-actions";
 import { ChatMessageInput } from "./chat-message-input";
-import { Button } from "@/shared/ui/button";
-import { Toast } from "@/shared/ui/toast";
+import { Toast, useToastState } from "@/shared/ui/toast";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { ChatActionPanel } from "./chat-details/chat-action-panel";
+import { ChatDetailsHeader } from "./chat-details/chat-details-header";
+import { StatusOption } from "./chat-details/chat-status-selector";
+import { ComposerUnavailable } from "./chat-details/composer-unavailable";
+import { MessageTimeline } from "./chat-details/message-timeline";
+import { getComposerAvailability } from "./chat-details/chat-details-utils";
+import {
+  mergeInsertedMessage,
+  mergeUpdatedDeliveryState,
+  normalizeMessages,
+  useChatDetailsRealtime,
+} from "./chat-details/chat-details-realtime";
+import { useSelectedChatReadState } from "./chat-details/use-selected-chat-read-state";
+import { useScrollToBottom } from "./chat-details/use-scroll-to-bottom";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
-const detailsEyebrowClassName = "support-text-muted text-xs uppercase tracking-[0.35em]";
-const detailsTitleClassName = "support-text-primary mt-2 text-2xl font-semibold";
-const detailsFullNameClassName = "support-text-secondary mt-2 text-sm";
-const detailsMetaListClassName = "support-text-secondary mt-3 flex wrap gap-2 text-xs";
-const messagesWrapperClassName = "mt-5 space-y-4";
-const messageCardClassName = "support-card p-4";
-const messageHeaderClassName =
-  "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
-const messageAuthorClassName = "flex items-center gap-3";
-const messageIndexClassName =
-  "flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white";
-const messageAuthorNameClassName = "support-text-primary text-sm font-semibold";
-const messageDateClassName = "support-text-muted mt-1 text-xs";
-const messageBadgeClassName =
-  "support-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em]";
-const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap break-words text-[15px] leading-7";
-const deliveryStatusClassName =
-  "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider";
-const assignedManagerBadgeClassName =
-  "mt-2 flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 ring-1 ring-inset ring-indigo-500/20";
-const metaChipClassName = "support-chip flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ring-slate-200";
-const statusMetaChipClassName = `${metaChipClassName} font-bold uppercase`;
-const transferMenuClassName =
-  "absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5";
-const transferMenuTitleClassName =
-  "mb-2 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400";
-const transferMenuListClassName = "max-h-48 overflow-y-auto";
-const transferManagerRoleClassName = "ml-1 text-[10px] text-slate-400";
-const statusSelectClassName =
-  "rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50";
-const messagesPanelClassName =
-  `${messagesWrapperClassName} overflow-y-auto max-h-[400px] min-h-[300px] p-4 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-4 shadow-inner`;
-const emptyMessagesClassName = "text-center py-10 text-slate-400";
-const deleteMessageButtonClassName = "!h-7 !w-7 !p-0 text-red-400 hover:text-red-700";
-const composerUnavailableClassName =
-  "mt-5 rounded-2xl bg-slate-100 p-8 text-center border-2 border-dashed border-slate-300";
-const composerUnavailableTextClassName = "text-slate-500 font-semibold";
 
 type ChatDetailsClientProps = {
   selectedChat: ChatSummary;
@@ -57,190 +40,24 @@ type ChatDetailsClientProps = {
   currentManager: Manager | null;
 };
 
-type ToastState = {
-  id: number;
-  message: string;
-  variant: "success" | "error";
-};
-
-type ComposerAvailability = {
-  canSend: boolean;
-  unavailableReason: string | null;
-};
-
-function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Manager[]) {
-  if (message.senderType === "manager") {
-    if (message.managerId) {
-      const mgr = allManagers.find(m => m.id === message.managerId);
-      if (mgr) return getManagerFullName(mgr);
+type ConfirmRequest =
+  | {
+      type: "status";
+      title: string;
+      description: string;
+      status: ChatStatus;
     }
-    return "Менеджер";
-  }
-
-  if (message.senderType === "ai") {
-    return "ИИ-помощник";
-  }
-
-  if (message.senderType === "system") {
-    return "Система";
-  }
-
-  return chatTitle;
-}
-
-function getManagerFullName(manager: Manager) {
-  return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
-}
-
-function sortMessagesByCreatedAt(messages: ChatMessage[]) {
-  return [...messages].sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-  );
-}
-
-function dedupeMessagesById(messages: ChatMessage[]) {
-  return Array.from(new Map(messages.map((message) => [message.id, message])).values());
-}
-
-function normalizeMessages(messages: ChatMessage[]) {
-  return sortMessagesByCreatedAt(dedupeMessagesById(messages));
-}
-
-function isOutgoingMessage(message: ChatMessage) {
-  return message.senderType === "manager" || message.senderType === "ai";
-}
-
-function getMessageCardClassName(message: ChatMessage) {
-  const baseClassName = `relative max-w-[80%] ${messageCardClassName} transition hover:shadow-md`;
-
-  if (message.senderType === "manager") {
-    return `${baseClassName} ml-auto border-l-4 border-l-slate-900 bg-white`;
-  }
-
-  if (message.senderType === "ai") {
-    return `${baseClassName} ml-auto border-l-4 border-l-indigo-500 bg-indigo-50 ring-1 ring-indigo-100`;
-  }
-
-  if (message.senderType === "system") {
-    return `${baseClassName} mx-auto max-w-[90%] border-dashed bg-slate-100`;
-  }
-
-  return `${baseClassName} mr-auto bg-slate-50`;
-}
-
-function getSafeDeliveryError(deliveryError: string | null) {
-  if (!deliveryError) return undefined;
-
-  const normalized = deliveryError.replace(/\s+/g, " ").trim();
-  if (!normalized) return undefined;
-
-  const unsafePatterns = [
-    /authorization/i,
-    /bearer\s+[a-z0-9._-]+/i,
-    /token/i,
-    /secret/i,
-    /service[_-]?role/i,
-    /internal_secret/i,
-    /hf_[a-z0-9_]*api/i,
-    /https?:\/\/\S+\?\S+/i,
-    /\bat\s+\S+\s+\(/i,
-  ];
-  const looksStructuredPayload = /^[{[]/.test(normalized);
-  const looksUnsafe = looksStructuredPayload || unsafePatterns.some((pattern) => pattern.test(normalized));
-
-  if (looksUnsafe) {
-    return "Ошибка доставки";
-  }
-
-  const maxLength = 140;
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
-}
-
-function getDeliveryBadgeLabel(deliveryStatus: ChatMessage["deliveryStatus"]) {
-  if (deliveryStatus === "pending") return "⏳ Отправка";
-  if (deliveryStatus === "sent") return "✅ Доставлено";
-  return "❌ Ошибка";
-}
-
-function getDeliveryBadgeClassName(deliveryStatus: ChatMessage["deliveryStatus"]) {
-  if (deliveryStatus === "pending") {
-    return `${deliveryStatusClassName} bg-amber-100 text-amber-700 animate-pulse`;
-  }
-
-  if (deliveryStatus === "sent") {
-    return `${deliveryStatusClassName} bg-emerald-100 text-emerald-700`;
-  }
-
-  return `${deliveryStatusClassName} bg-red-100 text-red-700`;
-}
-
-function getComposerAvailability(selectedChat: ChatSummary, currentManager: Manager | null): ComposerAvailability {
-  if (!currentManager) {
-    return {
-      canSend: false,
-      unavailableReason: "Профиль менеджера не найден. Ответить клиенту нельзя.",
-    };
-  }
-
-  if (selectedChat.status === "resolved" || selectedChat.status === "closed") {
-    return {
-      canSend: false,
-      unavailableReason: "Диалог завершён. История сохранена, новые сообщения отправить нельзя.",
-    };
-  }
-
-  if (currentManager.role === "admin" || currentManager.role === "supervisor") {
-    return {
-      canSend: true,
-      unavailableReason: null,
-    };
-  }
-
-  if (currentManager.role === "support") {
-    if (selectedChat.status === "escalated") {
-      return {
-        canSend: false,
-        unavailableReason: "Чат эскалирован. Ответить может supervisor или admin.",
-      };
+  | {
+      type: "delete-message";
+      title: string;
+      description: string;
+      messageId: string;
     }
-
-    if (selectedChat.assignedManagerId !== currentManager.id) {
-      if (selectedChat.assignedManagerName) {
-        return {
-          canSend: false,
-          unavailableReason: `Чат закреплён за ${selectedChat.assignedManagerName}. Ответить может назначенный менеджер.`,
-        };
-      }
-
-      if (selectedChat.status !== "open" && selectedChat.status !== "waiting_operator") {
-        return {
-          canSend: false,
-          unavailableReason: "Вы не назначены на этот чат. Ответить может назначенный менеджер.",
-        };
-      }
-
-      return {
-        canSend: false,
-        unavailableReason: "Чтобы ответить клиенту, сначала возьмите чат в работу.",
-      };
-    }
-
-    return {
-      canSend: true,
-      unavailableReason: null,
+  | {
+      type: "delete-chat";
+      title: string;
+      description: string;
     };
-  }
-
-  return {
-    canSend: false,
-    unavailableReason: "Ответ недоступен для вашей роли или текущего состояния чата.",
-  };
-}
-
-type StatusOption = {
-  value: ChatStatus;
-  label: string;
-};
 
 const statusOptions: StatusOption[] = [
   { value: "open", label: "Открыть заново (open)" },
@@ -256,117 +73,53 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const [isPending, startTransition] = useTransition();
   const [messages, setMessages] = useState<ChatMessage[]>(() => normalizeMessages(initialMessages));
   const [showTransfer, setShowTransfer] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const lastMarkedReadRef = useRef<string | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const { toast, showToast, closeToast } = useToastState<"success" | "error">();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const showToast = (message: string, variant: ToastState["variant"]) => {
-    setToast({
-      id: Date.now(),
-      message,
-      variant,
-    });
-  };
+  const syncMessages = useCallback((nextMessages: ChatMessage[]) => {
+    setMessages(nextMessages);
+  }, []);
 
-  // Синхронизация при смене чата + сброс прочитанности
-  useEffect(() => {
-    setMessages(normalizeMessages(initialMessages));
+  const closeTransferMenu = useCallback(() => {
     setShowTransfer(false);
+  }, []);
 
-    // Сброс прочитанности в базе при выборе чата (guard: только если есть непрочитанные и мы еще не помечали этот чат в текущей сессии)
-    if (selectedChat.id && selectedChat.unreadCount > 0 && lastMarkedReadRef.current !== selectedChat.id) {
-      lastMarkedReadRef.current = selectedChat.id;
-      markChatAsReadAction(selectedChat.id).catch(err => 
-        console.warn("Failed to mark chat as read:", err)
-      );
+  const handleRealtimeInsert = useCallback((message: ChatMessage) => {
+    setMessages((currentMessages) => mergeInsertedMessage(currentMessages, message));
+
+    if (message.senderType === "client") {
+      markChatAsReadAction(message.chatId).catch((error) => {
+        console.warn("Failed to mark realtime message as read:", error);
+      });
     }
-  }, [initialMessages, selectedChat.id, selectedChat.unreadCount]);
+  }, []);
 
-  // Realtime подписка
-  useEffect(() => {
-    const supabase = createSupabaseClient();
-    
-    const channel = supabase
-      .channel(`chat_details:${selectedChat.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "chat_messages",
-          filter: `chat_id=eq.${selectedChat.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newMessage = payload.new as any;
-            if (newMessage.sender_type === "client") {
-              markChatAsReadAction(selectedChat.id).catch(err =>
-                console.warn("Failed to mark chat as read:", err)
-              );
-            }
+  const handleRealtimeDeliveryUpdate = useCallback(
+    (updated: Parameters<typeof mergeUpdatedDeliveryState>[1]) => {
+      setMessages((currentMessages) => mergeUpdatedDeliveryState(currentMessages, updated));
+    },
+    [],
+  );
 
-            setMessages((prev) => {
-              const formatted: ChatMessage = {
-                id: newMessage.id,
-                chatId: newMessage.chat_id,
-                senderType: newMessage.sender_type,
-                managerId: newMessage.manager_id,
-                text: newMessage.text,
-                deliveryStatus: newMessage.delivery_status,
-                deliveryError: newMessage.delivery_error,
-                clientMessageId: newMessage.client_message_id,
-                legacyMessageId: newMessage.legacy_message_id,
-                createdAt: newMessage.created_at,
-              };
+  const refreshDetails = useCallback(() => {
+    router.refresh();
+  }, [router]);
 
-              if (prev.some((message) => message.id === formatted.id)) {
-                return prev;
-              }
+  useSelectedChatReadState({
+    chatId: selectedChat.id,
+    unreadCount: selectedChat.unreadCount,
+    initialMessages,
+    syncMessages,
+    closeTransferMenu,
+  });
 
-              const withoutOptimisticDuplicate = formatted.clientMessageId
-                ? prev.filter((message) => message.clientMessageId !== formatted.clientMessageId)
-                : prev;
-
-              return normalizeMessages([...withoutOptimisticDuplicate, formatted]);
-            });
-          } else if (payload.eventType === "UPDATE") {
-            const updated = payload.new as any;
-            setMessages((prev) =>
-              normalizeMessages(
-                prev.map((m) =>
-                  m.id === updated.id || m.clientMessageId === updated.client_message_id
-                    ? {
-                        ...m,
-                        id: updated.id,
-                        deliveryStatus: updated.delivery_status,
-                        deliveryError: updated.delivery_error,
-                      }
-                    : m
-                ),
-              )
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "chats",
-          filter: `id=eq.${selectedChat.id}`,
-        },
-        () => {
-          // Metadata (status, assigned manager) changed.
-          // Trigger SSR refresh to get new props.
-          router.refresh();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedChat.id]);
+  useChatDetailsRealtime({
+    chatId: selectedChat.id,
+    onInsertMessage: handleRealtimeInsert,
+    onUpdateDeliveryState: handleRealtimeDeliveryUpdate,
+    refreshDetails,
+  });
 
   const handleTakeIntoWork = () => {
     startTransition(async () => {
@@ -403,29 +156,27 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
        confirmationMsg = "Завершить этот диалог?";
     }
 
-    if (!confirm(confirmationMsg)) return;
+    setConfirmRequest({
+      type: "status",
+      title: "Изменить статус чата",
+      description: confirmationMsg,
+      status: newStatus,
+    });
+  };
 
+  const confirmStatusChange = (newStatus: ChatStatus) => {
     startTransition(async () => {
-      // Подгружаем новый экшен динамически, чтобы не раздувать импорты в начале (условно)
-      const { updateChatStatusAction } = await import("../(protected)/_actions/chat-actions");
       const result = await updateChatStatusAction(selectedChat.id, newStatus, selectedChat.status);
       if (!result.success) {
         showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось изменить статус чата.", "error");
       } else {
+        setConfirmRequest(null);
         showToast("Статус чата изменён.", "success");
       }
     });
   };
 
-  // Авто-скролл вниз при добавлении сообщений
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useScrollToBottom(messagesEndRef, messages);
 
   const isResolved = selectedChat.status === "resolved" || selectedChat.status === "closed";
   const isClaimable = selectedChat.status === "open" || selectedChat.status === "waiting_operator";
@@ -450,184 +201,94 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
   const isAdmin = currentManager?.role === "admin";
 
   const handleDeleteMessage = (messageId: string) => {
-    if (!confirm("Удалить это сообщение? Это действие необратимо.")) return;
+    setConfirmRequest({
+      type: "delete-message",
+      title: "Удалить сообщение",
+      description: "Удалить это сообщение? Это действие необратимо.",
+      messageId,
+    });
+  };
+
+  const confirmDeleteMessage = (messageId: string) => {
     startTransition(async () => {
       const result = await deleteMessageAction(messageId);
       if (!result.success) {
         showToast(result.error ? `Ошибка удаления: ${result.error}` : "Удаление сообщения не выполнено.", "error");
       } else {
         setMessages(prev => prev.filter(m => m.id !== messageId));
+        setConfirmRequest(null);
         showToast("Сообщение удалено.", "success");
       }
     });
   };
 
   const handleDeleteChat = () => {
-    if (!confirm(`Удалить чат "${selectedChat.title}" полностью? Все сообщения и история будут уничтожены. Это действие необратимо!`)) return;
+    setConfirmRequest({
+      type: "delete-chat",
+      title: "Удалить чат",
+      description: `Удалить чат "${selectedChat.title}" полностью? Все сообщения и история будут уничтожены. Это действие необратимо!`,
+    });
+  };
+
+  const confirmDeleteChat = () => {
     startTransition(async () => {
       const result = await deleteChatAction(selectedChat.id);
       if (!result.success) {
         showToast(result.error ? `Ошибка: ${result.error}` : "Не удалось удалить чат.", "error");
       } else {
+        setConfirmRequest(null);
         showToast("Чат удалён.", "success");
       }
     });
   };
 
+  const handleConfirmAction = () => {
+    if (!confirmRequest || isPending) return;
+
+    if (confirmRequest.type === "status") {
+      confirmStatusChange(confirmRequest.status);
+      return;
+    }
+
+    if (confirmRequest.type === "delete-message") {
+      confirmDeleteMessage(confirmRequest.messageId);
+      return;
+    }
+
+    confirmDeleteChat();
+  };
+
   return (
     <>
       <div className={detailsHeaderClassName}>
-        <div className="flex-1">
-          <p className={detailsEyebrowClassName}>
-            Диалог
-          </p>
-          <div className="flex items-center gap-3">
-            <h2 className={detailsTitleClassName}>{selectedChat.title}</h2>
-            {selectedChat.assignedManagerName && (() => {
-              const assignedMgr = allManagers.find(m => m.id === selectedChat.assignedManagerId);
-              const roleLabel = assignedMgr?.role?.toUpperCase() ?? "Менеджер";
-              return (
-                <span className={assignedManagerBadgeClassName}>
-                  {roleLabel}: {selectedChat.assignedManagerName}
-                </span>
-              );
-            })()}
-          </div>
-          {selectedChat.fullName ? (
-            <p className={detailsFullNameClassName}>{selectedChat.fullName}</p>
-          ) : null}
-          <div className={detailsMetaListClassName}>
-            <span className={metaChipClassName}>
-              сообщений: {messages.length}
-            </span>
-            <span className={metaChipClassName}>
-              chat_id: {selectedChat.telegramChatId}
-            </span>
-            <span className={statusMetaChipClassName}>
-              status: {selectedChat.status}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {isClaimable && (
-            <Button
-              onClick={handleTakeIntoWork}
-              isLoading={isPending}
-              variant="primary"
-            >
-              {isPending ? "Обработка..." : "Взять в работу"}
-            </Button>
-          )}
-
-          {(canUseStatusSelector || canTransferChat) && (
-            <>
-              {canTransferChat && (
-                <div className="relative">
-                  <Button
-                    onClick={() => setShowTransfer(!showTransfer)}
-                    isLoading={isPending}
-                    variant="secondary"
-                  >
-                    Передать
-                  </Button>
-                  {showTransfer && (
-                    <div className={transferMenuClassName}>
-                      <p className={transferMenuTitleClassName}>Выберите менеджера</p>
-                      <div className={transferMenuListClassName}>
-                        {allManagers.map(mgr => (
-                          <Button
-                            key={mgr.id}
-                            onClick={() => handleTransfer(mgr.id)}
-                            variant="ghost"
-                            className="w-full justify-start rounded-lg px-3 py-2 text-left"
-                            size="sm"
-                          >
-                            {getManagerFullName(mgr)} <span className={transferManagerRoleClassName}>({mgr.role})</span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {canUseStatusSelector && (
-                <div className="relative">
-                  <select
-                    value={selectedChat.status}
-                    onChange={(e) => handleStatusChange(e.target.value as ChatStatus)}
-                    disabled={isPending}
-                    className={statusSelectClassName}
-                  >
-                    {visibleStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-
-          {isAdmin && (
-            <Button
-              onClick={handleDeleteChat}
-              isLoading={isPending}
-              variant="danger"
-              title="Удалить весь чат (только admin)"
-            >
-              🗑️ Удалить чат
-            </Button>
-          )}
-        </div>
+        <ChatDetailsHeader selectedChat={selectedChat} messagesCount={messages.length} allManagers={allManagers} />
+        <ChatActionPanel
+          allManagers={allManagers}
+          canTransferChat={canTransferChat}
+          canUseStatusSelector={canUseStatusSelector}
+          isAdmin={isAdmin}
+          isClaimable={isClaimable}
+          isPending={isPending}
+          selectedStatus={selectedChat.status}
+          showTransfer={showTransfer}
+          visibleStatusOptions={visibleStatusOptions}
+          onDeleteChat={handleDeleteChat}
+          onStatusChange={handleStatusChange}
+          onTakeIntoWork={handleTakeIntoWork}
+          onToggleTransfer={() => setShowTransfer((current) => !current)}
+          onTransfer={handleTransfer}
+        />
       </div>
 
-      <div className={messagesPanelClassName}>
-        {messages.length === 0 && (
-          <div className={emptyMessagesClassName}>Сообщений пока нет</div>
-        )}
-        {messages.map((message) => (
-          <article key={message.id} className={getMessageCardClassName(message)}>
-            <div className={messageHeaderClassName}>
-              <div className={messageAuthorClassName}>
-                <div>
-                  <p className={messageAuthorNameClassName}>{getSenderLabel(message, selectedChat.title, allManagers)}</p>
-                  <p className={messageDateClassName}>
-                    {new Date(message.createdAt).toLocaleString("ru-RU")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isOutgoingMessage(message) && message.deliveryStatus && (
-                  <span
-                    className={getDeliveryBadgeClassName(message.deliveryStatus)}
-                    title={getSafeDeliveryError(message.deliveryError)}
-                  >
-                    {getDeliveryBadgeLabel(message.deliveryStatus)}
-                  </span>
-                )}
-                {isAdmin && (
-                  <Button
-                    onClick={() => handleDeleteMessage(message.id)}
-                    isLoading={isPending}
-                    variant="ghost"
-                    className={deleteMessageButtonClassName}
-                    title="Удалить сообщение"
-                  >
-                    🗑️
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <p className={messageTextClassName}>{message.text || "Пустое сообщение"}</p>
-          </article>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+      <MessageTimeline
+        allManagers={allManagers}
+        chatTitle={selectedChat.title}
+        isAdmin={isAdmin}
+        isPending={isPending}
+        messages={messages}
+        messagesEndRef={messagesEndRef}
+        onDeleteMessage={handleDeleteMessage}
+      />
 
       {composerAvailability.canSend ? (
           <ChatMessageInput
@@ -637,9 +298,7 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
               }}
           />
       ) : (
-        <div className={composerUnavailableClassName}>
-           <p className={composerUnavailableTextClassName}>{composerAvailability.unavailableReason}</p>
-        </div>
+        <ComposerUnavailable reason={composerAvailability.unavailableReason} />
       )}
 
       {toast ? (
@@ -647,9 +306,20 @@ export function ChatDetailsClient({ selectedChat, initialMessages, allManagers, 
           key={toast.id}
           message={toast.message}
           variant={toast.variant}
-          onClose={() => setToast((current) => current?.id === toast.id ? null : current)}
+          onClose={() => closeToast(toast.id)}
         />
       ) : null}
+
+      <ConfirmDialog
+        isOpen={confirmRequest !== null}
+        title={confirmRequest?.title ?? ""}
+        description={confirmRequest?.description ?? ""}
+        confirmLabel={confirmRequest?.type === "status" ? "Изменить" : "Удалить"}
+        variant={confirmRequest?.type === "status" ? "default" : "danger"}
+        isPending={isPending}
+        onCancel={() => setConfirmRequest(null)}
+        onConfirm={handleConfirmAction}
+      />
     </>
   );
 }
