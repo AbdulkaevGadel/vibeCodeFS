@@ -6,7 +6,7 @@ type AuthSubmitButtonProps = {
 };
 
 const buttonClassName =
-  "w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500";
+  "support-interactive w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:bg-slate-500";
 
 export function AuthSubmitButton({
   children,

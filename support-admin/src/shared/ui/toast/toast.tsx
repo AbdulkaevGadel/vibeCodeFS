@@ -20,7 +20,7 @@ const bodyClassName = "min-w-0 flex-1";
 const titleClassName = "text-xs uppercase tracking-[0.24em] opacity-70";
 const messageClassName = "mt-1 text-sm font-medium";
 const closeButtonBaseClassName =
-  "rounded-full px-2 py-1 text-xs font-semibold transition hover:bg-black/5";
+  "support-interactive rounded-full px-2 py-1 text-xs font-semibold transition hover:bg-black/5";
 
 const variantConfig: Record<ToastVariant, {
   containerClassName: string;

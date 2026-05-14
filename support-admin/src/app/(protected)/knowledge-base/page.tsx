@@ -2,6 +2,11 @@ import { AdminHeader } from "../../_components/admin-header";
 import { ErrorAlert } from "../../_components/error-alert";
 import { KnowledgeList } from "../../_components/knowledge/knowledge-list";
 import { KnowledgeDetails } from "../../_components/knowledge/knowledge-details";
+import {
+  KnowledgeArchiveAction,
+  KnowledgeHeaderStats,
+} from "../../_components/knowledge/knowledge-header-content";
+import { KnowledgeEmbeddingRefreshPanel } from "../../_components/knowledge/knowledge-embedding-refresh-panel";
 import { getKnowledgeBaseData } from "../../_lib/get-knowledge-base-data";
 import { PageProps } from "../../_lib/page-types";
 import styles from "../../page.module.css";
@@ -16,30 +21,38 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
   const isCreatingArticle = params?.mode === "create" && requestedView === "active";
   
   const pageData = await getKnowledgeBaseData(selectedArticleId, searchQuery, requestedView);
-
-  // Для шапки нам нужны базовые данные менеджера (подтянем из pageData)
-  // В идеале мы должны иметь общий провайдер или кэшировать это, 
-  // но пока используем данные из нашего геттера.
+  const canManageKnowledgeArchive = pageData.currentManager?.role === "admin"
+    || pageData.currentManager?.role === "supervisor";
 
   return (
     <main className={styles.pageMain}>
       <div className={styles.pageContent}>
         <AdminHeader
-          headerBotLabel="База знаний"
-          messageCount={0}
-          chatCount={0}
-          botOptions={[]}
-          selectedBotKey={null}
+          title="База знаний"
           allManagers={pageData.allManagers}
           currentManager={pageData.currentManager}
-          kbTotalCount={pageData.embeddingSummary.totalCount}
-          kbPublishedCount={pageData.embeddingSummary.publishedCount}
-          kbEmbeddingSummary={pageData.embeddingSummary}
-          kbEmbeddingRefreshBatch={
-            pageData.embeddingRefreshBatch?.status === "running"
-              ? pageData.embeddingRefreshBatch
-              : null
-          }
+          navigationHref="/"
+          navigationLabel="← Вернуться к чатам"
+          secondaryActions={canManageKnowledgeArchive ? (
+            <KnowledgeArchiveAction isArchiveView={pageData.view === "archive"} />
+          ) : null}
+          stats={(
+            <KnowledgeHeaderStats
+              totalCount={pageData.embeddingSummary.totalCount}
+              publishedCount={pageData.embeddingSummary.publishedCount}
+            />
+          )}
+          sidePanel={(
+            <KnowledgeEmbeddingRefreshPanel
+              summary={pageData.embeddingSummary}
+              initialBatch={
+                pageData.embeddingRefreshBatch?.status === "running"
+                  ? pageData.embeddingRefreshBatch
+                  : null
+              }
+              canManage={canManageKnowledgeArchive}
+            />
+          )}
         />
 
         {pageData.errorMessage ? (

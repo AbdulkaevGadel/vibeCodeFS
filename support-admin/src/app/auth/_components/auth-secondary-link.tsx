@@ -11,7 +11,7 @@ const alignClasses = {
   center: "text-center",
   compact: "w-fit self-center",
 };
-const linkBaseClassName = "text-sm text-slate-600 underline underline-offset-4 transition hover:text-slate-900";
+const linkBaseClassName = "support-interactive text-sm text-slate-600 underline underline-offset-4 transition hover:text-slate-900";
 
 export function AuthSecondaryLink({
   href,

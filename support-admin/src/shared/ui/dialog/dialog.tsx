@@ -30,7 +30,7 @@ const descriptionClassName = "mt-1 text-sm text-slate-500";
 const bodyBaseClassName = "overflow-y-auto px-6 py-5";
 const footerClassName = "flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-6 py-4";
 const closeButtonClassName =
-  "absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-2xl leading-none text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50";
+  "support-interactive absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-2xl leading-none text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 disabled:opacity-50";
 
 const sizeClassNames: Record<DialogSize, string> = {
   sm: "max-w-md",

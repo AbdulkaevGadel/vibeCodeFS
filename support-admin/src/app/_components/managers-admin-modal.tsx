@@ -23,7 +23,7 @@ const formGridClassName = "mt-4 grid gap-3 md:grid-cols-2";
 const inputClassName =
   "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const selectClassName =
-  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
+  "support-interactive w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900";
 const tableHeaderClassName = "text-left text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400";
 const tableCellClassName = "border-t border-slate-100 py-3 pr-3 text-sm text-slate-700";
 const successMessageClassName =
