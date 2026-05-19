@@ -26,19 +26,63 @@ Rule:
 
 ## UI Reuse Check
 
-Before changing UI in `support-admin`, first check existing shared UI primitives and nearby route-local components.
+Before changing UI in `support-admin`, first check existing shared UI primitives, FSD layer candidates, and nearby transitional route-local components.
 
 Check at minimum:
 - `src/shared/ui`
-- nearby `_components`
+- relevant `widgets`, `features`, `entities`, and `shared` candidates when they exist
+- nearby `_components` as transitional legacy
 - existing component patterns in the same route/page
 
 Rules:
 - Reuse `Button`, `Toast`, modal, form, badge, and card-like patterns when they match the behavior and semantic role.
 - Do not hand-roll a new button, alert, toast, modal, or repeated card layout if an existing component already fits.
 - Do not move UI into `shared` only because Tailwind classes look similar.
-- Prefer local constants or local components for one-route UI.
+- Simple route-only glue may stay near the route/page while it is small, not reused, and has no independent FSD responsibility.
+- Do not add new frontend code to `_components` / `_lib` when it already has a clear `widgets`, `features`, `entities`, or `shared` responsibility.
 - Promote to shared only after real cross-route reuse is clear.
+
+## Pragmatic FSD Rules
+
+`support-admin` uses pragmatic Feature-Sliced Design as the target frontend architecture.
+
+This is an app-specific override for `support-admin`: these FSD rules take priority over root-level route-local `_components` / `_lib` defaults when they conflict. Root frontend rules still apply where they do not conflict with this section.
+
+Next.js App Router mapping:
+- `src/app` is the routing boundary for routes, guards, route-level data loading, redirects, and composition.
+- `app/.../page.tsx` is a route entry and composition layer, not the place for stable domain/UI architecture.
+- `widgets` are large standalone page UI blocks with a composition role.
+- `features` are user actions and use-cases, such as `send-message`, `transfer-chat`, or `update-chat-status`.
+- `entities` are stable domain entities with their own model, types, UI, or behavior, such as `chat`, `message`, `manager`, or `knowledge-article`.
+- `shared` is only for stable primitives, utilities, infrastructure, and config with real cross-domain reuse.
+
+Dependency direction:
+- `app` may import `widgets`, `features`, `entities`, and `shared`.
+- `widgets` may import `features`, `entities`, and `shared`.
+- `features` may import `entities` and `shared`.
+- `entities` may import `shared`.
+- `shared` must not import upper FSD layers.
+- Lower FSD layers must not import `app`.
+
+Transition rules:
+- Existing `_components` / `_lib` folders are transitional legacy, not the target folder-formation model.
+- Do not create `widgets`, `features`, `entities`, or `shared` folders only because FSD has those layers.
+- Do not start a full-project FSD rewrite in one task.
+- Move code into an FSD layer by responsibility, reuse, or complexity pressure, not by the idea that "lower is better".
+- `shared` is the strictest promotion target and requires stable cross-domain reuse.
+- Do not move code into a new FSD layer silently; explain the reason, target layer, affected files, and wait for approval.
+
+FSD placement review:
+- After each frontend implementation task in `support-admin`, review touched frontend code placement.
+- If the code is still simple and route-specific, it may stay near the route/page.
+- If a large page-level UI block appeared, recommend `widgets`.
+- If a user interaction or use-case appeared, recommend `features`.
+- If a stable domain entity with types, model, UI, or behavior appeared, recommend `entities`.
+- If a cross-domain primitive, utility, infrastructure, or config appeared, recommend `shared`.
+- In the final report, explicitly state one result:
+  - `No FSD promotion needed`;
+  - `FSD promotion recommended`;
+  - `FSD promotion approved and completed`.
 
 ## Component Decomposition Rule
 
@@ -48,7 +92,8 @@ Preferred split:
 - presentational subcomponents for repeated or visually distinct UI blocks;
 - local helper functions for pure formatting, mapping, and conditional UI decisions;
 - local hooks for stateful workflows, polling, timers, subscriptions, and multi-step async UI logic;
-- route-local `_lib` helpers when logic is reused across components in the same route/domain.
+- FSD layer modules when the extracted code has a clear `widgets`, `features`, `entities`, or `shared` responsibility.
+- route-local `_lib` helpers only as transitional route-only glue when the logic is small, route-specific, and not ready for an FSD layer.
 
 Rules:
 - do not keep unrelated workflows inside one large component;
@@ -58,7 +103,7 @@ Rules:
 - keep hooks focused on UI state and synchronization, not backend authority.
 - For React component files, keep the exported/main component as the final meaningful block whenever practical.
 - Place imports, types, constants, local helpers, and small private subcomponents above the exported/main component so the file can be read top-down.
-- Prefer separate route-local or feature-local modules for extracted components with a standalone UI role, especially when the parent file is already large.
+- Prefer separate FSD layer modules for extracted components with a standalone responsibility, especially when the parent file is already large.
 - Avoid leaving React subcomponents, type blocks, or helper functions below the main component unless there is a strong local reason.
 
 ## Async UI Sync Rule
@@ -79,6 +124,7 @@ These rules are permanent for the `support-admin` frontend.
 - Support Admin must read support-domain data through approved server-side boundaries.
 - Client Components may subscribe to Supabase Realtime only for UI synchronization.
 - Business mutations must stay behind Server Actions / RPC.
+- FSD placement must not move privileged business mutations into Client Components.
 - React must not own workflow consistency.
 - Backend / DB remains the source of truth for chat status, assignment, unread state, AI state, and message delivery state.
 - Realtime callbacks must not become orchestration logic.
@@ -112,11 +158,12 @@ MUST:
 - Repeated auth layout must live in one place.
 - Debug/demo blocks must not affect redirect logic, cookies, session flow, or server auth contracts.
 - Auth-specific UI must stay inside the auth domain until there is real reuse outside auth.
+- New auth UI should follow the pragmatic FSD rules when it has stable `widgets`, `features`, `entities`, or `shared` responsibility.
 
 SHOULD:
 - Keep auth screens visually consistent in spacing, radius, borders, alerts, and text hierarchy.
 - Extract auth UI patterns only when they repeat with the same semantic role.
-- Keep helper and component placement predictable: page-local first, auth-shared second, global shared last.
+- Keep helper and component placement predictable: route-only glue first, responsible FSD layer second, global shared last.
 
 Notes:
 - `DebugPanel` is a development tool and must not be part of the auth-flow contract.
