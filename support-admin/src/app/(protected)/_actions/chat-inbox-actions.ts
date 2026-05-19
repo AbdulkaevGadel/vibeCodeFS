@@ -2,28 +2,28 @@
 
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
-  chatInboxPageLimit,
-  mapInboxPage,
-} from "../../_lib/get-support-admin-page-data";
+  supportChatInboxPageLimit,
+  mapSupportChatInboxPage,
+} from "@/entities/support-chat";
 import { getCurrentManagerId } from "../../_lib/manager-utils";
-import type { ChatInboxCursor, ChatInboxPage } from "../../_lib/page-types";
+import type { SupportChatInboxCursor, SupportChatInboxPage } from "../../_lib/page-types";
 
 type LoadChatInboxPageInput = {
   botUsername: string | null;
-  cursor: ChatInboxCursor;
+  cursor: SupportChatInboxCursor;
 };
 
 type LoadChatInboxPageResult =
   | {
       success: true;
-      data: ChatInboxPage;
+      data: SupportChatInboxPage;
     }
   | {
       success: false;
       error: string;
     };
 
-function isValidCursor(cursor: ChatInboxCursor) {
+function isValidCursor(cursor: SupportChatInboxCursor) {
   return (
     (typeof cursor.lastMessageAt === "string" || cursor.lastMessageAt === null) &&
     typeof cursor.createdAt === "string" &&
@@ -56,7 +56,7 @@ export async function loadChatInboxPageAction(
 
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("get_support_admin_chat_inbox_page", {
-      p_limit: chatInboxPageLimit,
+      p_limit: supportChatInboxPageLimit,
       p_cursor_last_message_at: input.cursor.lastMessageAt,
       p_cursor_created_at: input.cursor.createdAt,
       p_cursor_chat_id: input.cursor.chatId,
@@ -73,7 +73,7 @@ export async function loadChatInboxPageAction(
 
     return {
       success: true,
-      data: mapInboxPage(data),
+      data: mapSupportChatInboxPage(data),
     };
   } catch (error) {
     console.error("Failed to load chat inbox page:", error);

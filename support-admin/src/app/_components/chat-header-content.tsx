@@ -1,4 +1,4 @@
-import { BotOption, Manager } from "../_lib/page-types";
+import { SupportChatBotOption, Manager } from "../_lib/page-types";
 import { BotTabs } from "./bot-tabs";
 
 const chatStatsGridClassName = "grid gap-3 md:grid-cols-3";
@@ -59,7 +59,7 @@ export function CurrentManagerPanel({ manager }: CurrentManagerPanelProps) {
 }
 
 type ChatHeaderTabsProps = {
-  botOptions: BotOption[];
+  botOptions: SupportChatBotOption[];
   selectedBotKey: string | null;
 };
 

@@ -1,5 +1,6 @@
 import { RefObject } from "react";
-import { ChatMessage, Manager } from "../../_lib/page-types";
+import type { ChatMessage } from "@/entities/chat-message";
+import type { ChatDetailsManager } from "../model/manager-types";
 import { MessageBubble } from "./message-bubble";
 
 const messagesPanelClassName =
@@ -7,7 +8,7 @@ const messagesPanelClassName =
 const emptyMessagesClassName = "py-10 text-center text-slate-400";
 
 type MessageTimelineProps = {
-  allManagers: Manager[];
+  allManagers: ChatDetailsManager[];
   chatTitle: string;
   isAdmin: boolean;
   isPending: boolean;

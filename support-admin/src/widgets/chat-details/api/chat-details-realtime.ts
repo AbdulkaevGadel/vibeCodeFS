@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createSupabaseClient } from "@/lib/supabase";
-import { ChatMessage, MessageSenderType } from "../../_lib/page-types";
+import { mapChatMessage, type ChatMessage, type MessageDeliveryUpdateRow, type MessageSenderType } from "@/entities/chat-message";
 
 type RealtimeMessageRow = {
   id: string;
@@ -17,75 +17,15 @@ type RealtimeMessageRow = {
   created_at: string;
 };
 
-type RealtimeMessageDeliveryUpdateRow = Pick<
-  RealtimeMessageRow,
-  "id" | "chat_id" | "delivery_status" | "delivery_error" | "client_message_id"
->;
-
 type UseChatDetailsRealtimeOptions = {
   chatId: string;
   onInsertMessage: (message: ChatMessage) => void;
-  onUpdateDeliveryState: (row: RealtimeMessageDeliveryUpdateRow) => void;
+  onUpdateDeliveryState: (row: MessageDeliveryUpdateRow) => void;
   refreshDetails: () => void;
 };
 
-export function sortMessagesByCreatedAt(messages: ChatMessage[]) {
-  return [...messages].sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-  );
-}
-
-export function dedupeMessagesById(messages: ChatMessage[]) {
-  return Array.from(new Map(messages.map((message) => [message.id, message])).values());
-}
-
-export function normalizeMessages(messages: ChatMessage[]) {
-  return sortMessagesByCreatedAt(dedupeMessagesById(messages));
-}
-
 export function formatRealtimeMessage(row: RealtimeMessageRow): ChatMessage {
-  return {
-    id: row.id,
-    chatId: row.chat_id,
-    senderType: row.sender_type,
-    managerId: row.manager_id,
-    text: row.text,
-    deliveryStatus: row.delivery_status,
-    deliveryError: row.delivery_error,
-    clientMessageId: row.client_message_id,
-    legacyMessageId: row.legacy_message_id,
-    createdAt: row.created_at,
-  };
-}
-
-export function mergeInsertedMessage(messages: ChatMessage[], inserted: ChatMessage) {
-  if (messages.some((message) => message.id === inserted.id)) {
-    return messages;
-  }
-
-  const withoutOptimisticDuplicate = inserted.clientMessageId
-    ? messages.filter((message) => message.clientMessageId !== inserted.clientMessageId)
-    : messages;
-
-  return normalizeMessages([...withoutOptimisticDuplicate, inserted]);
-}
-
-export function mergeUpdatedDeliveryState(
-  messages: ChatMessage[],
-  updated: RealtimeMessageDeliveryUpdateRow,
-) {
-  return normalizeMessages(
-    messages.map((message) =>
-      message.id === updated.id || message.clientMessageId === updated.client_message_id
-        ? {
-            ...message,
-            id: updated.id,
-            deliveryStatus: updated.delivery_status,
-            deliveryError: updated.delivery_error,
-          }
-        : message,
-    ),
-  );
+  return mapChatMessage(row);
 }
 
 export function useChatDetailsRealtime({
@@ -123,7 +63,7 @@ export function useChatDetailsRealtime({
           }
 
           if (payload.eventType === "UPDATE") {
-            const updatedRow = payload.new as RealtimeMessageDeliveryUpdateRow;
+            const updatedRow = payload.new as MessageDeliveryUpdateRow;
             if (updatedRow.chat_id !== activeChatIdRef.current) {
               return;
             }

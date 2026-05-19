@@ -2,13 +2,13 @@
 
 import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef } from "react";
 import { createSupabaseClient } from "@/lib/supabase";
-import { ChatStatus, ChatSummary, MessageSenderType } from "../_lib/page-types";
-import { getBotKey } from "../_lib/page-utils";
+import { getBotKey, sortSupportChatsByActivity, type SupportChatStatus, type SupportChatSummary } from "@/entities/support-chat";
+import type { MessageSenderType } from "@/entities/chat-message";
 
 type RealtimeChatRow = {
   id: string;
   bot_username: string | null;
-  status: ChatStatus;
+  status: SupportChatStatus;
   last_message_at: string | null;
   last_read_at: string | null;
   created_at: string;
@@ -24,39 +24,20 @@ type RealtimeMessageRow = {
 };
 
 type UseChatListRealtimeOptions = {
-  chatsRef: MutableRefObject<ChatSummary[]>;
+  chatsRef: MutableRefObject<SupportChatSummary[]>;
   selectedChatIdRef: MutableRefObject<string | null>;
   selectedBotKeyRef: MutableRefObject<string | null>;
-  setChats: Dispatch<SetStateAction<ChatSummary[]>>;
+  setChats: Dispatch<SetStateAction<SupportChatSummary[]>>;
   refreshList: () => void;
 };
-
-function compareNullableDatesDesc(left: string | null, right: string | null) {
-  if (left && right) return new Date(right).getTime() - new Date(left).getTime();
-  if (left && !right) return -1;
-  if (!left && right) return 1;
-  return 0;
-}
-
-export function sortChatsByActivity(chats: ChatSummary[]) {
-  return [...chats].sort((left, right) => {
-    const lastMessageCompare = compareNullableDatesDesc(left.lastMessageAt, right.lastMessageAt);
-    if (lastMessageCompare !== 0) return lastMessageCompare;
-
-    const createdAtCompare = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    if (createdAtCompare !== 0) return createdAtCompare;
-
-    return left.id.localeCompare(right.id);
-  });
-}
 
 function isMatchingBot(row: Pick<RealtimeChatRow, "bot_username">, selectedBotKey: string | null) {
   if (!selectedBotKey) return true;
   return getBotKey(row.bot_username) === selectedBotKey;
 }
 
-function patchUpdatedChat(chats: ChatSummary[], updated: RealtimeChatRow) {
-  return sortChatsByActivity(
+function patchUpdatedChat(chats: SupportChatSummary[], updated: RealtimeChatRow) {
+  return sortSupportChatsByActivity(
     chats.map((chat) =>
       chat.id === updated.id
         ? {
@@ -72,16 +53,16 @@ function patchUpdatedChat(chats: ChatSummary[], updated: RealtimeChatRow) {
   );
 }
 
-function removeDeletedChat(chats: ChatSummary[], deletedId: string) {
+function removeDeletedChat(chats: SupportChatSummary[], deletedId: string) {
   return chats.filter((chat) => chat.id !== deletedId);
 }
 
 function patchInsertedMessage(
-  chats: ChatSummary[],
+  chats: SupportChatSummary[],
   inserted: RealtimeMessageRow,
   selectedChatId: string | null,
 ) {
-  return sortChatsByActivity(
+  return sortSupportChatsByActivity(
     chats.map((chat) => {
       if (chat.id !== inserted.chat_id) return chat;
 

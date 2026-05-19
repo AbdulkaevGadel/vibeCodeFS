@@ -1,5 +1,6 @@
 import { Badge } from "@/shared/ui/badge";
-import { ChatSummary, Manager } from "../../_lib/page-types";
+import type { SupportChatSummary } from "@/entities/support-chat";
+import type { ChatDetailsManager } from "../model/manager-types";
 
 const detailsHeaderContentClassName = "min-w-0 flex-1";
 const detailsEyebrowClassName = "support-text-muted text-xs uppercase tracking-[0.35em]";
@@ -12,9 +13,9 @@ const assignedManagerBadgeClassName =
 const metaChipClassName = "px-3 py-1";
 
 type ChatDetailsHeaderProps = {
-  selectedChat: ChatSummary;
+  selectedChat: SupportChatSummary;
   messagesCount: number;
-  allManagers: Manager[];
+  allManagers: ChatDetailsManager[];
 };
 
 export function ChatDetailsHeader({ selectedChat, messagesCount, allManagers }: ChatDetailsHeaderProps) {

@@ -1,4 +1,23 @@
+import type { SupportChatBotOption, SupportChatInboxPageInfo, SupportChatSummary } from "@/entities/support-chat";
+import type { ChatMessage as SupportChatMessage } from "@/entities/chat-message";
+
+// Transitional compatibility file during the FSD migration.
+// Do not add new domain types here: move them to the responsible entity phase.
 export type SearchParamValue = string | string[] | undefined;
+
+export type {
+  SupportChatBotOption,
+  SupportChatInboxCursor,
+  SupportChatInboxPage,
+  SupportChatInboxPageInfo,
+  SupportChatStatus,
+  SupportChatSummary,
+} from "@/entities/support-chat";
+export type {
+  ChatMessage,
+  MessageDeliveryStatus,
+  MessageSenderType,
+} from "@/entities/chat-message";
 
 export type PageProps = {
   searchParams?: Promise<{
@@ -10,19 +29,6 @@ export type PageProps = {
     mode?: SearchParamValue;
   }>;
 };
-
-export type ClientSnapshot = {
-  telegramUserId: number;
-  username: string | null;
-  firstName: string | null;
-  lastName: string | null;
-};
-
-export type MessageSenderType = "client" | "manager" | "ai" | "system";
-
-export type ChatStatus = "open" | "waiting_operator" | "in_progress" | "escalated" | "resolved" | "closed";
-
-export type MessageDeliveryStatus = "pending" | "sent" | "failed";
 
 export type ManagerRole = "admin" | "support" | "supervisor";
 
@@ -36,62 +42,6 @@ export function coerceManagerRole(value: unknown): ManagerRole {
   return isManagerRole(value) ? value : "support";
 }
 
-export type ChatMessage = {
-  id: string;
-  chatId: string;
-  senderType: MessageSenderType;
-  managerId: string | null;
-  text: string;
-  deliveryStatus: MessageDeliveryStatus | null;
-  deliveryError: string | null;
-  clientMessageId: string | null;
-  legacyMessageId: number | null;
-  createdAt: string;
-};
-
-export type BotOption = {
-  key: string;
-  label: string;
-  value: string | null;
-};
-
-export type ChatSummary = {
-  id: string;
-  telegramChatId: number;
-  botUsername: string;
-  status: ChatStatus;
-  title: string;
-  fullName: string | null;
-  subtitle: string;
-  username: string | null;
-  assignedManagerId: string | null;
-  assignedManagerName: string | null;
-  telegramUserId: number;
-  lastMessageAt: string | null;
-  lastReadAt: string | null;
-  unreadCount: number;
-  messageCount: number;
-  createdAt: string;
-  updatedAt: string;
-  isUnread?: boolean;
-};
-
-export type ChatInboxCursor = {
-  lastMessageAt: string | null;
-  createdAt: string;
-  chatId: string;
-};
-
-export type ChatInboxPageInfo = {
-  hasMore: boolean;
-  nextCursor: ChatInboxCursor | null;
-};
-
-export type ChatInboxPage = {
-  rows: ChatSummary[];
-  pageInfo: ChatInboxPageInfo;
-};
-
 export type Manager = {
   id: string;
   email: string | null;
@@ -101,15 +51,15 @@ export type Manager = {
 };
 
 export type SupportAdminPageData = {
-  botOptions: BotOption[];
-  selectedBot: BotOption | null;
-  botFilteredChats: ChatSummary[];
+  botOptions: SupportChatBotOption[];
+  selectedBot: SupportChatBotOption | null;
+  botFilteredChats: SupportChatSummary[];
   botFilteredChatCount: number;
   botFilteredMessageCount: number;
-  chatSummaries: ChatSummary[];
-  chatInboxPageInfo: ChatInboxPageInfo;
-  selectedChat: ChatSummary | null;
-  selectedChatMessages: ChatMessage[];
+  chatSummaries: SupportChatSummary[];
+  chatInboxPageInfo: SupportChatInboxPageInfo;
+  selectedChat: SupportChatSummary | null;
+  selectedChatMessages: SupportChatMessage[];
   allManagers: Manager[];
   currentManager: Manager | null;
   statusMessage: string | null;

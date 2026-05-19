@@ -1,6 +1,5 @@
 import { Badge } from "@/shared/ui/badge";
-import { ChatSummary } from "../_lib/page-types";
-import { getQueryString } from "../_lib/page-utils";
+import type { SupportChatSummary } from "@/entities/support-chat";
 
 const activeItemClassName =
   "support-interactive support-surface-accent block rounded-2xl px-4 py-4 shadow-lg";
@@ -24,12 +23,27 @@ const badgesWrapperClassName = "flex flex-col items-end gap-1 pt-1";
 const unreadWrapperClassName = "flex items-center gap-2";
 const unreadLabelClassName = "text-[10px] font-bold uppercase tracking-wider text-blue-500";
 const unreadCountClassName = "animate-in zoom-in duration-300";
+const needsHelpBadgeClassName =
+  "bg-amber-200 text-amber-950 shadow-sm ring-1 ring-amber-300 tracking-wider";
 
 type ChatListItemProps = {
-  chat: ChatSummary;
+  chat: SupportChatSummary;
   isActive: boolean;
   selectedBotKey: string | null;
 };
+
+function getChatListItemHref(botKey: string | null, chatId: string) {
+  const params = new URLSearchParams();
+
+  if (botKey) {
+    params.set("bot", botKey);
+  }
+
+  params.set("chat", chatId);
+
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
+}
 
 export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemProps) {
   const lastActivityLabel = chat.lastMessageAt
@@ -40,7 +54,7 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
 
   return (
     <a
-      href={getQueryString(selectedBotKey, chat.id)}
+      href={getChatListItemHref(selectedBotKey, chat.id)}
       className={isActive ? activeItemClassName : inactiveItemClassName}
     >
       <div className={itemContentClassName}>
@@ -60,9 +74,9 @@ export function ChatListItem({ chat, isActive, selectedBotKey }: ChatListItemPro
           <div className={badgesWrapperClassName}>
             {needsHelp && (
               <Badge
-                variant={isActive ? "inverse" : "warning"}
+                variant="warning"
                 size="sm"
-                className={isActive ? "bg-amber-300/95 text-slate-950 shadow-sm tracking-wider" : "tracking-wider"}
+                className={needsHelpBadgeClassName}
               >
                 Needs help
               </Badge>

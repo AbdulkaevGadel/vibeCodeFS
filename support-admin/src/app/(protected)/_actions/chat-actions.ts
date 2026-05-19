@@ -1,8 +1,7 @@
 "use server";
 
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { getCurrentManagerId } from "../../_lib/manager-utils";
-import { revalidatePath } from "next/cache";
+import {createSupabaseServerClient} from "@/lib/supabase-server";
+import {revalidatePath} from "next/cache";
 
 function getActionErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error occurred";
@@ -47,27 +46,6 @@ export async function sendManagerMessageAction(chatId: string, text: string, cli
     return { success: true };
   } catch (err: unknown) {
     console.error("Failed to send manager message:", err);
-    return { success: false, error: getActionErrorMessage(err) };
-  }
-}
-
-export async function resolveChatAction(chatId: string, expectedStatus?: string | null) {
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.rpc("resolve_chat", {
-      p_chat_id: chatId,
-      p_expected_status: expectedStatus
-    });
-
-    if (error) {
-      console.error("Error in resolveChatAction:", error);
-      return { success: false, error: error.message };
-    }
-
-    revalidatePath("/");
-    return { success: true };
-  } catch (err: unknown) {
-    console.error("Failed to resolve chat:", err);
     return { success: false, error: getActionErrorMessage(err) };
   }
 }
