@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { sendManagerMessageAction } from "../(protected)/_actions/chat-actions";
-import { ChatMessage } from "../_lib/page-types";
+import type { ChatMessage } from "@/entities/chat-message";
 import { Button } from "@/shared/ui/button";
 import { Toast, useToastState } from "@/shared/ui/toast";
 
@@ -14,6 +13,10 @@ export type OptimisticManagerMessage = ChatMessage & {
 
 type ChatMessageInputProps = {
   chatId: string;
+  sendManagerMessage: (chatId: string, text: string, clientMessageId: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   onLocalMessage?: (message: OptimisticManagerMessage) => void;
 };
 
@@ -24,7 +27,7 @@ const textareaClassName =
 const toolbarClassName = "flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-4 py-3";
 const toolbarTextClassName = "support-text-muted text-[11px] uppercase tracking-wider";
 
-export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProps) {
+export function ChatMessageInput({ chatId, sendManagerMessage, onLocalMessage }: ChatMessageInputProps) {
   const [text, setText] = useState("");
   const { toast, showToast, closeToast } = useToastState<"error">();
   const [isPending, startTransition] = useTransition();
@@ -51,7 +54,7 @@ export function ChatMessageInput({ chatId,onLocalMessage }: ChatMessageInputProp
     setText("");
 
     startTransition(async () => {
-      const result = await sendManagerMessageAction(chatId, text, clientMessageId);
+      const result = await sendManagerMessage(chatId, text, clientMessageId);
 
       if (!result.success) {
         showToast(result.error ? `Ошибка при отправке: ${result.error}` : "Сообщение не отправлено.", "error");

@@ -56,6 +56,27 @@ Next.js App Router mapping:
 - `entities` are stable domain entities with their own model, types, UI, or behavior, such as `chat`, `message`, `manager`, or `knowledge-article`.
 - `shared` is only for stable primitives, utilities, infrastructure, and config with real cross-domain reuse.
 
+FSD terminology:
+- `app`, `pages`, `widgets`, `features`, `entities`, and `shared` are layers.
+- Do not introduce the deprecated `processes` layer.
+- Folders inside layers are slices, for example `widgets/chat-details`, `widgets/chat-list`, `entities/chat`, or `entities/message`.
+- Folders inside slices are segments, for example `ui`, `model`, `api`, and `lib`.
+- Choose a layer by architectural role.
+- Create a slice only when it has independent responsibility inside its layer.
+- Use segments to separate responsibility inside an existing slice.
+- Do not confuse layers, slices, and segments.
+- Do not create a new slice only for thematic grouping when the code still depends on the parent slice context.
+- Do not create segments preemptively when a small slice is still readable as a flat folder.
+- Keep context-dependent UI, such as a chat details message timeline, inside the owning slice segment instead of promoting it to a separate widget, feature, or entity.
+- Keep `index.ts` as the pure public API barrel for the slice.
+
+FSD slice naming:
+- Slice names inside FSD layers must describe the product/domain responsibility clearly, not only use the shortest generic noun.
+- Use explicit domain-qualified names when a short name can conflict with platform terms, UI terms, database terms, or another slice/layer meaning.
+- Prefer `support-chat` over generic `chat` when the code represents a support-domain conversation, because Telegram also has `chat` and UI widgets also use chat terminology.
+- Prefer `chat-message` over generic `message` when the code represents one message inside a support chat.
+- Do not over-qualify names when the short name is already unambiguous in the current app.
+
 Dependency direction:
 - `app` may import `widgets`, `features`, `entities`, and `shared`.
 - `widgets` may import `features`, `entities`, and `shared`.
@@ -84,6 +105,13 @@ FSD placement review:
   - `FSD promotion recommended`;
   - `FSD promotion approved and completed`.
 
+FSD public API files:
+- In `support-admin/src/{shared,entities,features,widgets}/**/index.ts`, keep `index.ts` files as pure public API barrels.
+- Allowed in `index.ts`: `export * from "./model";`, `export { SomeComponent } from "./ui/some-component";`, `export type { SomeType } from "./model";`.
+- Forbidden in `index.ts`: declaring types, functions, helpers, constants, React components, or runtime logic directly.
+- Put implementation details in named files such as `model.ts`, `lib.ts`, `ui.tsx`, `api.ts`, or more specific modules.
+- Reason: `index.ts` controls the public API of an FSD slice and must not become a mixed dump as the product grows.
+
 ## Component Decomposition Rule
 
 When a `support-admin` Client Component grows beyond a simple view, decompose it before adding more behavior.
@@ -105,6 +133,9 @@ Rules:
 - Place imports, types, constants, local helpers, and small private subcomponents above the exported/main component so the file can be read top-down.
 - Prefer separate FSD layer modules for extracted components with a standalone responsibility, especially when the parent file is already large.
 - Avoid leaving React subcomponents, type blocks, or helper functions below the main component unless there is a strong local reason.
+- When a component accumulates multiple pure view helpers for labels, variants, className selection, safe display formatting, or view-only filtering/sorting, move them to a neighboring `*-utils.ts` file in the same widget/feature/entity.
+- Keep such helpers out of `entities/*/lib.ts` unless they describe reusable pure operations on the domain model rather than one widget's presentation.
+- Do not extract a single tiny helper by default; extract when helper volume starts to hide the component's render/composition role.
 
 ## Async UI Sync Rule
 

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ChatMessage } from "../../_lib/page-types";
-import { markChatAsReadAction } from "../../(protected)/_actions/chat-actions";
-import { normalizeMessages } from "./chat-details-realtime";
+import { normalizeMessages, type ChatMessage } from "@/entities/chat-message";
 
 type UseSelectedChatReadStateOptions = {
   chatId: string;
@@ -11,6 +9,7 @@ type UseSelectedChatReadStateOptions = {
   initialMessages: ChatMessage[];
   syncMessages: (messages: ChatMessage[]) => void;
   closeTransferMenu: () => void;
+  markChatAsRead: (chatId: string) => Promise<unknown>;
 };
 
 export function useSelectedChatReadState({
@@ -19,6 +18,7 @@ export function useSelectedChatReadState({
   initialMessages,
   syncMessages,
   closeTransferMenu,
+  markChatAsRead,
 }: UseSelectedChatReadStateOptions) {
   const lastMarkedReadRef = useRef<string | null>(null);
 
@@ -28,9 +28,9 @@ export function useSelectedChatReadState({
 
     if (chatId && unreadCount > 0 && lastMarkedReadRef.current !== chatId) {
       lastMarkedReadRef.current = chatId;
-      markChatAsReadAction(chatId).catch((error) => {
+      markChatAsRead(chatId).catch((error) => {
         console.warn("Failed to mark chat as read:", error);
       });
     }
-  }, [chatId, closeTransferMenu, initialMessages, syncMessages, unreadCount]);
+  }, [chatId, closeTransferMenu, initialMessages, markChatAsRead, syncMessages, unreadCount]);
 }

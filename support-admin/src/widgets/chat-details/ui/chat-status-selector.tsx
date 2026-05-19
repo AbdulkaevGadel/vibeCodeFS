@@ -1,18 +1,18 @@
-import { ChatStatus } from "../../_lib/page-types";
+import type { SupportChatStatus } from "@/entities/support-chat";
 
 const statusSelectClassName =
   "support-interactive rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:opacity-50";
 
 export type StatusOption = {
-  value: ChatStatus;
+  value: SupportChatStatus;
   label: string;
 };
 
 type ChatStatusSelectorProps = {
-  status: ChatStatus;
+  status: SupportChatStatus;
   isPending: boolean;
   visibleStatusOptions: StatusOption[];
-  onStatusChange: (newStatus: ChatStatus) => void;
+  onStatusChange: (newStatus: SupportChatStatus) => void;
 };
 
 export function ChatStatusSelector({
@@ -25,7 +25,7 @@ export function ChatStatusSelector({
     <div className="relative">
       <select
         value={status}
-        onChange={(event) => onStatusChange(event.target.value as ChatStatus)}
+        onChange={(event) => onStatusChange(event.target.value as SupportChatStatus)}
         disabled={isPending}
         className={statusSelectClassName}
       >

@@ -1,17 +1,18 @@
-import { ChatSummary, Manager } from "../../_lib/page-types";
+import type { SupportChatStatus, SupportChatSummary } from "@/entities/support-chat";
+import type { ChatDetailsManager } from "../model/manager-types";
 
 export type ComposerAvailability = {
   canSend: boolean;
   unavailableReason: string | null;
 };
 
-export function getManagerFullName(manager: Manager) {
+export function getManagerFullName(manager: ChatDetailsManager) {
   return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
 }
 
 export function getComposerAvailability(
-  selectedChat: ChatSummary,
-  currentManager: Manager | null,
+  selectedChat: SupportChatSummary,
+  currentManager: ChatDetailsManager | null,
 ): ComposerAvailability {
   if (!currentManager) {
     return {
@@ -48,11 +49,27 @@ export function getComposerAvailability(
   }
 }
 
+export function getStatusChangeConfirmation(status: SupportChatStatus) {
+  if (status === "open") {
+    return "Вы уверены, что хотите сбросить чат в 'open'? Это удалит текущее назначение на менеджера.";
+  }
+
+  if (status === "waiting_operator") {
+    return "Перевести чат в Needs help? Текущее назначение на менеджера будет снято.";
+  }
+
+  if (status === "resolved") {
+    return "Завершить этот диалог?";
+  }
+
+  return `Вы уверены, что хотите изменить статус на '${status}'?`;
+}
+
 // Support может отвечать только когда чат назначен ему
 // и не эскалирован на роль выше.
 function getSupportComposerAvailability(
-  selectedChat: ChatSummary,
-  currentManager: Manager,
+  selectedChat: SupportChatSummary,
+  currentManager: ChatDetailsManager,
 ): ComposerAvailability {
   if (selectedChat.status === "escalated") {
     return {

@@ -5,10 +5,20 @@ import {
   ChatHeaderTabs,
   CurrentManagerPanel,
 } from "../_components/chat-header-content";
-import { ChatDetails } from "../_components/chat-details";
-import { ChatList } from "../_components/chat-list";
+import { ChatDetails } from "@/widgets/chat-details";
+import { ChatList } from "@/widgets/chat-list";
 import { ErrorAlert } from "../_components/error-alert";
 import { StatusAlert } from "../_components/status-alert";
+import {
+  deleteChatAction,
+  deleteMessageAction,
+  markChatAsReadAction,
+  sendManagerMessageAction,
+  takeChatIntoWorkAction,
+  transferChatAction,
+  updateChatStatusAction,
+} from "./_actions/chat-actions";
+import { loadChatInboxPageAction } from "./_actions/chat-inbox-actions";
 import { flashCookieName, isFlashStatus } from "../_lib/flash-cookie";
 import { getSupportAdminPageData } from "../_lib/get-support-admin-page-data";
 import { PageProps } from "../_lib/page-types";
@@ -67,6 +77,7 @@ export default async function Home({ searchParams }: PageProps) {
               selectedChatId={pageData.selectedChat?.id ?? null}
               selectedBotKey={pageData.selectedBot?.key ?? null}
               selectedBotUsername={pageData.selectedBot?.value ?? null}
+              loadChatInboxPage={loadChatInboxPageAction}
             />
             <ChatDetails
               selectedChat={pageData.selectedChat}
@@ -74,6 +85,15 @@ export default async function Home({ searchParams }: PageProps) {
               selectedBotKey={pageData.selectedBot?.key ?? null}
               allManagers={pageData.allManagers}
               currentManager={pageData.currentManager}
+              actions={{
+                deleteChat: deleteChatAction,
+                deleteMessage: deleteMessageAction,
+                markChatAsRead: markChatAsReadAction,
+                sendManagerMessage: sendManagerMessageAction,
+                takeChatIntoWork: takeChatIntoWorkAction,
+                transferChat: transferChatAction,
+                updateChatStatus: updateChatStatusAction,
+              }}
             />
           </section>
         )}

@@ -1,21 +1,21 @@
 import { Button } from "@/shared/ui/button";
-import { ChatStatus } from "../../_lib/page-types";
+import type { SupportChatStatus } from "@/entities/support-chat";
 import { ChatStatusSelector, StatusOption } from "./chat-status-selector";
 import { TransferMenu } from "./transfer-menu";
-import { Manager } from "../../_lib/page-types";
+import type { ChatDetailsManager } from "../model/manager-types";
 
 type ChatActionPanelProps = {
-  allManagers: Manager[];
+  allManagers: ChatDetailsManager[];
   canTransferChat: boolean;
   canUseStatusSelector: boolean;
   isAdmin: boolean;
   isClaimable: boolean;
   isPending: boolean;
-  selectedStatus: ChatStatus;
+  selectedStatus: SupportChatStatus;
   showTransfer: boolean;
   visibleStatusOptions: StatusOption[];
   onDeleteChat: () => void;
-  onStatusChange: (newStatus: ChatStatus) => void;
+  onStatusChange: (newStatus: SupportChatStatus) => void;
   onTakeIntoWork: () => void;
   onToggleTransfer: () => void;
   onTransfer: (targetManagerId: string) => void;
