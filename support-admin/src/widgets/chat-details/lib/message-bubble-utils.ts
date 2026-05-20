@@ -1,10 +1,9 @@
 import type { ChatMessage } from "@/entities/chat-message";
-import { getManagerFullName } from "./chat-details-utils";
-import type { ChatDetailsManager } from "../model/manager-types";
+import { getManagerFullName, type Manager } from "@/entities/manager";
 
 const messageCardClassName = "support-card p-4";
 
-export function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: ChatDetailsManager[]) {
+export function getSenderLabel(message: ChatMessage, chatTitle: string, allManagers: Manager[]) {
   if (message.senderType === "manager") {
     if (message.managerId) {
       const manager = allManagers.find((item) => item.id === message.managerId);

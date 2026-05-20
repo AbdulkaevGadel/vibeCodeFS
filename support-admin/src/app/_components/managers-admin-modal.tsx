@@ -2,7 +2,7 @@
 
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { isManagerRole, Manager } from "../_lib/page-types";
+import { getManagerFullName, isManagerRole, type Manager } from "@/entities/manager";
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
 import {
@@ -37,10 +37,6 @@ const spacedSectionClassName = `${sectionClassName} mt-4`;
 const tableWrapperClassName = "mt-4 overflow-x-auto";
 const tableClassName = "w-full border-collapse";
 const editActionsClassName = "flex items-end gap-3";
-
-function getManagerFullName(manager: Manager) {
-  return [manager.displayName, manager.lastName].filter(Boolean).join(" ");
-}
 
 function readManagerRoleFromForm(formData: FormData) {
   const role = formData.get("role")?.toString();

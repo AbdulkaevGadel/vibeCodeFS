@@ -1,6 +1,6 @@
 import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { coerceManagerRole, isManagerRole, Manager } from "./page-types";
+import { isManagerRole, mapManagerRow, type Manager, type ManagerRow } from "@/entities/manager";
 
 export async function getCurrentManagerId(): Promise<string> {
   const manager = await getCurrentManager();
@@ -33,11 +33,5 @@ export async function getCurrentManager(): Promise<Manager> {
     });
   }
 
-  return {
-    id: manager.id,
-    email: manager.email,
-    displayName: manager.display_name,
-    lastName: manager.last_name,
-    role: coerceManagerRole(manager.role),
-  };
+  return mapManagerRow(manager as ManagerRow);
 }

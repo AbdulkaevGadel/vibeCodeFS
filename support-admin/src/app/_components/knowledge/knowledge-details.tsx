@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { isPrivilegedManager, type Manager } from "@/entities/manager";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Toast, useToastState } from "@/shared/ui/toast";
@@ -16,7 +17,6 @@ import {
   ArticleStatus,
   KnowledgeArticle,
   KnowledgeArticleHistory,
-  Manager,
 } from "../../_lib/page-types";
 import { KnowledgeArticleForm } from "./knowledge-article-form";
 import { KnowledgeArticleHistoryList } from "./knowledge-article-history";
@@ -70,7 +70,7 @@ export function KnowledgeDetails({
 
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
-  const canManageLifecycle = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+  const canManageLifecycle = isPrivilegedManager(currentManager);
 
   const displayedArticle = selectedArticle
     ? {

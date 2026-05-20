@@ -1,6 +1,5 @@
 import { Button } from "@/shared/ui/button";
-import { getManagerFullName } from "../lib/chat-details-utils";
-import type { ChatDetailsManager } from "../model/manager-types";
+import { getManagerFullName, type Manager } from "@/entities/manager";
 
 const transferMenuClassName =
   "absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5";
@@ -10,7 +9,7 @@ const transferMenuListClassName = "max-h-48 overflow-y-auto";
 const transferManagerRoleClassName = "ml-1 text-[10px] text-slate-400";
 
 type TransferMenuProps = {
-  allManagers: ChatDetailsManager[];
+  allManagers: Manager[];
   isPending: boolean;
   isOpen: boolean;
   onToggle: () => void;

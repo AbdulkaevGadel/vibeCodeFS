@@ -1,7 +1,8 @@
-import type { SupportChatStatus, SupportChatSummary } from "@/entities/support-chat";
+import type { SupportChatSummary } from "@/entities/support-chat";
 import type { ChatMessage } from "@/entities/chat-message";
+import type { Manager } from "@/entities/manager";
+import type { ChatDetailsActions } from "../model";
 import { ChatDetailsClient } from "./chat-details-client";
-import type { ChatDetailsManager } from "../model/manager-types";
 
 const detailsSectionClassName = "support-panel p-5";
 const emptyStateClassName =
@@ -11,40 +12,9 @@ type ChatDetailsProps = {
   selectedChat: SupportChatSummary | null;
   selectedChatMessages: ChatMessage[];
   selectedBotKey: string | null;
-  allManagers: ChatDetailsManager[];
-  currentManager: ChatDetailsManager | null;
+  allManagers: Manager[];
+  currentManager: Manager | null;
   actions: ChatDetailsActions;
-};
-
-export type ChatActionResult =
-  | {
-      success: true;
-    }
-  | {
-      success: false;
-      error?: string;
-    };
-
-export type ChatDetailsActions = {
-  deleteChat: (chatId: string) => Promise<ChatActionResult>;
-  deleteMessage: (messageId: string) => Promise<ChatActionResult>;
-  markChatAsRead: (chatId: string) => Promise<ChatActionResult>;
-  sendManagerMessage: (
-    chatId: string,
-    text: string,
-    clientMessageId: string,
-  ) => Promise<ChatActionResult>;
-  takeChatIntoWork: (chatId: string) => Promise<ChatActionResult>;
-  transferChat: (
-    chatId: string,
-    targetManagerId: string,
-    expectedFromManagerId?: string | null,
-  ) => Promise<ChatActionResult>;
-  updateChatStatus: (
-    chatId: string,
-    newStatus: SupportChatStatus,
-    expectedStatus?: string | null,
-  ) => Promise<ChatActionResult>;
 };
 
 export function ChatDetails({

@@ -1,3 +1,4 @@
+import { isPrivilegedManager } from "@/entities/manager";
 import { AdminHeader } from "../../_components/admin-header";
 import { ErrorAlert } from "../../_components/error-alert";
 import { KnowledgeList } from "../../_components/knowledge/knowledge-list";
@@ -21,8 +22,7 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
   const isCreatingArticle = params?.mode === "create" && requestedView === "active";
   
   const pageData = await getKnowledgeBaseData(selectedArticleId, searchQuery, requestedView);
-  const canManageKnowledgeArchive = pageData.currentManager?.role === "admin"
-    || pageData.currentManager?.role === "supervisor";
+  const canManageKnowledgeArchive = isPrivilegedManager(pageData.currentManager);
 
   return (
     <main className={styles.pageMain}>

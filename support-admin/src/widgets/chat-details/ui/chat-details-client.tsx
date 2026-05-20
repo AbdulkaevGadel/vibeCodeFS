@@ -4,6 +4,11 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportChatSummary } from "@/entities/support-chat";
 import {
+  isAdminManager,
+  isPrivilegedManager,
+  type Manager,
+} from "@/entities/manager";
+import {
   mergeInsertedMessage,
   mergeUpdatedDeliveryState,
   normalizeMessages,
@@ -22,8 +27,7 @@ import { getComposerAvailability } from "../lib/chat-details-utils";
 import { useChatDetailsActions } from "../model/use-chat-details-actions";
 import { useScrollToBottom } from "../model/use-scroll-to-bottom";
 import { useSelectedChatReadState } from "../model/use-selected-chat-read-state";
-import type { ChatDetailsActions } from "./chat-details";
-import type { ChatDetailsManager } from "../model/manager-types";
+import type { ChatDetailsActions } from "../model";
 
 const detailsHeaderClassName =
   "flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between";
@@ -32,8 +36,8 @@ type ChatDetailsClientProps = {
   selectedChat: SupportChatSummary;
   initialMessages: ChatMessage[];
   selectedBotKey: string | null;
-  allManagers: ChatDetailsManager[];
-  currentManager: ChatDetailsManager | null;
+  allManagers: Manager[];
+  currentManager: Manager | null;
   actions: ChatDetailsActions;
 };
 
@@ -122,25 +126,25 @@ export function ChatDetailsClient({
 
   const isResolved = selectedChat.status === "resolved" || selectedChat.status === "closed";
   const isClaimable = selectedChat.status === "open" || selectedChat.status === "waiting_operator";
-  const isPrivilegedManager = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+  const canUsePrivilegedRole = isPrivilegedManager(currentManager);
   const isAssignedToCurrentManager = selectedChat.assignedManagerId === currentManager?.id;
   const canSupportChangeStatus =
     currentManager?.role === "support" && isAssignedToCurrentManager && selectedChat.status !== "escalated";
-  const canUseStatusSelector = Boolean(isPrivilegedManager || canSupportChangeStatus);
-  const canTransferChat = Boolean(!isResolved && !isClaimable && (isPrivilegedManager || isAssignedToCurrentManager));
+  const canUseStatusSelector = Boolean(canUsePrivilegedRole || canSupportChangeStatus);
+  const canTransferChat = Boolean(!isResolved && !isClaimable && (canUsePrivilegedRole || isAssignedToCurrentManager));
   const composerAvailability = getComposerAvailability(selectedChat, currentManager);
   const visibleStatusOptions = statusOptions.filter((option) => {
     if (option.value === "waiting_operator") {
-      return Boolean(isPrivilegedManager && !isResolved);
+      return Boolean(canUsePrivilegedRole && !isResolved);
     }
 
     if (option.value === "open") {
-      return Boolean(isPrivilegedManager || canSupportChangeStatus);
+      return Boolean(canUsePrivilegedRole || canSupportChangeStatus);
     }
 
     return true;
   });
-  const isAdmin = currentManager?.role === "admin";
+  const isAdmin = isAdminManager(currentManager);
 
   return (
     <>

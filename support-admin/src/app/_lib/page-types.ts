@@ -1,5 +1,6 @@
 import type { SupportChatBotOption, SupportChatInboxPageInfo, SupportChatSummary } from "@/entities/support-chat";
 import type { ChatMessage as SupportChatMessage } from "@/entities/chat-message";
+import type { Manager } from "@/entities/manager";
 
 // Transitional compatibility file during the FSD migration.
 // Do not add new domain types here: move them to the responsible entity phase.
@@ -18,6 +19,12 @@ export type {
   MessageDeliveryStatus,
   MessageSenderType,
 } from "@/entities/chat-message";
+export type { Manager, ManagerRole } from "@/entities/manager";
+export {
+  coerceManagerRole,
+  isManagerRole,
+  managerRoles,
+} from "@/entities/manager";
 
 export type PageProps = {
   searchParams?: Promise<{
@@ -28,26 +35,6 @@ export type PageProps = {
     view?: SearchParamValue;
     mode?: SearchParamValue;
   }>;
-};
-
-export type ManagerRole = "admin" | "support" | "supervisor";
-
-export const managerRoles = ["admin", "support", "supervisor"] as const satisfies readonly ManagerRole[];
-
-export function isManagerRole(value: unknown): value is ManagerRole {
-  return typeof value === "string" && managerRoles.includes(value as ManagerRole);
-}
-
-export function coerceManagerRole(value: unknown): ManagerRole {
-  return isManagerRole(value) ? value : "support";
-}
-
-export type Manager = {
-  id: string;
-  email: string | null;
-  displayName: string;
-  lastName: string | null;
-  role: ManagerRole;
 };
 
 export type SupportAdminPageData = {

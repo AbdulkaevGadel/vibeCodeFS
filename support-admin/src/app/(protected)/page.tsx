@@ -1,10 +1,8 @@
 import { cookies } from "next/headers";
 import { AdminHeader } from "../_components/admin-header";
-import {
-  ChatHeaderStats,
-  ChatHeaderTabs,
-  CurrentManagerPanel,
-} from "../_components/chat-header-content";
+import { BotTabs } from "../_components/bot-tabs";
+import { ChatHeaderStats } from "../_components/chat-header-stats";
+import { CurrentManagerPanel } from "../_components/current-manager-panel";
 import { ChatDetails } from "@/widgets/chat-details";
 import { ChatList } from "@/widgets/chat-list";
 import { ErrorAlert } from "../_components/error-alert";
@@ -52,7 +50,7 @@ export default async function Home({ searchParams }: PageProps) {
             <CurrentManagerPanel manager={pageData.currentManager} />
           ) : null}
           bottom={(
-            <ChatHeaderTabs
+            <BotTabs
               botOptions={pageData.botOptions}
               selectedBotKey={pageData.selectedBot?.key ?? null}
             />

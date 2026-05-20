@@ -5,7 +5,7 @@ import type { SupportChatStatus, SupportChatSummary } from "@/entities/support-c
 import type { ChatMessage } from "@/entities/chat-message";
 import { useToastState } from "@/shared/ui/toast";
 import { getStatusChangeConfirmation } from "../lib/chat-details-utils";
-import type { ChatDetailsActions } from "../ui/chat-details";
+import type { ChatDetailsActions } from "./types";
 
 export type ConfirmRequest =
   | {

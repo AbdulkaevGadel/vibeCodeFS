@@ -1,7 +1,7 @@
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import type { ChatMessage } from "@/entities/chat-message";
-import type { ChatDetailsManager } from "../model/manager-types";
+import type { Manager } from "@/entities/manager";
 import {
   getDeliveryBadgeLabel,
   getDeliveryBadgeVariant,
@@ -18,7 +18,7 @@ const messageTextClassName = "support-text-secondary mt-4 whitespace-pre-wrap br
 const deleteMessageButtonClassName = "!h-7 !w-7 !p-0 text-red-400 hover:text-red-700";
 
 type MessageBubbleProps = {
-  allManagers: ChatDetailsManager[];
+  allManagers: Manager[];
   chatTitle: string;
   isAdmin: boolean;
   isPending: boolean;

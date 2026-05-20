@@ -1,4 +1,10 @@
 import {createSupabaseServerClient} from "@/lib/supabase-server";
+import {
+  isPrivilegedManager,
+  mapManagerRow,
+  type Manager,
+  type ManagerRow,
+} from "@/entities/manager";
 import {getCurrentManager} from "./manager-utils";
 import {
   ArticleEmbeddingStatus,
@@ -10,8 +16,6 @@ import {
   KnowledgeBaseView,
   KnowledgeEmbeddingRefreshBatch,
   KnowledgeEmbeddingSummary,
-  Manager,
-  coerceManagerRole,
 } from "./page-types";
 
 export type KnowledgeBasePageData = {
@@ -113,8 +117,6 @@ export async function getKnowledgeBaseData(
   let currentManager: Manager | null = null;
   let allManagers: Manager[] = [];
   let view: KnowledgeBaseView = "active";
-  let totalCount = 0;
-  let publishedCount = 0;
   let embeddingSummary: KnowledgeEmbeddingSummary = emptyEmbeddingSummary;
   let embeddingRefreshBatch: KnowledgeEmbeddingRefreshBatch | null = null;
   let errorMessage: string | null = null;
@@ -124,7 +126,7 @@ export async function getKnowledgeBaseData(
     
     // 1. Текущий менеджер
     currentManager = await getCurrentManager().catch(() => null);
-    const canManageArchive = currentManager?.role === "admin" || currentManager?.role === "supervisor";
+    const canManageArchive = isPrivilegedManager(currentManager);
     view = requestedView === "archive" && canManageArchive ? "archive" : "active";
 
     const { data: managersData, error: managersError } = await supabase
@@ -135,13 +137,7 @@ export async function getKnowledgeBaseData(
     if (managersError) {
       console.error("Fetch managers error:", managersError);
     } else {
-      allManagers = (managersData ?? []).map((manager) => ({
-        id: manager.id,
-        email: manager.email,
-        displayName: manager.display_name,
-        lastName: manager.last_name,
-        role: coerceManagerRole(manager.role),
-      }));
+      allManagers = ((managersData ?? []) as ManagerRow[]).map(mapManagerRow);
     }
 
     const { data: summaryData, error: summaryError } = await supabase

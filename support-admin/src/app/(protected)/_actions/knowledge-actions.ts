@@ -1,6 +1,7 @@
 "use server";
 
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { isPrivilegedManager } from "@/entities/manager";
 import { revalidatePath } from "next/cache";
 import { ArticleStatus } from "../../_lib/page-types";
 import { getCurrentManager } from "../../_lib/manager-utils";
@@ -171,7 +172,7 @@ export async function refreshArticleEmbeddingsAction(id: string, expectedVersion
       return { error: "Обновлять знания ИИ могут только пользователи с ролью менеджера." };
     }
 
-    if (currentManager.role !== "admin" && currentManager.role !== "supervisor") {
+    if (!isPrivilegedManager(currentManager)) {
       return { error: "Обновлять знания ИИ могут только supervisor или admin." };
     }
 
@@ -277,7 +278,7 @@ export async function startKnowledgeEmbeddingRefreshBatchAction() {
       return { error: "Обновлять знания ИИ могут только пользователи с ролью менеджера." };
     }
 
-    if (currentManager.role !== "admin" && currentManager.role !== "supervisor") {
+    if (!isPrivilegedManager(currentManager)) {
       return { error: "Обновлять все знания ИИ могут только supervisor или admin." };
     }
 

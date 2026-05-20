@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Manager } from "@/entities/manager";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { KnowledgeArticle, KnowledgeBaseView, Manager } from "../../_lib/page-types";
+import { KnowledgeArticle, KnowledgeBaseView } from "../../_lib/page-types";
 
 type KnowledgeListProps = {
   articles: KnowledgeArticle[];

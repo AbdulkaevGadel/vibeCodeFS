@@ -1,11 +1,11 @@
 import { Button } from "@/shared/ui/button";
 import type { SupportChatStatus } from "@/entities/support-chat";
+import type { Manager } from "@/entities/manager";
 import { ChatStatusSelector, StatusOption } from "./chat-status-selector";
 import { TransferMenu } from "./transfer-menu";
-import type { ChatDetailsManager } from "../model/manager-types";
 
 type ChatActionPanelProps = {
-  allManagers: ChatDetailsManager[];
+  allManagers: Manager[];
   canTransferChat: boolean;
   canUseStatusSelector: boolean;
   isAdmin: boolean;

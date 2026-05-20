@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
+import { isAdminManager, type Manager } from "@/entities/manager";
 import { Button } from "@/shared/ui/button";
 import { logoutAction } from "../_actions/logout";
-import { Manager } from "../_lib/page-types";
 import { RefreshButton } from "../refresh-button";
 import { ManagersAdminModal } from "./managers-admin-modal";
 
@@ -64,7 +64,7 @@ export function AdminHeader({
 
             {secondaryActions}
 
-            {currentManager?.role === "admin" ? (
+            {isAdminManager(currentManager) ? (
               <ManagersAdminModal managers={allManagers} />
             ) : null}
 
