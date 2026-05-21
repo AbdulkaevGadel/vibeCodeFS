@@ -51,6 +51,8 @@ This is an app-specific override for `support-admin`: these FSD rules take prior
 Next.js App Router mapping:
 - `src/app` is the routing boundary for routes, guards, route-level data loading, redirects, and composition.
 - `app/.../page.tsx` is a route entry and composition layer, not the place for stable domain/UI architecture.
+- `src/fsd-pages` is the physical folder for the logical FSD `pages` layer.
+- Do not create `src/pages` for FSD page slices, because `src/pages` can activate or imply Next.js Pages Router semantics and conflict with the App Router architecture.
 - `widgets` are large standalone page UI blocks with a composition role.
 - `features` are user actions and use-cases, such as `send-message`, `transfer-chat`, or `update-chat-status`.
 - `entities` are stable domain entities with their own model, types, UI, or behavior, such as `chat`, `message`, `manager`, or `knowledge-article`.
@@ -106,7 +108,7 @@ FSD placement review:
   - `FSD promotion approved and completed`.
 
 FSD public API files:
-- In `support-admin/src/{shared,entities,features,widgets}/**/index.ts`, keep `index.ts` files as pure public API barrels.
+- In `support-admin/src/{fsd-pages,shared,entities,features,widgets}/**/index.ts`, keep `index.ts` files as pure public API barrels.
 - Allowed in `index.ts`: `export * from "./model";`, `export { SomeComponent } from "./ui/some-component";`, `export type { SomeType } from "./model";`.
 - Forbidden in `index.ts`: declaring types, functions, helpers, constants, React components, or runtime logic directly.
 - Put implementation details in named files such as `model.ts`, `lib.ts`, `ui.tsx`, `api.ts`, or more specific modules.

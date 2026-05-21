@@ -3,12 +3,12 @@
 import { useEffect } from "react";
 import { Toast } from "@/shared/ui/toast";
 
-type StatusToastProps = {
+type StatusAlertProps = {
   message: string;
   variant: "success" | "error";
 };
 
-export function StatusToast({ message, variant }: StatusToastProps) {
+export function StatusAlert({ message, variant }: StatusAlertProps) {
   useEffect(() => {
     void fetch("/api/flash", {
       method: "DELETE",
