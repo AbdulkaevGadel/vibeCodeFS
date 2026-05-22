@@ -1,16 +1,14 @@
 import { cookies } from "next/headers";
 import { AdminHeader } from "../_components/admin-header";
+import { deleteChatAction } from "@/features/delete-chat";
+import { deleteMessageAction } from "@/features/delete-message";
+import { loadChatInboxPageAction } from "@/features/load-chat-inbox-page";
+import { markChatAsReadAction } from "@/features/mark-chat-as-read";
+import { sendManagerMessageAction } from "@/features/send-message";
 import { SupportInboxPage } from "@/fsd-pages/support-inbox";
-import {
-  deleteChatAction,
-  deleteMessageAction,
-  markChatAsReadAction,
-  sendManagerMessageAction,
-  takeChatIntoWorkAction,
-  transferChatAction,
-  updateChatStatusAction,
-} from "./_actions/chat-actions";
-import { loadChatInboxPageAction } from "./_actions/chat-inbox-actions";
+import { takeChatIntoWorkAction } from "@/features/take-chat-into-work";
+import { transferChatAction } from "@/features/transfer-chat";
+import { updateChatStatusAction } from "@/features/update-chat-status";
 import { flashCookieName, isFlashStatus } from "../_lib/flash-cookie";
 import { getSupportAdminPageData } from "../_lib/get-support-admin-page-data";
 import { PageProps } from "../_lib/page-types";

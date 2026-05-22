@@ -114,6 +114,12 @@ FSD public API files:
 - Put implementation details in named files such as `model.ts`, `lib.ts`, `ui.tsx`, `api.ts`, or more specific modules.
 - Reason: `index.ts` controls the public API of an FSD slice and must not become a mixed dump as the product grows.
 
+Server-only entity API:
+- Server-only entity API modules, such as `entities/*/api/*`, must not be exported through the root entity public barrel when that root barrel is used by Client Components.
+- Import server-only entity API directly from its server-only module path, for example `@/entities/manager/api/current-manager`.
+- Root entity barrels should stay safe for shared server/client domain contracts, pure helpers, and types.
+- Reason: this prevents accidental `server-only` imports from Client Components while still allowing Server Actions and server loaders to use entity-owned server helpers.
+
 ## Component Decomposition Rule
 
 When a `support-admin` Client Component grows beyond a simple view, decompose it before adding more behavior.

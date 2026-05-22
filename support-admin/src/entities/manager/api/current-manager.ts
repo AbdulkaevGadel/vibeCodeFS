@@ -1,4 +1,5 @@
 import "server-only";
+
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { isManagerRole, mapManagerRow, type Manager, type ManagerRow } from "@/entities/manager";
 
@@ -9,9 +10,12 @@ export async function getCurrentManagerId(): Promise<string> {
 
 export async function getCurrentManager(): Promise<Manager> {
   const supabase = await createSupabaseServerClient();
-  
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
   if (authError || !user) {
     throw new Error("User not authenticated");
   }

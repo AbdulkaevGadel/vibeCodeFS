@@ -11,7 +11,7 @@ import {
   type KnowledgeEmbeddingRefreshBatch,
   type KnowledgeEmbeddingSummary,
 } from "@/entities/knowledge-article";
-import {getCurrentManager} from "./manager-utils";
+import { getCurrentManager } from "@/entities/manager/api/current-manager";
 import {
   loadKnowledgeArticles,
   loadSelectedKnowledgeArticleDetails,

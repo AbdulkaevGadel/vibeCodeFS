@@ -5,14 +5,34 @@ import { useRouter } from "next/navigation";
 import { getManagerFullName, isManagerRole, type Manager } from "@/entities/manager";
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
-import {
-  addManagerAction,
-  createAuthUserAction,
-  updateManagerAction,
-} from "../(protected)/_actions/manager-actions";
 
 type ManagersAdminModalProps = {
   managers: Manager[];
+  actions: ManagersAdminModalActions;
+};
+
+type ManagersAdminActionResult = {
+  success: boolean;
+  error: string | null;
+};
+
+type ManagersAdminModalActions = {
+  addManager: (input: {
+    email: string;
+    displayName: string;
+    lastName: string;
+    role: Manager["role"];
+  }) => Promise<ManagersAdminActionResult>;
+  createAuthUser: (input: {
+    email: string;
+    password: string;
+  }) => Promise<ManagersAdminActionResult>;
+  updateManager: (input: {
+    managerId: string;
+    displayName: string;
+    lastName: string;
+    role: Manager["role"];
+  }) => Promise<ManagersAdminActionResult>;
 };
 
 const sectionClassName = "rounded-xl border border-slate-200 p-4";
@@ -43,7 +63,7 @@ function readManagerRoleFromForm(formData: FormData) {
   return isManagerRole(role) ? role : "support";
 }
 
-export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
+export function ManagersAdminModal({ managers, actions }: ManagersAdminModalProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -83,7 +103,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
     const password = formData.get("password")?.toString() ?? "";
 
     runAction(
-      () => createAuthUserAction({ email, password }),
+      () => actions.createAuthUser({ email, password }),
       "Пользователь создан в Supabase Auth.",
     );
     event.currentTarget.reset();
@@ -96,7 +116,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
 
     runAction(
       () =>
-        addManagerAction({
+        actions.addManager({
           email: formData.get("email")?.toString() ?? "",
           displayName: formData.get("displayName")?.toString() ?? "",
           lastName: formData.get("lastName")?.toString() ?? "",
@@ -116,7 +136,7 @@ export function ManagersAdminModal({ managers }: ManagersAdminModalProps) {
 
     runAction(
       () =>
-        updateManagerAction({
+        actions.updateManager({
           managerId: editingManager.id,
           displayName: formData.get("displayName")?.toString() ?? "",
           lastName: formData.get("lastName")?.toString() ?? "",

@@ -22,7 +22,7 @@ import {
   type Manager,
   type ManagerRow,
 } from "@/entities/manager";
-import { getCurrentManager } from "./manager-utils";
+import { getCurrentManager } from "@/entities/manager/api/current-manager";
 import { FlashStatus } from "./flash-cookie";
 import {
   PageProps,

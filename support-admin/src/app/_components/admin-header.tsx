@@ -1,5 +1,10 @@
 import { ReactNode } from "react";
 import { isAdminManager, type Manager } from "@/entities/manager";
+import {
+  addManagerAction,
+  createAuthUserAction,
+  updateManagerAction,
+} from "@/features/manage-managers";
 import { Button } from "@/shared/ui/button";
 import { logoutAction } from "../_actions/logout";
 import { RefreshButton } from "../refresh-button";
@@ -65,7 +70,14 @@ export function AdminHeader({
             {secondaryActions}
 
             {isAdminManager(currentManager) ? (
-              <ManagersAdminModal managers={allManagers} />
+              <ManagersAdminModal
+                managers={allManagers}
+                actions={{
+                  addManager: addManagerAction,
+                  createAuthUser: createAuthUserAction,
+                  updateManager: updateManagerAction,
+                }}
+              />
             ) : null}
 
             <form action={logoutAction}>

@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import type { User } from "@supabase/supabase-js";
+import { isManagerRole, type ManagerRole } from "@/entities/manager";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isManagerRole, type ManagerRole } from "@/entities/manager";
 
 type ActionResult = {
   success: boolean;

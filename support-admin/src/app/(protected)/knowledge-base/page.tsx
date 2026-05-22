@@ -1,18 +1,22 @@
 import {
   KnowledgeBasePage as KnowledgeBaseFsdPage,
 } from "@/fsd-pages/knowledge-base";
+import {
+  deleteArticleAction,
+  setArticleStatusAction,
+  upsertArticleAction,
+} from "@/features/manage-knowledge-article";
+import {
+  getArticleEmbeddingStateAction,
+  refreshArticleEmbeddingsAction,
+} from "@/features/refresh-knowledge-article-embedding";
+import {
+  getKnowledgeEmbeddingRefreshBatchStateAction,
+  startKnowledgeEmbeddingRefreshBatchAction,
+} from "@/features/refresh-knowledge-embedding-batch";
 import type { KnowledgeDetailsActions } from "@/widgets/knowledge-details";
 import type { KnowledgeEmbeddingRefreshPanelActions } from "@/widgets/knowledge-embedding-refresh-panel";
 import { AdminHeader } from "../../_components/admin-header";
-import {
-  deleteArticleAction,
-  getArticleEmbeddingStateAction,
-  getKnowledgeEmbeddingRefreshBatchStateAction,
-  refreshArticleEmbeddingsAction,
-  setArticleStatusAction,
-  startKnowledgeEmbeddingRefreshBatchAction,
-  upsertArticleAction,
-} from "../_actions/knowledge-actions";
 import { getKnowledgeBaseData } from "../../_lib/get-knowledge-base-data";
 import { PageProps } from "../../_lib/page-types";
 

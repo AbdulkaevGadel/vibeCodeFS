@@ -1,12 +1,13 @@
 "use server";
 
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
-  supportChatInboxPageLimit,
   mapSupportChatInboxPage,
+  supportChatInboxPageLimit,
+  type SupportChatInboxCursor,
+  type SupportChatInboxPage,
 } from "@/entities/support-chat";
-import { getCurrentManagerId } from "../../_lib/manager-utils";
-import type { SupportChatInboxCursor, SupportChatInboxPage } from "../../_lib/page-types";
+import { getCurrentManagerId } from "@/entities/manager/api/current-manager";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type LoadChatInboxPageInput = {
   botUsername: string | null;
