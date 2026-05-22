@@ -1,5 +1,5 @@
 import { Badge } from "@/shared/ui/badge";
-import { KnowledgeArticleHistory } from "../../_lib/page-types";
+import type { KnowledgeArticleHistory } from "@/entities/knowledge-article";
 
 type KnowledgeArticleHistoryListProps = {
   history: KnowledgeArticleHistory[];

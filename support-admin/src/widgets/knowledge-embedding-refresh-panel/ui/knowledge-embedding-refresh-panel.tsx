@@ -1,17 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import type {
+  KnowledgeEmbeddingRefreshBatch,
+  KnowledgeEmbeddingSummary,
+} from "@/entities/knowledge-article";
 import { Button } from "@/shared/ui/button";
 import { TooltipMarker } from "@/shared/ui/tooltip-marker";
 import { Toast } from "@/shared/ui/toast";
-import {
-  KnowledgeEmbeddingRefreshBatch,
-  KnowledgeEmbeddingSummary,
-} from "../../_lib/page-types";
 import { KnowledgeBatchLogModal } from "./knowledge-batch-log-modal";
 import { KnowledgeBatchProgress } from "./knowledge-batch-progress";
 import { KnowledgeEmbeddingStat } from "./knowledge-embedding-stat";
-import { useKnowledgeEmbeddingBatchSync } from "./use-knowledge-embedding-batch-sync";
+import type { KnowledgeEmbeddingRefreshPanelActions } from "../model";
+import { useKnowledgeEmbeddingBatchSync } from "../model/use-knowledge-embedding-batch-sync";
 
 const kbEmbeddingPanelClassName = "support-surface-default rounded-2xl px-4 py-3";
 const kbEmbeddingHeaderClassName = "flex flex-wrap items-center justify-between gap-3";
@@ -24,12 +25,14 @@ type KnowledgeEmbeddingRefreshPanelProps = {
   summary: KnowledgeEmbeddingSummary;
   initialBatch: KnowledgeEmbeddingRefreshBatch | null;
   canManage: boolean;
+  actions: KnowledgeEmbeddingRefreshPanelActions;
 };
 
 export function KnowledgeEmbeddingRefreshPanel({
   summary,
   initialBatch,
   canManage,
+  actions,
 }: KnowledgeEmbeddingRefreshPanelProps) {
   const [isLogOpen, setIsLogOpen] = useState(false);
   const {
@@ -46,6 +49,7 @@ export function KnowledgeEmbeddingRefreshPanel({
     initialBatch,
     summary,
     canManage,
+    actions,
   });
 
   return (

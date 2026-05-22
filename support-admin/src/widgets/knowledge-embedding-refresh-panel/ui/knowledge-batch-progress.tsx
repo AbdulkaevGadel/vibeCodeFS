@@ -1,4 +1,4 @@
-import { KnowledgeEmbeddingRefreshBatch } from "../../_lib/page-types";
+import type { KnowledgeEmbeddingRefreshBatch } from "@/entities/knowledge-article";
 
 const kbBatchProgressClassName = "mt-3 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs";
 const kbBatchProgressHeaderClassName = "flex items-center justify-between gap-3";
@@ -12,6 +12,19 @@ type KnowledgeBatchProgressProps = {
   batch: KnowledgeEmbeddingRefreshBatch;
   visibleLogCount: number;
 };
+
+function getBatchStatusLabel(status: KnowledgeEmbeddingRefreshBatch["status"]) {
+  switch (status) {
+    case "completed":
+      return "Готово";
+    case "completed_with_errors":
+      return "Готово с ошибками";
+    case "failed":
+      return "Ошибка";
+    case "running":
+      return "В работе";
+  }
+}
 
 export function KnowledgeBatchProgress({
   batch,
@@ -28,7 +41,7 @@ export function KnowledgeBatchProgress({
           Обработано {batch.processedCount} из {batch.totalCount}
         </span>
         <span className={kbBatchProgressMetaClassName}>
-          {batch.status === "running" ? "В работе" : getBatchStatusLabel(batch.status)}
+          {getBatchStatusLabel(batch.status)}
         </span>
       </div>
       <div className={kbBatchProgressTrackClassName}>
@@ -50,20 +63,4 @@ export function KnowledgeBatchProgress({
       ) : null}
     </div>
   );
-}
-
-function getBatchStatusLabel(status: KnowledgeEmbeddingRefreshBatch["status"]) {
-  if (status === "completed") {
-    return "Готово";
-  }
-
-  if (status === "completed_with_errors") {
-    return "Готово с ошибками";
-  }
-
-  if (status === "failed") {
-    return "Ошибка";
-  }
-
-  return "В работе";
 }

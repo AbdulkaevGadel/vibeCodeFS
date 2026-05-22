@@ -1,6 +1,7 @@
 import { Button } from "@/shared/ui/button";
-import { KnowledgeArticle } from "../../_lib/page-types";
-import { getEmbeddingUi, KnowledgeEmbeddingStatus } from "./knowledge-embedding-status";
+import type { KnowledgeArticle } from "@/entities/knowledge-article";
+import { KnowledgeEmbeddingStatus } from "./knowledge-embedding-status";
+import { getEmbeddingUi } from "./knowledge-embedding-status-utils";
 
 type KnowledgeDetailsHeaderProps = {
   article: KnowledgeArticle | null;

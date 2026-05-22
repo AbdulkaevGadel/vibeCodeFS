@@ -1,9 +1,4 @@
-import { TooltipMarker } from "@/shared/ui/tooltip-marker";
-import { ArticleEmbeddingStatus, KnowledgeArticle } from "../../_lib/page-types";
-
-type KnowledgeEmbeddingStatusProps = {
-  article: KnowledgeArticle;
-};
+import type { ArticleEmbeddingStatus, KnowledgeArticle } from "@/entities/knowledge-article";
 
 type EmbeddingUi = {
   icon: string;
@@ -74,18 +69,4 @@ export function getEmbeddingUi(article: {
   }
 
   return embeddingUiByStatus[article.embeddingStatus];
-}
-
-export function KnowledgeEmbeddingStatus({ article }: KnowledgeEmbeddingStatusProps) {
-  const embeddingUi = getEmbeddingUi(article);
-
-  return (
-    <TooltipMarker
-      content={embeddingUi.tooltip}
-      label={embeddingUi.icon}
-      size="md"
-      tone={embeddingUi.tone}
-      labelClassName={embeddingUi.isSpinner ? "animate-spin" : ""}
-    />
-  );
 }

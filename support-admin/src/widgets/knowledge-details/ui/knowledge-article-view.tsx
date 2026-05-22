@@ -1,6 +1,6 @@
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { ArticleStatus, KnowledgeArticle } from "../../_lib/page-types";
+import type { ArticleStatus, KnowledgeArticle } from "@/entities/knowledge-article";
 
 type KnowledgeArticleViewProps = {
   article: KnowledgeArticle;

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { KnowledgeArticle, KnowledgeBaseView } from "@/entities/knowledge-article";
 import type { Manager } from "@/entities/manager";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { KnowledgeArticle, KnowledgeBaseView } from "../../_lib/page-types";
+import { KnowledgeListHeader } from "./knowledge-list-header";
 
 type KnowledgeListProps = {
   articles: KnowledgeArticle[];
@@ -17,11 +18,6 @@ type KnowledgeListProps = {
 };
 
 const listPanelClassName = "flex flex-col h-[calc(100vh-200px)] overflow-hidden support-panel";
-const listHeaderClassName = "p-5 border-b border-black/5 flex flex-col gap-4";
-const listTitleClassName = "text-xs font-bold uppercase tracking-widest support-text-muted";
-const searchInputClassName =
-  "w-full bg-white/40 border border-black/5 rounded-2xl px-4 py-2 text-xs support-text-primary outline-none focus:border-indigo-500/30 transition-all font-medium placeholder:text-black/20";
-const searchIconClassName = "absolute right-3 top-1/2 -translate-y-1/2 support-text-muted text-[10px]";
 const scrollAreaClassName = "flex-1 overflow-y-auto custom-scrollbar p-3";
 const emptyTextClassName = "p-4 text-sm support-text-muted italic text-center";
 const articleLinkBaseClassName = "support-interactive flex flex-col gap-1.5 p-4 rounded-3xl transition-all duration-300";
@@ -101,26 +97,11 @@ export function KnowledgeList({
 
   return (
     <div className={listPanelClassName}>
-      <div className={listHeaderClassName}>
-        <div className="flex items-center justify-between">
-          <h2 className={listTitleClassName}>
-            {isArchiveView ? "Архив" : "Статьи"}
-          </h2>
-        </div>
-        
-        <div className="relative">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Поиск по базе..."
-            className={searchInputClassName}
-          />
-          <div className={searchIconClassName}>
-             🔎
-          </div>
-        </div>
-      </div>
+      <KnowledgeListHeader
+        isArchiveView={isArchiveView}
+        search={search}
+        onSearchChange={handleSearch}
+      />
       <div className={scrollAreaClassName}>
         <div className="flex flex-col gap-2">
           {articles.length === 0 ? (
@@ -157,8 +138,6 @@ export function KnowledgeList({
           )}
         </div>
       </div>
-      
-
       <div className={footerClassName}>
         {isArchiveView ? (
           <Button 

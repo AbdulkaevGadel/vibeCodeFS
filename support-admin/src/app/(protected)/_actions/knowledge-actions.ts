@@ -2,10 +2,13 @@
 
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { isPrivilegedManager } from "@/entities/manager";
+import {
+  mapKnowledgeArticleEmbeddingState,
+  mapKnowledgeEmbeddingRefreshBatch,
+  type ArticleStatus,
+} from "@/entities/knowledge-article";
 import { revalidatePath } from "next/cache";
-import { ArticleStatus } from "../../_lib/page-types";
 import { getCurrentManager } from "../../_lib/manager-utils";
-import { mapEmbeddingRefreshBatch, mapEmbeddingState } from "../../_lib/get-knowledge-base-data";
 
 type JsonObject = Record<string, unknown>;
 
@@ -260,7 +263,7 @@ export async function getArticleEmbeddingStateAction(id: string) {
     }
 
     return {
-      data: mapEmbeddingState(data),
+      data: mapKnowledgeArticleEmbeddingState(data),
     };
   } catch (err: unknown) {
     console.error("Knowledge Base Embedding State Error:", err);
@@ -376,7 +379,7 @@ async function readEmbeddingRefreshBatchState() {
     throw error;
   }
 
-  return mapEmbeddingRefreshBatch(data);
+  return mapKnowledgeEmbeddingRefreshBatch(data);
 }
 
 async function invokePendingArticleIngestionIfNeeded(articleId: string | null) {
@@ -395,7 +398,7 @@ async function invokePendingArticleIngestionIfNeeded(articleId: string | null) {
       return;
     }
 
-    const state = mapEmbeddingState(data);
+    const state = mapKnowledgeArticleEmbeddingState(data);
     const chunkSetId = typeof data?.chunk_set_id === "string" ? data.chunk_set_id : null;
 
     if (state.embeddingStatus !== "updating" || !chunkSetId) {

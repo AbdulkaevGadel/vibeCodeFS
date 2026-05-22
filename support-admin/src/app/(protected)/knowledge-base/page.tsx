@@ -1,16 +1,20 @@
-import { isPrivilegedManager } from "@/entities/manager";
-import { AdminHeader } from "../../_components/admin-header";
-import { ErrorAlert } from "../../_components/error-alert";
-import { KnowledgeList } from "../../_components/knowledge/knowledge-list";
-import { KnowledgeDetails } from "../../_components/knowledge/knowledge-details";
 import {
-  KnowledgeArchiveAction,
-  KnowledgeHeaderStats,
-} from "../../_components/knowledge/knowledge-header-content";
-import { KnowledgeEmbeddingRefreshPanel } from "../../_components/knowledge/knowledge-embedding-refresh-panel";
+  KnowledgeBasePage as KnowledgeBaseFsdPage,
+} from "@/fsd-pages/knowledge-base";
+import type { KnowledgeDetailsActions } from "@/widgets/knowledge-details";
+import type { KnowledgeEmbeddingRefreshPanelActions } from "@/widgets/knowledge-embedding-refresh-panel";
+import { AdminHeader } from "../../_components/admin-header";
+import {
+  deleteArticleAction,
+  getArticleEmbeddingStateAction,
+  getKnowledgeEmbeddingRefreshBatchStateAction,
+  refreshArticleEmbeddingsAction,
+  setArticleStatusAction,
+  startKnowledgeEmbeddingRefreshBatchAction,
+  upsertArticleAction,
+} from "../_actions/knowledge-actions";
 import { getKnowledgeBaseData } from "../../_lib/get-knowledge-base-data";
 import { PageProps } from "../../_lib/page-types";
-import styles from "../../page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -22,60 +26,39 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
   const isCreatingArticle = params?.mode === "create" && requestedView === "active";
   
   const pageData = await getKnowledgeBaseData(selectedArticleId, searchQuery, requestedView);
-  const canManageKnowledgeArchive = isPrivilegedManager(pageData.currentManager);
+  const knowledgeDetailsActions: KnowledgeDetailsActions = {
+    deleteArticle: deleteArticleAction,
+    getArticleEmbeddingState: getArticleEmbeddingStateAction,
+    refreshArticleEmbeddings: refreshArticleEmbeddingsAction,
+    setArticleStatus: setArticleStatusAction,
+    upsertArticle: upsertArticleAction,
+  };
+  const embeddingRefreshPanelActions: KnowledgeEmbeddingRefreshPanelActions = {
+    getBatchState: getKnowledgeEmbeddingRefreshBatchStateAction,
+    startBatch: startKnowledgeEmbeddingRefreshBatchAction,
+  };
 
   return (
-    <main className={styles.pageMain}>
-      <div className={styles.pageContent}>
+    <KnowledgeBaseFsdPage
+      articles={pageData.articles}
+      selectedArticle={pageData.selectedArticle}
+      selectedArticleId={selectedArticleId}
+      history={pageData.history}
+      currentManager={pageData.currentManager}
+      allManagers={pageData.allManagers}
+      view={pageData.view}
+      searchQuery={searchQuery ?? ""}
+      isCreatingArticle={isCreatingArticle}
+      embeddingSummary={pageData.embeddingSummary}
+      embeddingRefreshBatch={pageData.embeddingRefreshBatch}
+      errorMessage={pageData.errorMessage}
+      knowledgeDetailsActions={knowledgeDetailsActions}
+      embeddingRefreshPanelActions={embeddingRefreshPanelActions}
+      renderHeaderShell={(headerProps) => (
         <AdminHeader
-          title="База знаний"
-          allManagers={pageData.allManagers}
-          currentManager={pageData.currentManager}
-          navigationHref="/"
-          navigationLabel="← Вернуться к чатам"
-          secondaryActions={canManageKnowledgeArchive ? (
-            <KnowledgeArchiveAction isArchiveView={pageData.view === "archive"} />
-          ) : null}
-          stats={(
-            <KnowledgeHeaderStats
-              totalCount={pageData.embeddingSummary.totalCount}
-              publishedCount={pageData.embeddingSummary.publishedCount}
-            />
-          )}
-          sidePanel={(
-            <KnowledgeEmbeddingRefreshPanel
-              summary={pageData.embeddingSummary}
-              initialBatch={
-                pageData.embeddingRefreshBatch?.status === "running"
-                  ? pageData.embeddingRefreshBatch
-                  : null
-              }
-              canManage={canManageKnowledgeArchive}
-            />
-          )}
+          {...headerProps}
         />
-
-        {pageData.errorMessage ? (
-          <ErrorAlert message={pageData.errorMessage} />
-        ) : (
-          <section className={styles.pageGrid}>
-            <KnowledgeList 
-               articles={pageData.articles} 
-               selectedId={selectedArticleId} 
-               view={pageData.view}
-               initialSearchQuery={searchQuery ?? ""}
-               currentManager={pageData.currentManager}
-            />
-            <KnowledgeDetails 
-               key={selectedArticleId ?? (isCreatingArticle ? "create" : "empty")}
-               selectedArticle={pageData.selectedArticle}
-               history={pageData.history}
-               currentManager={pageData.currentManager}
-               isCreatingArticle={isCreatingArticle}
-            />
-          </section>
-        )}
-      </div>
-    </main>
+      )}
+    />
   );
 }

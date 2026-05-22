@@ -2,33 +2,29 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type {
+  ArticleStatus,
+  KnowledgeArticle,
+  KnowledgeArticleHistory,
+} from "@/entities/knowledge-article";
 import { isPrivilegedManager, type Manager } from "@/entities/manager";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Toast, useToastState } from "@/shared/ui/toast";
-import {
-  upsertArticleAction,
-  setArticleStatusAction,
-  deleteArticleAction,
-  refreshArticleEmbeddingsAction,
-  getArticleEmbeddingStateAction,
-} from "../../(protected)/_actions/knowledge-actions";
-import {
-  ArticleStatus,
-  KnowledgeArticle,
-  KnowledgeArticleHistory,
-} from "../../_lib/page-types";
 import { KnowledgeArticleForm } from "./knowledge-article-form";
 import { KnowledgeArticleHistoryList } from "./knowledge-article-history";
 import { KnowledgeArticleView } from "./knowledge-article-view";
 import { KnowledgeDetailsHeader } from "./knowledge-details-header";
-import { useArticleEmbeddingSync } from "./use-article-embedding-sync";
+import type { KnowledgeDetailsActions } from "../model";
+import { useArticleEmbeddingSync } from "../model/use-article-embedding-sync";
+import { useKnowledgeArticleDraft } from "../model/use-knowledge-article-draft";
 
 type KnowledgeDetailsProps = {
   selectedArticle: KnowledgeArticle | null;
   history: KnowledgeArticleHistory[];
   currentManager: Manager | null;
   isCreatingArticle: boolean;
+  actions: KnowledgeDetailsActions;
 };
 
 const emptyStateClassName = "h-[calc(100vh-200px)]";
@@ -41,6 +37,7 @@ export function KnowledgeDetails({
   history,
   currentManager,
   isCreatingArticle,
+  actions,
 }: KnowledgeDetailsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -48,11 +45,17 @@ export function KnowledgeDetails({
   const [isEditing, setIsEditing] = useState(isCreatingArticle);
   const [showHistory, setShowHistory] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-
-  const [title, setTitle] = useState(selectedArticle?.title ?? "");
-  const [content, setContent] = useState(selectedArticle?.content ?? "");
-  const [slug, setSlug] = useState(selectedArticle?.slug ?? "");
-  const [status, setStatus] = useState<ArticleStatus>(selectedArticle?.status ?? "draft");
+  const {
+    title,
+    content,
+    slug,
+    status,
+    setTitle,
+    setContent,
+    setSlug,
+    setStatus,
+    resetToSelectedArticle,
+  } = useKnowledgeArticleDraft(selectedArticle);
   const { toast, showToast, closeToast } = useToastState<"success" | "error">();
 
   const handleEmbeddingTerminalState = useCallback(() => {
@@ -65,6 +68,7 @@ export function KnowledgeDetails({
     startEmbeddingRefreshSync,
   } = useArticleEmbeddingSync({
     articleId: selectedArticle?.id ?? null,
+    getArticleEmbeddingState: actions.getArticleEmbeddingState,
     onTerminalState: handleEmbeddingTerminalState,
   });
 
@@ -89,7 +93,7 @@ export function KnowledgeDetails({
 
   const handleSave = () => {
     startTransition(async () => {
-      const result = await upsertArticleAction(
+      const result = await actions.upsertArticle(
         selectedArticle?.id ?? null,
         title,
         content,
@@ -113,7 +117,7 @@ export function KnowledgeDetails({
         setManualEmbeddingStatus(null);
         router.refresh();
       } else if (savedArticleId) {
-        const embeddingStateResult = await getArticleEmbeddingStateAction(savedArticleId);
+        const embeddingStateResult = await actions.getArticleEmbeddingState(savedArticleId);
 
         if (!embeddingStateResult.error && embeddingStateResult.data?.embeddingStatus === "updating") {
           setManualEmbeddingStatus("updating");
@@ -138,7 +142,7 @@ export function KnowledgeDetails({
     }
 
     startTransition(async () => {
-      const result = await setArticleStatusAction(
+      const result = await actions.setArticleStatus(
         selectedArticle.id,
         newStatus,
         selectedArticle.version
@@ -171,7 +175,7 @@ export function KnowledgeDetails({
     }
 
     startTransition(async () => {
-      const result = await deleteArticleAction(selectedArticle.id, selectedArticle.version);
+      const result = await actions.deleteArticle(selectedArticle.id, selectedArticle.version);
 
       if (result.error) {
         showToast(result.error, "error");
@@ -191,7 +195,7 @@ export function KnowledgeDetails({
     }
 
     startRefreshTransition(async () => {
-      const result = await refreshArticleEmbeddingsAction(selectedArticle.id, selectedArticle.version);
+      const result = await actions.refreshArticleEmbeddings(selectedArticle.id, selectedArticle.version);
 
       if (result.error) {
         showToast(result.error, "error");
@@ -221,10 +225,7 @@ export function KnowledgeDetails({
   const handleCancelEdit = () => {
     if (selectedArticle) {
       setIsEditing(false);
-      setTitle(selectedArticle.title);
-      setContent(selectedArticle.content);
-      setSlug(selectedArticle.slug);
-      setStatus(selectedArticle.status);
+      resetToSelectedArticle();
       return;
     }
 

@@ -1,4 +1,4 @@
-import { ArticleStatus } from "../../_lib/page-types";
+import type { ArticleStatus } from "@/entities/knowledge-article";
 
 type KnowledgeArticleFormProps = {
   slug: string;

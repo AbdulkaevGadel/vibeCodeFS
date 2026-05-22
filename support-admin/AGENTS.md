@@ -134,10 +134,33 @@ Rules:
 - For React component files, keep the exported/main component as the final meaningful block whenever practical.
 - Place imports, types, constants, local helpers, and small private subcomponents above the exported/main component so the file can be read top-down.
 - Prefer separate FSD layer modules for extracted components with a standalone responsibility, especially when the parent file is already large.
+- Prefer one main exported React component and one UI role per component module.
+- Do not keep multiple exported React components with different UI roles, different import sites, or different slot ownership in one file; split them into explicitly named modules.
+- Small private JSX fragments, render helpers, and private subcomponents may stay in the same file when they only support the main exported component and do not form a standalone UI role.
+- UI component modules should not own exported non-component contracts when those contracts are imported by other modules.
+- Exported widget/feature contracts, such as action bags, wiring types, DTO props shared across modules, or public callback contracts, should live in the responsible `model` file or segment and be re-exported through the slice `index.ts`.
+- Component props types may stay in the component file when they are only local to that component and are not imported as a separate contract elsewhere.
 - Avoid leaving React subcomponents, type blocks, or helper functions below the main component unless there is a strong local reason.
+- After editing or moving a React component file, perform a local structure pass before finishing the task.
+- The structure pass must check this order: imports, types, constants, helpers/private subcomponents, then the exported/main component as the final meaningful block.
+- Do this check for mechanical file moves as well as new component code; moving legacy files into FSD slices is not enough by itself.
 - When a component accumulates multiple pure view helpers for labels, variants, className selection, safe display formatting, or view-only filtering/sorting, move them to a neighboring `*-utils.ts` file in the same widget/feature/entity.
 - Keep such helpers out of `entities/*/lib.ts` unless they describe reusable pure operations on the domain model rather than one widget's presentation.
 - Do not extract a single tiny helper by default; extract when helper volume starts to hide the component's render/composition role.
+
+## Helper / Mapper Placement
+
+Helper, util, mapper, and formatter files should be grouped by subject area, not by one-function-per-file.
+
+Rules:
+- multiple closely related helpers may live in one file when they serve the same domain or UI responsibility;
+- do not create broad generic files such as `utils.ts`, `helpers.ts`, or `common.ts` when the file can be named by purpose, for example `knowledge-embedding-status-utils.ts`, `manager-row-mappers.ts`, or `support-chat-date-utils.ts`;
+- if a helper belongs only to one widget, feature, entity, or route, keep it inside that slice or nearby route-local folder;
+- if a helper describes a domain entity or maps domain rows/DTOs, keep it in the responsible `entities/*/model` or `entities/*/lib`;
+- if a helper is presentation-specific, such as labels, badge variants, button titles, className selection, or UI-only filtering, keep it near the owning widget/feature UI;
+- move helpers to `shared` only after real cross-domain reuse exists;
+- do not dump unrelated helpers into global `shared/utils`;
+- prefer explicit file names based on responsibility over generic names.
 
 ## Async UI Sync Rule
 

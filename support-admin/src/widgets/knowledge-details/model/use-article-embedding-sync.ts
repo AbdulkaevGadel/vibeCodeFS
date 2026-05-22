@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getArticleEmbeddingStateAction } from "../../(protected)/_actions/knowledge-actions";
-import { ArticleEmbeddingStatus } from "../../_lib/page-types";
+import type { ArticleEmbeddingStatus, KnowledgeArticle } from "@/entities/knowledge-article";
 
 type UseArticleEmbeddingSyncArgs = {
   articleId: string | null;
+  getArticleEmbeddingState: (
+    id: string,
+  ) => Promise<{
+    data?: Pick<KnowledgeArticle, "embeddingStatus" | "embeddingChunkSetId" | "embeddingErrorMessage"> | null;
+    error?: string;
+  }>;
   onTerminalState: () => void;
 };
 
@@ -21,6 +26,7 @@ const embeddingRefreshSyncMaxAttempts = 12;
 
 export function useArticleEmbeddingSync({
   articleId,
+  getArticleEmbeddingState,
   onTerminalState,
 }: UseArticleEmbeddingSyncArgs) {
   const [isEmbeddingRefreshSyncing, setIsEmbeddingRefreshSyncing] = useState(false);
@@ -73,7 +79,7 @@ export function useArticleEmbeddingSync({
     const timeoutId = window.setTimeout(() => {
       embeddingRefreshSyncAttemptsRef.current += 1;
 
-      void getArticleEmbeddingStateAction(syncArticleId).then((result) => {
+      void getArticleEmbeddingState(syncArticleId).then((result) => {
         if (isCancelled) {
           return;
         }
@@ -113,6 +119,7 @@ export function useArticleEmbeddingSync({
     };
   }, [
     isEmbeddingRefreshSyncing,
+    getArticleEmbeddingState,
     onTerminalState,
     pollTick,
     stopEmbeddingRefreshSync,

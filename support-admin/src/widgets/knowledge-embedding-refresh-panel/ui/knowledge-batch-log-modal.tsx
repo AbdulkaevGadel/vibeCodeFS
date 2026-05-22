@@ -1,5 +1,5 @@
 import { Dialog } from "@/shared/ui/dialog";
-import { KnowledgeEmbeddingRefreshBatch } from "../../_lib/page-types";
+import type { KnowledgeEmbeddingRefreshBatch } from "@/entities/knowledge-article";
 
 const kbBatchLogBodyClassName = "max-h-[520px] space-y-3 overflow-y-auto";
 const kbBatchLogItemClassName = "rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800";

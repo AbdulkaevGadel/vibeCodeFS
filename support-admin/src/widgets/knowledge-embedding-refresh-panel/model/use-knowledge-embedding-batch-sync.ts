@@ -2,20 +2,18 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useToastState } from "@/shared/ui/toast";
-import {
-  getKnowledgeEmbeddingRefreshBatchStateAction,
-  startKnowledgeEmbeddingRefreshBatchAction,
-} from "../../(protected)/_actions/knowledge-actions";
-import {
+import type {
   KnowledgeEmbeddingRefreshBatch,
   KnowledgeEmbeddingSummary,
-} from "../../_lib/page-types";
+} from "@/entities/knowledge-article";
+import { useToastState } from "@/shared/ui/toast";
+import type { KnowledgeEmbeddingRefreshPanelActions } from "./types";
 
 type UseKnowledgeEmbeddingBatchSyncParams = {
   initialBatch: KnowledgeEmbeddingRefreshBatch | null;
   summary: KnowledgeEmbeddingSummary;
   canManage: boolean;
+  actions: KnowledgeEmbeddingRefreshPanelActions;
 };
 
 function isVisibleBatchLogItem(item: KnowledgeEmbeddingRefreshBatch["items"][number]) {
@@ -39,6 +37,7 @@ export function useKnowledgeEmbeddingBatchSync({
   initialBatch,
   summary,
   canManage,
+  actions,
 }: UseKnowledgeEmbeddingBatchSyncParams) {
   const router = useRouter();
   const [batch, setBatch] = useState(initialBatch);
@@ -66,7 +65,7 @@ export function useKnowledgeEmbeddingBatchSync({
     }
 
     const intervalId = window.setInterval(async () => {
-      const result = await getKnowledgeEmbeddingRefreshBatchStateAction();
+      const result = await actions.getBatchState();
 
       if (result.error) {
         showToast(result.error, "error");
@@ -82,13 +81,13 @@ export function useKnowledgeEmbeddingBatchSync({
     }, 3000);
 
     return () => window.clearInterval(intervalId);
-  }, [isRunning, router, showToast]);
+  }, [actions, isRunning, router, showToast]);
 
   const startBatch = () => {
     clearToast();
 
     startTransition(async () => {
-      const result = await startKnowledgeEmbeddingRefreshBatchAction();
+      const result = await actions.startBatch();
 
       if (result.error) {
         setBatch(result.data ?? null);
