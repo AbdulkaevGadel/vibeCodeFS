@@ -1,9 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import type {
-  ArticleStatus,
   KnowledgeArticle,
   KnowledgeArticleHistory,
 } from "@/entities/knowledge-article";
@@ -15,8 +12,11 @@ import { KnowledgeArticleForm } from "./knowledge-article-form";
 import { KnowledgeArticleHistoryList } from "./knowledge-article-history";
 import { KnowledgeArticleView } from "./knowledge-article-view";
 import { KnowledgeDetailsHeader } from "./knowledge-details-header";
-import type { KnowledgeDetailsActions } from "../model";
-import { useArticleEmbeddingSync } from "../model/use-article-embedding-sync";
+import {
+  type KnowledgeDetailsActions,
+  useKnowledgeDetailsActions,
+  useKnowledgeDetailsMode,
+} from "../model";
 import { useKnowledgeArticleDraft } from "../model/use-knowledge-article-draft";
 
 type KnowledgeDetailsProps = {
@@ -39,12 +39,6 @@ export function KnowledgeDetails({
   isCreatingArticle,
   actions,
 }: KnowledgeDetailsProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [isRefreshPending, startRefreshTransition] = useTransition();
-  const [isEditing, setIsEditing] = useState(isCreatingArticle);
-  const [showHistory, setShowHistory] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const {
     title,
     content,
@@ -57,31 +51,47 @@ export function KnowledgeDetails({
     resetToSelectedArticle,
   } = useKnowledgeArticleDraft(selectedArticle);
   const { toast, showToast, closeToast } = useToastState<"success" | "error">();
-
-  const handleEmbeddingTerminalState = useCallback(() => {
-    router.refresh();
-  }, [router]);
-
   const {
-    manualEmbeddingStatus,
-    setManualEmbeddingStatus,
-    startEmbeddingRefreshSync,
-  } = useArticleEmbeddingSync({
-    articleId: selectedArticle?.id ?? null,
-    getArticleEmbeddingState: actions.getArticleEmbeddingState,
-    onTerminalState: handleEmbeddingTerminalState,
+    isEditing,
+    showHistory,
+    isDeleteConfirmOpen,
+    startEdit,
+    finishEdit,
+    toggleHistory,
+    cancelEdit,
+    openDeleteConfirm,
+    closeDeleteConfirm,
+  } = useKnowledgeDetailsMode({
+    selectedArticle,
+    isCreatingArticle,
+    resetToSelectedArticle,
+  });
+  const {
+    displayedArticle,
+    isPending,
+    isRefreshPending,
+    saveArticle,
+    changeStatus,
+    deleteArticle,
+    refreshEmbeddings,
+    cancelCreate,
+  } = useKnowledgeDetailsActions({
+    selectedArticle,
+    draft: {
+      title,
+      content,
+      slug,
+      status,
+    },
+    actions,
+    finishEdit,
+    closeDeleteConfirm,
+    showToast,
   });
 
   const canEdit = !!currentManager;
   const canCreateArticle = !!currentManager;
   const canManageLifecycle = isPrivilegedManager(currentManager);
-
-  const displayedArticle = selectedArticle
-    ? {
-        ...selectedArticle,
-        embeddingStatus: manualEmbeddingStatus ?? selectedArticle.embeddingStatus,
-      }
-    : null;
   const canRefreshEmbeddings =
     canManageLifecycle &&
     !!displayedArticle &&
@@ -90,147 +100,6 @@ export function KnowledgeDetails({
     !showHistory &&
     (displayedArticle.embeddingStatus === "outdated" ||
       displayedArticle.embeddingStatus === "failed");
-
-  const handleSave = () => {
-    startTransition(async () => {
-      const result = await actions.upsertArticle(
-        selectedArticle?.id ?? null,
-        title,
-        content,
-        slug,
-        status,
-        selectedArticle?.version
-      );
-
-      if (result.error) {
-        showToast(result.error, "error");
-        return;
-      }
-
-      setIsEditing(false);
-      showToast("Статья сохранена.", "success");
-
-      const savedArticleId = result.data?.id ?? selectedArticle?.id ?? null;
-      const savedArticleStatus = result.data?.status ?? status;
-
-      if (savedArticleStatus !== "published") {
-        setManualEmbeddingStatus(null);
-        router.refresh();
-      } else if (savedArticleId) {
-        const embeddingStateResult = await actions.getArticleEmbeddingState(savedArticleId);
-
-        if (!embeddingStateResult.error && embeddingStateResult.data?.embeddingStatus === "updating") {
-          setManualEmbeddingStatus("updating");
-          startEmbeddingRefreshSync(savedArticleId);
-        } else if (!embeddingStateResult.error && embeddingStateResult.data) {
-          setManualEmbeddingStatus(embeddingStateResult.data.embeddingStatus);
-          router.refresh();
-        }
-      } else {
-        setManualEmbeddingStatus(null);
-      }
-
-      if (!selectedArticle && result.data) {
-        router.push(`/knowledge-base?article=${result.data.id}`);
-      }
-    });
-  };
-
-  const handleStatusChange = (newStatus: ArticleStatus) => {
-    if (!selectedArticle) {
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await actions.setArticleStatus(
-        selectedArticle.id,
-        newStatus,
-        selectedArticle.version
-      );
-
-      if (result.error) {
-        showToast(result.error, "error");
-        return;
-      }
-
-      if (result.data) {
-        showToast("Статус статьи изменён.", "success");
-        router.push(newStatus === "archived" ? "/knowledge-base" : "/knowledge-base?view=archive");
-        router.refresh();
-      }
-    });
-  };
-
-  const handleDelete = () => {
-    if (!selectedArticle) {
-      return;
-    }
-
-    setIsDeleteConfirmOpen(true);
-  };
-
-  const confirmDelete = () => {
-    if (!selectedArticle) {
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await actions.deleteArticle(selectedArticle.id, selectedArticle.version);
-
-      if (result.error) {
-        showToast(result.error, "error");
-        return;
-      }
-
-      setIsDeleteConfirmOpen(false);
-      showToast("Статья удалена.", "success");
-      router.push("/knowledge-base?view=archive");
-      router.refresh();
-    });
-  };
-
-  const handleRefreshEmbeddings = () => {
-    if (!selectedArticle) {
-      return;
-    }
-
-    startRefreshTransition(async () => {
-      const result = await actions.refreshArticleEmbeddings(selectedArticle.id, selectedArticle.version);
-
-      if (result.error) {
-        showToast(result.error, "error");
-        return;
-      }
-
-      const resultType = result.data?.type;
-
-      if (
-        resultType === "queued" ||
-        resultType === "retry_queued" ||
-        resultType === "already_updating"
-      ) {
-        startEmbeddingRefreshSync(selectedArticle.id);
-      }
-
-      showToast(result.message ?? "Обновление знаний ИИ запущено", "success");
-      router.refresh();
-    });
-  };
-
-  const handleToggleHistory = () => {
-    setShowHistory((currentValue) => !currentValue);
-    setIsEditing(false);
-  };
-
-  const handleCancelEdit = () => {
-    if (selectedArticle) {
-      setIsEditing(false);
-      resetToSelectedArticle();
-      return;
-    }
-
-    router.push("/knowledge-base");
-  };
 
   if (!selectedArticle && (!isEditing || !canCreateArticle)) {
     return (
@@ -255,11 +124,11 @@ export function KnowledgeDetails({
         isPending={isPending}
         isRefreshPending={isRefreshPending}
         onTitleChange={setTitle}
-        onToggleHistory={handleToggleHistory}
-        onStartEdit={() => setIsEditing(true)}
-        onCancelEdit={handleCancelEdit}
-        onSave={handleSave}
-        onRefreshEmbeddings={handleRefreshEmbeddings}
+        onToggleHistory={toggleHistory}
+        onStartEdit={startEdit}
+        onCancelEdit={() => cancelEdit(cancelCreate)}
+        onSave={saveArticle}
+        onRefreshEmbeddings={refreshEmbeddings}
       />
 
       <div className={contentScrollClassName}>
@@ -280,8 +149,8 @@ export function KnowledgeDetails({
               article={displayedArticle}
               canManageLifecycle={canManageLifecycle}
               isPending={isPending}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
+              onDelete={openDeleteConfirm}
+              onStatusChange={changeStatus}
             />
           ) : null}
         </div>
@@ -306,8 +175,8 @@ export function KnowledgeDetails({
         confirmLabel="Удалить"
         variant="danger"
         isPending={isPending}
-        onCancel={() => setIsDeleteConfirmOpen(false)}
-        onConfirm={confirmDelete}
+        onCancel={closeDeleteConfirm}
+        onConfirm={deleteArticle}
       />
     </div>
   );
