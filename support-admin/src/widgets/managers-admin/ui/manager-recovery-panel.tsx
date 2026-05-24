@@ -1,4 +1,4 @@
-import type { ManagerAccountRecovery } from "@/features/manage-managers";
+import type { ManagerAccountRecovery } from "@/features/manage-managers/model";
 import { Button } from "@/shared/ui/button";
 
 type ManagerRecoveryPanelProps = {

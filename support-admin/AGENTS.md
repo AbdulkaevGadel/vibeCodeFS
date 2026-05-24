@@ -120,6 +120,13 @@ Server-only entity API:
 - Root entity barrels should stay safe for shared server/client domain contracts, pure helpers, and types.
 - Reason: this prevents accidental `server-only` imports from Client Components while still allowing Server Actions and server loaders to use entity-owned server helpers.
 
+Feature Server Action barrels:
+- If a root feature barrel exports Server Actions, Client Components and widgets must not import action result or contract types from that root barrel.
+- Client Components and widgets should import those type contracts from the feature `model` public API, for example `@/features/manage-managers/model`.
+- Route entrypoints and server-side composition code may import Server Actions from the root feature barrel when they wire actions into page/widget props.
+- Widgets must receive privileged Server Actions through props/action objects and must not import `features/*/api/*` implementation modules directly.
+- Reason: this keeps the client/widget boundary away from server-only mutation implementation while still allowing explicit action wiring at the `app` composition boundary.
+
 ## Component Decomposition Rule
 
 When a `support-admin` Client Component grows beyond a simple view, decompose it before adding more behavior.

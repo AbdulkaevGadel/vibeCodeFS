@@ -1,7 +1,7 @@
 import type { Manager } from "@/entities/manager";
 import type {
   ManageManagersActionResult,
-} from "@/features/manage-managers";
+} from "@/features/manage-managers/model";
 
 export type ManagersAdminActions = {
   createManagerAccount: (input: {

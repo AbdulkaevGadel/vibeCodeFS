@@ -58,7 +58,7 @@ export function Modal({
   const descriptionId = useId();
 
   useEffect(() => {
-    // Preserve portal mounting behavior from the previous Dialog primitive.
+    // Preserve portal mounting behavior from the previous modal primitive.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
   }, []);

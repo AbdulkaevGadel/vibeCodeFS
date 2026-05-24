@@ -6,7 +6,7 @@ import { isManagerRole, type Manager } from "@/entities/manager";
 import type {
   ManagerAccountRecovery,
   ManageManagersActionResult,
-} from "@/features/manage-managers";
+} from "@/features/manage-managers/model";
 import { useToastState } from "@/shared/ui/toast";
 import type { ManagersAdminPanelProps } from "../model";
 import { CreateManagerAccountForm } from "./create-manager-account-form";
