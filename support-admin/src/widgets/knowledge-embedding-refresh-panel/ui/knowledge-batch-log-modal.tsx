@@ -1,4 +1,4 @@
-import { Dialog } from "@/shared/ui/dialog";
+import { Modal } from "@/shared/ui/modal";
 import type { KnowledgeEmbeddingRefreshBatch } from "@/entities/knowledge-article";
 
 const kbBatchLogBodyClassName = "max-h-[520px] space-y-3 overflow-y-auto";
@@ -17,7 +17,7 @@ export function KnowledgeBatchLogModal({
   onClose,
 }: KnowledgeBatchLogModalProps) {
   return (
-    <Dialog
+    <Modal
       isOpen
       title="Лог обновления знаний ИИ"
       description="Ошибки и пропущенные статьи последнего batch."
@@ -44,6 +44,6 @@ export function KnowledgeBatchLogModal({
           </div>
         ))
       )}
-    </Dialog>
+    </Modal>
   );
 }

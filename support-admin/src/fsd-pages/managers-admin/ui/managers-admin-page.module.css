@@ -1,0 +1,11 @@
+.pageMain {
+  min-height: 100vh;
+  padding: 1.5rem;
+  color: var(--support-text-primary);
+  background: var(--support-page-bg);
+}
+
+.pageContent {
+  margin: 0 auto;
+  max-width: 80rem;
+}

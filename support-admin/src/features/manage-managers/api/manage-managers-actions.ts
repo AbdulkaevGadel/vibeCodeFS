@@ -1,26 +1,31 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { User } from "@supabase/supabase-js";
 import { isManagerRole, type ManagerRole } from "@/entities/manager";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import {
+  createErrorResult,
+  createRecoveryResult,
+  createSuccessResult,
+  emailPattern,
+  isUuid,
+  normalizeEmail,
+  normalizeNullableText,
+  requireCurrentAdmin,
+} from "./manager-action-helpers";
+import { getCreateAuthUserErrorMessage } from "./manager-auth-errors";
+import type { ManageManagersActionResult } from "../model";
 
-type ActionResult = {
-  success: boolean;
-  error: string | null;
-};
-
-type CreateAuthUserInput = {
+type CreateManagerAccountInput = {
   email: string;
   password: string;
-};
-
-type AddManagerInput = {
-  email: string;
   displayName: string;
   lastName: string;
-  role: ManagerRole;
+};
+
+type DeleteUnlinkedAuthUserInput = {
+  authUserId: string;
+  email: string;
 };
 
 type UpdateManagerInput = {
@@ -30,91 +35,13 @@ type UpdateManagerInput = {
   role: ManagerRole;
 };
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function createErrorResult(error: string): ActionResult {
-  return {
-    success: false,
-    error,
-  };
-}
-
-function createSuccessResult(): ActionResult {
-  return {
-    success: true,
-    error: null,
-  };
-}
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function normalizeNullableText(value: string) {
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-async function requireCurrentAdmin() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    throw new Error("Нужно войти в админ-панель.");
-  }
-
-  const { data: manager, error: managerError } = await supabase
-    .from("managers")
-    .select("id, role")
-    .eq("auth_user_id", user.id)
-    .single();
-
-  if (managerError || !manager) {
-    throw new Error("Профиль менеджера не найден.");
-  }
-
-  if (manager.role !== "admin") {
-    throw new Error("Только admin может управлять пользователями и менеджерами.");
-  }
-
-  return manager;
-}
-
-async function findAuthUserByEmail(email: string): Promise<User | null> {
-  const supabaseAdmin = createSupabaseAdminClient();
-  let page = 1;
-  const perPage = 1000;
-
-  while (true) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage,
-    });
-
-    if (error) {
-      throw new Error("Не удалось проверить пользователей Supabase Auth.");
-    }
-
-    const foundUser = data.users.find((user) => user.email?.toLowerCase() === email);
-
-    if (foundUser) {
-      return foundUser;
-    }
-
-    if (data.users.length < perPage) {
-      return null;
-    }
-
-    page += 1;
-  }
-}
-
-export async function createAuthUserAction(input: CreateAuthUserInput): Promise<ActionResult> {
+export async function createManagerAccountAction(
+  input: CreateManagerAccountInput,
+): Promise<ManageManagersActionResult> {
   const email = normalizeEmail(input.email);
   const password = input.password;
+  const displayName = input.displayName.trim();
+  const lastName = normalizeNullableText(input.lastName);
 
   if (!emailPattern.test(email)) {
     return createErrorResult("Введите корректный email.");
@@ -124,94 +51,114 @@ export async function createAuthUserAction(input: CreateAuthUserInput): Promise<
     return createErrorResult("Пароль должен быть не короче 6 символов.");
   }
 
+  if (!displayName) {
+    return createErrorResult("Display name обязателен.");
+  }
+
   try {
     await requireCurrentAdmin();
 
-    const existingUser = await findAuthUserByEmail(email);
-    if (existingUser) {
-      return createErrorResult("Пользователь с такой почтой уже существует.");
-    }
-
     const supabaseAdmin = createSupabaseAdminClient();
-    const { error } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     });
 
-    if (error) {
-      console.error("Failed to create auth user:", error);
-      return createErrorResult("Не удалось создать пользователя.");
+    const createdUser = authData.user;
+
+    if (authError || !createdUser) {
+      console.error("Failed to create manager auth user:", authError);
+      return createErrorResult(getCreateAuthUserErrorMessage(authError));
+    }
+
+    const { error: insertError } = await supabaseAdmin.from("managers").insert({
+      auth_user_id: createdUser.id,
+      email,
+      display_name: displayName,
+      last_name: lastName,
+      role: "support",
+    });
+
+    if (insertError) {
+      console.error("Failed to create manager row after auth user creation:", insertError);
+
+      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(createdUser.id);
+      if (!rollbackError) {
+        return createErrorResult("Не удалось создать менеджера. Auth-пользователь был удалён автоматически.");
+      }
+
+      console.error("Failed to rollback manager auth user creation:", rollbackError);
+      return createRecoveryResult(
+        "Auth-пользователь создан, но строка managers не создана. Автоматическое удаление не удалось.",
+        {
+          authUserId: createdUser.id,
+          email,
+        },
+      );
     }
 
     revalidatePath("/");
+    revalidatePath("/managers");
     return createSuccessResult();
   } catch (error) {
-    console.error("Create auth user action failed:", error);
-    return createErrorResult(error instanceof Error ? error.message : "Не удалось создать пользователя.");
+    console.error("Create manager account action failed:", error);
+    return createErrorResult(error instanceof Error ? error.message : "Не удалось создать менеджера.");
   }
 }
 
-export async function addManagerAction(input: AddManagerInput): Promise<ActionResult> {
+export async function deleteUnlinkedAuthUserAction(
+  input: DeleteUnlinkedAuthUserInput,
+): Promise<ManageManagersActionResult> {
+  const authUserId = input.authUserId.trim();
   const email = normalizeEmail(input.email);
-  const displayName = input.displayName.trim() || email;
-  const lastName = normalizeNullableText(input.lastName);
-  const role = input.role;
 
-  if (!emailPattern.test(email)) {
-    return createErrorResult("Введите корректный email.");
+  if (!isUuid(authUserId)) {
+    return createErrorResult("Некорректный Auth user id.");
   }
 
-  if (!isManagerRole(role)) {
-    return createErrorResult("Выберите корректную роль.");
+  if (!emailPattern.test(email)) {
+    return createErrorResult("Некорректный email для recovery.");
   }
 
   try {
     await requireCurrentAdmin();
 
-    const authUser = await findAuthUserByEmail(email);
-    if (!authUser) {
-      return createErrorResult("Сначала создайте пользователя в Supabase Auth.");
-    }
-
     const supabaseAdmin = createSupabaseAdminClient();
-    const { data: existingManager, error: existingManagerError } = await supabaseAdmin
+    const { data: linkedManager, error: linkedManagerError } = await supabaseAdmin
       .from("managers")
       .select("id")
-      .eq("auth_user_id", authUser.id)
+      .eq("auth_user_id", authUserId)
       .maybeSingle();
 
-    if (existingManagerError) {
-      console.error("Failed to check existing manager:", existingManagerError);
-      return createErrorResult("Не удалось проверить менеджера.");
+    if (linkedManagerError) {
+      console.error("Failed to verify unlinked auth user before recovery delete:", linkedManagerError);
+      return createErrorResult("Не удалось проверить связь Auth user и managers.");
     }
 
-    if (existingManager) {
-      return createErrorResult("Этот пользователь уже добавлен в managers.");
+    if (linkedManager) {
+      return createErrorResult("Auth user уже связан с менеджером. Recovery delete запрещён.");
     }
 
-    const { error } = await supabaseAdmin.from("managers").insert({
-      auth_user_id: authUser.id,
-      email,
-      display_name: displayName,
-      last_name: lastName,
-      role,
-    });
-
-    if (error) {
-      console.error("Failed to add manager:", error);
-      return createErrorResult("Не удалось добавить менеджера.");
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
+    if (deleteError) {
+      console.error("Failed to delete unlinked auth user during recovery:", deleteError);
+      return createRecoveryResult("Не удалось удалить незавершённый Auth account.", {
+        authUserId,
+        email,
+      });
     }
 
     revalidatePath("/");
+    revalidatePath("/managers");
     return createSuccessResult();
   } catch (error) {
-    console.error("Add manager action failed:", error);
-    return createErrorResult(error instanceof Error ? error.message : "Не удалось добавить менеджера.");
+    console.error("Delete unlinked auth user action failed:", error);
+    return createErrorResult(error instanceof Error ? error.message : "Не удалось удалить незавершённый Auth account.");
   }
 }
 
-export async function updateManagerAction(input: UpdateManagerInput): Promise<ActionResult> {
+export async function updateManagerAction(input: UpdateManagerInput): Promise<ManageManagersActionResult> {
   const managerId = input.managerId.trim();
   const displayName = input.displayName.trim();
   const lastName = normalizeNullableText(input.lastName);
@@ -249,6 +196,7 @@ export async function updateManagerAction(input: UpdateManagerInput): Promise<Ac
     }
 
     revalidatePath("/");
+    revalidatePath("/managers");
     return createSuccessResult();
   } catch (error) {
     console.error("Update manager action failed:", error);
