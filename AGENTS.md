@@ -104,6 +104,8 @@ Rule:
 
 ## 7. Domain Model (Current)
 
+High-level project context:
+
 Current support-domain entities:
 - `client`
 - `chat`
@@ -112,24 +114,21 @@ Current support-domain entities:
 - `chat_assignment`
 - `assignment_history`
 
-Core rules:
-- `Client` is a Telegram user, not an auth user
-- `Manager` is an admin-panel user linked to `auth.users`
-- `Chat` is the central support-processing entity
-- manager assignment happens on `chat`, not on `client`
-- current assignment and assignment history must be stored separately
+Detailed Supabase/database guardrails for these entities live in `supabase/AGENTS.md`.
 
 ---
 
 ## 8. Data Flow (Current Direction)
 
+High-level project flow:
+
 1. Telegram sends webhook request
 2. Edge Function receives request
-3. Validate incoming data
-4. Resolve or create support-domain records as needed
-5. Persist relational data in Supabase
-6. Next.js admin panel reads relational support data
-7. Managers process chats, assignments, and statuses in admin UI
+3. Edge Function persists support-domain data in Supabase
+4. Next.js admin panel reads support-domain data
+5. Managers process chats, assignments, and statuses in admin UI
+
+Detailed Supabase/backend flow rules live in `supabase/AGENTS.md`.
 
 ---
 
@@ -138,7 +137,8 @@ Core rules:
 ### Backend
 - Supabase
 - Supabase Edge Functions
-- Deno runtime (NOT Node.js)
+- Deno runtime for Edge Functions
+- detailed Supabase/backend runtime rules: `supabase/AGENTS.md`
 
 ### Frontend
 - Next.js (App Router)
@@ -152,116 +152,35 @@ Core rules:
 
 ## 10. Deno Rules (CRITICAL)
 
-Edge Functions run on Deno, NOT Node.js.
+Supabase Edge Functions run on Deno, not Node.js.
 
-❌ Forbidden:
-- `npm install`
-- `require()`
-- `node_modules`
-- `express`
-- `axios` (node version)
-
-✅ Allowed:
-- URL imports
-- `fetch` API
-- `Deno.env`
-
-If Node.js patterns are used → this is a mistake
-
-### Local Deno Typing Rule
-
-For Supabase Edge Functions, local IDE/TypeScript support is configured once at the shared functions level:
-
-- `supabase/functions/tsconfig.json`
-- `supabase/functions/deno-shim.d.ts`
-
-Rules:
-- do NOT copy `tsconfig.json` or `deno-shim.d.ts` into every Edge Function
-- new Edge Functions must live inside `supabase/functions` so they are covered by the shared config
-- if WebStorm/TypeScript shows `TS2304: Cannot find name 'Deno'`, first check the shared `tsconfig.json` and `deno-shim.d.ts`
-- do NOT fix Deno typing problems with Node.js dependencies such as `@types/node`
-- do NOT use `npm install` as a solution for Deno runtime typing
-
-Verification:
-- `node support-admin/node_modules/typescript/bin/tsc -p supabase/functions/tsconfig.json`
+For files inside `supabase/`, follow the detailed runtime and local typing rules in `supabase/AGENTS.md`.
 
 ---
 
 ## 11. Supabase Rules
 
-### Access pattern
+For files inside `supabase/`, also follow `supabase/AGENTS.md`. It contains local rules for Edge Functions, migrations, SQL scripts, Deno runtime, secrets/logging, and Supabase backend boundaries.
 
-- Edge Function → `service_role`
-- Next.js server-side auth/session work → server client
-- privileged admin mutations → server-side only
-- anon key access is allowed only where it fits the approved architecture
-
----
-
-### Query style
-
-Use direct Supabase queries.
-
-✅ Allowed:
-- direct table queries
-- simple helper functions
-- explicit SQL migrations
-
-❌ Forbidden:
-- repository pattern
-- service layer abstraction jungle
-- ORM
+Supabase access pattern and query style rules are owned by `supabase/AGENTS.md`.
 
 ---
 
 ## 12. Database Rules
 
-The project is now allowed to use a normalized relational structure when it reflects the approved support domain.
+The project may use a normalized relational structure when it reflects the approved support domain.
 
-### Allowed
-- multiple tables
-- foreign keys
-- joins where they reflect real relations
-- normalization
-- indexes
-- RLS
-- migration-driven changes
-
-### Required
-- every new table must have a clear business reason
-- every relation must reflect the actual support domain
-- every schema change must go through migrations
-- constraints must enforce critical business rules in the DB
-
-### Forbidden
-- adding tables only "for future use"
-- denormalization without clear reason
-- storing assignment state in the wrong entity
-- mixing current state and history in one table when they serve different purposes
+Detailed database contract rules, support-domain guardrails, RLS/grants/RPC expectations, and schema-change rules live in `supabase/AGENTS.md`.
 
 ---
 
 ## 13. Migration Rules (CRITICAL)
 
-Before creating any migration, the agent MUST explicitly say:
-- that a migration is needed
-- why it is needed
-- what part of the schema it changes
-- whether there is a manual Supabase step around it
-- what must be verified after it is applied
+Schema, RPC, RLS, policy, grant, trigger, and database contract changes must go through Supabase migrations.
 
-Rules:
-- one migration = one clear purpose
-- no silent schema changes
-- **IMMUTABLE MIGRATIONS:** Once a migration is pushed to the database, do NOT modify its file. Any further changes or fixes must be created as a NEW migration file (Incremental approach).
-- no direct manual table editing without matching migration intent
-- if the user discusses уточнение, исправление, or change of an already created migration, the agent MUST first ask:
-  - была ли эта миграция уже применена в Supabase или ещё нет
-- if the migration is already applied in Supabase:
-  - the agent MUST NOT modify the existing migration file
-  - the agent MUST create a new migration for any follow-up fix
-- if the migration is not yet applied in Supabase:
-  - the existing migration file may be edited after explicit discussion and agreement with the user
+Before creating any migration, the agent must explicitly explain why it is needed, what it changes, what manual Supabase step may be required, and what must be verified after applying it.
+
+Detailed migration immutability and follow-up fix rules live in `supabase/AGENTS.md`.
 
 ---
 
@@ -321,34 +240,19 @@ It must include:
 
 The agent MUST explicitly call out manual steps in advance.
 
-Examples:
-- checking current tables in Supabase
-- applying migrations
-- enabling RLS
-- validating policies
-- verifying data backfill
-- inspecting dashboard state after schema rollout
-
 The agent must clearly label:
 - `Manual Step`
 - `Code Step`
 - `Decision Required`
 - `Verification`
 
-### SQL Editor Restrictions
-- **READ-ONLY:** Use SQL Editor primarily for the `SELECT` query to inspect data or verify results.
-- **NO SCHEMA CHANGES:** Do NOT use SQL Editor to create or alter tables, functions, or triggers manually. All schema changes must go through migrations.
-- **SECRET EXCEPTION:** The only allowed mutation in SQL Editor is the initialization or update of sensitive secrets (e.g., `system_settings` or `internal_secret`) that should not be committed to Git.
+Supabase-specific manual step and SQL Editor restrictions live in `supabase/AGENTS.md`.
 
 ---
 
 ## 15. Edge Function Rules
 
-- Always validate input
-- Never trust incoming data
-- Always log errors
-- Always return HTTP 200 to Telegram
-- Keep webhook logic simple and explicit
+Edge Function boundary, validation, logging, and Telegram HTTP response rules live in `supabase/AGENTS.md`.
 
 ---
 
@@ -679,8 +583,5 @@ Rules:
 - поддерживай relational stage, если он утвержден планом
 - каждую миграцию проговаривай заранее
 - ручные шаги проговаривай заранее
-- Deno ≠ Node.js
-- Supabase напрямую, без abstraction jungle
-- `chat` — центральная сущность support-domain
-- assignment и history не смешивать
+- для Supabase/backend правил смотри `supabase/AGENTS.md`
 - если пользователь ошибается — скажи прямо и объясни
