@@ -1,28 +1,17 @@
 import { cookies } from "next/headers";
 import { AdminHeader } from "../_components/admin-header";
-import {
-  ChatHeaderStats,
-  ChatHeaderTabs,
-  CurrentManagerPanel,
-} from "../_components/chat-header-content";
-import { ChatDetails } from "@/widgets/chat-details";
-import { ChatList } from "@/widgets/chat-list";
-import { ErrorAlert } from "../_components/error-alert";
-import { StatusAlert } from "../_components/status-alert";
-import {
-  deleteChatAction,
-  deleteMessageAction,
-  markChatAsReadAction,
-  sendManagerMessageAction,
-  takeChatIntoWorkAction,
-  transferChatAction,
-  updateChatStatusAction,
-} from "./_actions/chat-actions";
-import { loadChatInboxPageAction } from "./_actions/chat-inbox-actions";
+import { deleteChatAction } from "@/features/delete-chat";
+import { deleteMessageAction } from "@/features/delete-message";
+import { loadChatInboxPageAction } from "@/features/load-chat-inbox-page";
+import { markChatAsReadAction } from "@/features/mark-chat-as-read";
+import { sendManagerMessageAction } from "@/features/send-message";
+import { SupportInboxPage } from "@/fsd-pages/support-inbox";
+import { takeChatIntoWorkAction } from "@/features/take-chat-into-work";
+import { transferChatAction } from "@/features/transfer-chat";
+import { updateChatStatusAction } from "@/features/update-chat-status";
 import { flashCookieName, isFlashStatus } from "../_lib/flash-cookie";
 import { getSupportAdminPageData } from "../_lib/get-support-admin-page-data";
 import { PageProps } from "../_lib/page-types";
-import styles from "../page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -33,71 +22,36 @@ export default async function Home({ searchParams }: PageProps) {
   const pageData = await getSupportAdminPageData(await searchParams, flashStatus);
 
   return (
-    <main className={styles.pageMain}>
-      <div className={styles.pageContent}>
+    <SupportInboxPage
+      botOptions={pageData.botOptions}
+      selectedBot={pageData.selectedBot}
+      botFilteredChatCount={pageData.botFilteredChatCount}
+      botFilteredMessageCount={pageData.botFilteredMessageCount}
+      chatSummaries={pageData.chatSummaries}
+      chatInboxPageInfo={pageData.chatInboxPageInfo}
+      selectedChat={pageData.selectedChat}
+      selectedChatMessages={pageData.selectedChatMessages}
+      allManagers={pageData.allManagers}
+      currentManager={pageData.currentManager}
+      statusMessage={pageData.statusMessage}
+      statusVariant={pageData.statusVariant}
+      errorMessage={pageData.errorMessage}
+      headerBotLabel={pageData.headerBotLabel}
+      loadChatInboxPage={loadChatInboxPageAction}
+      actions={{
+        deleteChat: deleteChatAction,
+        deleteMessage: deleteMessageAction,
+        markChatAsRead: markChatAsReadAction,
+        sendManagerMessage: sendManagerMessageAction,
+        takeChatIntoWork: takeChatIntoWorkAction,
+        transferChat: transferChatAction,
+        updateChatStatus: updateChatStatusAction,
+      }}
+      renderHeaderShell={(headerProps) => (
         <AdminHeader
-          title={pageData.headerBotLabel}
-          allManagers={pageData.allManagers}
-          currentManager={pageData.currentManager}
-          navigationHref="/knowledge-base"
-          navigationLabel="База знаний"
-          stats={(
-            <ChatHeaderStats
-              botLabel={pageData.headerBotLabel}
-              messageCount={pageData.botFilteredMessageCount}
-              chatCount={pageData.botFilteredChatCount}
-            />
-          )}
-          sidePanel={pageData.currentManager ? (
-            <CurrentManagerPanel manager={pageData.currentManager} />
-          ) : null}
-          bottom={(
-            <ChatHeaderTabs
-              botOptions={pageData.botOptions}
-              selectedBotKey={pageData.selectedBot?.key ?? null}
-            />
-          )}
+          {...headerProps}
         />
-
-        {pageData.statusMessage && pageData.statusVariant ? (
-          <StatusAlert
-            message={pageData.statusMessage}
-            variant={pageData.statusVariant}
-          />
-        ) : null}
-
-        {pageData.errorMessage ? (
-          <ErrorAlert message={pageData.errorMessage} />
-        ) : (
-          <section className={styles.pageGrid}>
-            <ChatList
-              chatSummaries={pageData.chatSummaries}
-              chatInboxPageInfo={pageData.chatInboxPageInfo}
-              selectedChat={pageData.selectedChat}
-              selectedChatId={pageData.selectedChat?.id ?? null}
-              selectedBotKey={pageData.selectedBot?.key ?? null}
-              selectedBotUsername={pageData.selectedBot?.value ?? null}
-              loadChatInboxPage={loadChatInboxPageAction}
-            />
-            <ChatDetails
-              selectedChat={pageData.selectedChat}
-              selectedChatMessages={pageData.selectedChatMessages}
-              selectedBotKey={pageData.selectedBot?.key ?? null}
-              allManagers={pageData.allManagers}
-              currentManager={pageData.currentManager}
-              actions={{
-                deleteChat: deleteChatAction,
-                deleteMessage: deleteMessageAction,
-                markChatAsRead: markChatAsReadAction,
-                sendManagerMessage: sendManagerMessageAction,
-                takeChatIntoWork: takeChatIntoWorkAction,
-                transferChat: transferChatAction,
-                updateChatStatus: updateChatStatusAction,
-              }}
-            />
-          </section>
-        )}
-      </div>
-    </main>
+      )}
+    />
   );
 }

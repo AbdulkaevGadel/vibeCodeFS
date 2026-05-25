@@ -1,0 +1,41 @@
+import "server-only";
+
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { isManagerRole, mapManagerRow, type Manager, type ManagerRow } from "@/entities/manager";
+
+export async function getCurrentManagerId(): Promise<string> {
+  const manager = await getCurrentManager();
+  return manager.id;
+}
+
+export async function getCurrentManager(): Promise<Manager> {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    throw new Error("User not authenticated");
+  }
+
+  const { data: manager, error: managerError } = await supabase
+    .from("managers")
+    .select("id, email, display_name, last_name, role")
+    .eq("auth_user_id", user.id)
+    .single();
+
+  if (managerError || !manager) {
+    throw new Error("Профиль менеджера не найден. Обратитесь к администратору.");
+  }
+
+  if (!isManagerRole(manager.role)) {
+    console.warn("Unknown manager role received from DB; falling back to least-privileged support role.", {
+      managerId: manager.id,
+      role: manager.role,
+    });
+  }
+
+  return mapManagerRow(manager as ManagerRow);
+}

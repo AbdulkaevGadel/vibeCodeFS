@@ -1,9 +1,8 @@
 import { ReactNode } from "react";
+import { isAdminManager, type Manager } from "@/entities/manager";
 import { Button } from "@/shared/ui/button";
 import { logoutAction } from "../_actions/logout";
-import { Manager } from "../_lib/page-types";
 import { RefreshButton } from "../refresh-button";
-import { ManagersAdminModal } from "./managers-admin-modal";
 
 const headerClassName = "support-panel-strong p-5 sm:p-6";
 const headerLayoutClassName = "flex flex-col gap-5";
@@ -22,6 +21,7 @@ type AdminHeaderProps = {
   navigationHref: string;
   navigationLabel: string;
   navigationActive?: boolean;
+  managersNavigationActive?: boolean;
   secondaryActions?: ReactNode;
   stats: ReactNode;
   sidePanel?: ReactNode;
@@ -32,10 +32,10 @@ export function AdminHeader({
   title,
   eyebrow = "VibeCode Support",
   currentManager,
-  allManagers,
   navigationHref,
   navigationLabel,
   navigationActive = false,
+  managersNavigationActive = false,
   secondaryActions,
   stats,
   sidePanel,
@@ -64,8 +64,15 @@ export function AdminHeader({
 
             {secondaryActions}
 
-            {currentManager?.role === "admin" ? (
-              <ManagersAdminModal managers={allManagers} />
+            {isAdminManager(currentManager) ? (
+              <Button
+                href="/managers"
+                variant="secondary"
+                active={managersNavigationActive}
+                size="sm"
+              >
+                Менеджеры
+              </Button>
             ) : null}
 
             <form action={logoutAction}>

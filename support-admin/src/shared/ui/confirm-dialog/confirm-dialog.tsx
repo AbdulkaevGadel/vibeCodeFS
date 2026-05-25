@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 import { Button } from "@/shared/ui/button";
-import { Dialog } from "@/shared/ui/dialog";
+import { Modal } from "@/shared/ui/modal";
 
 type ConfirmDialogVariant = "default" | "danger";
 
@@ -32,7 +32,7 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <Dialog
+    <Modal
       isOpen={isOpen}
       title={title}
       onClose={onCancel}
@@ -60,6 +60,6 @@ export function ConfirmDialog({
       }
     >
       <p className={descriptionClassName}>{description}</p>
-    </Dialog>
+    </Modal>
   );
 }

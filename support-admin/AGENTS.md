@@ -21,7 +21,7 @@ Rule:
 - do not introduce CSS Modules everywhere by default
 - do not add `clsx`, `cn`, `cva`, or similar helpers until class composition becomes repetitive enough to justify it
 - enabled interactive elements must use the project semantic `support-interactive` cursor behavior when they are not already covered by a shared primitive
-- shared primitives such as `Button`, `Dialog`, tooltip triggers, and reusable links should include `support-interactive` centrally
+- shared primitives such as `Button`, `Modal`, tooltip triggers, and reusable links should include `support-interactive` centrally
 - do not add one-off `cursor-pointer` / `disabled:cursor-not-allowed` classes when the element can use `support-interactive` or an existing shared primitive
 
 ## UI Reuse Check
@@ -51,6 +51,8 @@ This is an app-specific override for `support-admin`: these FSD rules take prior
 Next.js App Router mapping:
 - `src/app` is the routing boundary for routes, guards, route-level data loading, redirects, and composition.
 - `app/.../page.tsx` is a route entry and composition layer, not the place for stable domain/UI architecture.
+- `src/fsd-pages` is the physical folder for the logical FSD `pages` layer.
+- Do not create `src/pages` for FSD page slices, because `src/pages` can activate or imply Next.js Pages Router semantics and conflict with the App Router architecture.
 - `widgets` are large standalone page UI blocks with a composition role.
 - `features` are user actions and use-cases, such as `send-message`, `transfer-chat`, or `update-chat-status`.
 - `entities` are stable domain entities with their own model, types, UI, or behavior, such as `chat`, `message`, `manager`, or `knowledge-article`.
@@ -106,11 +108,24 @@ FSD placement review:
   - `FSD promotion approved and completed`.
 
 FSD public API files:
-- In `support-admin/src/{shared,entities,features,widgets}/**/index.ts`, keep `index.ts` files as pure public API barrels.
+- In `support-admin/src/{fsd-pages,shared,entities,features,widgets}/**/index.ts`, keep `index.ts` files as pure public API barrels.
 - Allowed in `index.ts`: `export * from "./model";`, `export { SomeComponent } from "./ui/some-component";`, `export type { SomeType } from "./model";`.
 - Forbidden in `index.ts`: declaring types, functions, helpers, constants, React components, or runtime logic directly.
 - Put implementation details in named files such as `model.ts`, `lib.ts`, `ui.tsx`, `api.ts`, or more specific modules.
 - Reason: `index.ts` controls the public API of an FSD slice and must not become a mixed dump as the product grows.
+
+Server-only entity API:
+- Server-only entity API modules, such as `entities/*/api/*`, must not be exported through the root entity public barrel when that root barrel is used by Client Components.
+- Import server-only entity API directly from its server-only module path, for example `@/entities/manager/api/current-manager`.
+- Root entity barrels should stay safe for shared server/client domain contracts, pure helpers, and types.
+- Reason: this prevents accidental `server-only` imports from Client Components while still allowing Server Actions and server loaders to use entity-owned server helpers.
+
+Feature Server Action barrels:
+- If a root feature barrel exports Server Actions, Client Components and widgets must not import action result or contract types from that root barrel.
+- Client Components and widgets should import those type contracts from the feature `model` public API, for example `@/features/manage-managers/model`.
+- Route entrypoints and server-side composition code may import Server Actions from the root feature barrel when they wire actions into page/widget props.
+- Widgets must receive privileged Server Actions through props/action objects and must not import `features/*/api/*` implementation modules directly.
+- Reason: this keeps the client/widget boundary away from server-only mutation implementation while still allowing explicit action wiring at the `app` composition boundary.
 
 ## Component Decomposition Rule
 
@@ -132,10 +147,33 @@ Rules:
 - For React component files, keep the exported/main component as the final meaningful block whenever practical.
 - Place imports, types, constants, local helpers, and small private subcomponents above the exported/main component so the file can be read top-down.
 - Prefer separate FSD layer modules for extracted components with a standalone responsibility, especially when the parent file is already large.
+- Prefer one main exported React component and one UI role per component module.
+- Do not keep multiple exported React components with different UI roles, different import sites, or different slot ownership in one file; split them into explicitly named modules.
+- Small private JSX fragments, render helpers, and private subcomponents may stay in the same file when they only support the main exported component and do not form a standalone UI role.
+- UI component modules should not own exported non-component contracts when those contracts are imported by other modules.
+- Exported widget/feature contracts, such as action bags, wiring types, DTO props shared across modules, or public callback contracts, should live in the responsible `model` file or segment and be re-exported through the slice `index.ts`.
+- Component props types may stay in the component file when they are only local to that component and are not imported as a separate contract elsewhere.
 - Avoid leaving React subcomponents, type blocks, or helper functions below the main component unless there is a strong local reason.
+- After editing or moving a React component file, perform a local structure pass before finishing the task.
+- The structure pass must check this order: imports, types, constants, helpers/private subcomponents, then the exported/main component as the final meaningful block.
+- Do this check for mechanical file moves as well as new component code; moving legacy files into FSD slices is not enough by itself.
 - When a component accumulates multiple pure view helpers for labels, variants, className selection, safe display formatting, or view-only filtering/sorting, move them to a neighboring `*-utils.ts` file in the same widget/feature/entity.
 - Keep such helpers out of `entities/*/lib.ts` unless they describe reusable pure operations on the domain model rather than one widget's presentation.
 - Do not extract a single tiny helper by default; extract when helper volume starts to hide the component's render/composition role.
+
+## Helper / Mapper Placement
+
+Helper, util, mapper, and formatter files should be grouped by subject area, not by one-function-per-file.
+
+Rules:
+- multiple closely related helpers may live in one file when they serve the same domain or UI responsibility;
+- do not create broad generic files such as `utils.ts`, `helpers.ts`, or `common.ts` when the file can be named by purpose, for example `knowledge-embedding-status-utils.ts`, `manager-row-mappers.ts`, or `support-chat-date-utils.ts`;
+- if a helper belongs only to one widget, feature, entity, or route, keep it inside that slice or nearby route-local folder;
+- if a helper describes a domain entity or maps domain rows/DTOs, keep it in the responsible `entities/*/model` or `entities/*/lib`;
+- if a helper is presentation-specific, such as labels, badge variants, button titles, className selection, or UI-only filtering, keep it near the owning widget/feature UI;
+- move helpers to `shared` only after real cross-domain reuse exists;
+- do not dump unrelated helpers into global `shared/utils`;
+- prefer explicit file names based on responsibility over generic names.
 
 ## Async UI Sync Rule
 

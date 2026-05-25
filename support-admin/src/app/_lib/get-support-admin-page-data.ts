@@ -17,13 +17,16 @@ import {
   type ChatMessage,
   type ChatMessageRow,
 } from "@/entities/chat-message";
-import { getCurrentManager } from "./manager-utils";
+import {
+  mapManagerRow,
+  type Manager,
+  type ManagerRow,
+} from "@/entities/manager";
+import { getCurrentManager } from "@/entities/manager/api/current-manager";
 import { FlashStatus } from "./flash-cookie";
 import {
-  Manager,
   PageProps,
   SupportAdminPageData,
-  coerceManagerRole,
 } from "./page-types";
 import {
   getSingleValue,
@@ -87,13 +90,7 @@ export async function getSupportAdminPageData(
     if (managersAllError) {
       console.error("Fetch managers error:", managersAllError);
     } else {
-      allManagers = (managersAllData ?? []).map((manager) => ({
-        id: manager.id,
-        email: manager.email,
-        displayName: manager.display_name,
-        lastName: manager.last_name,
-        role: coerceManagerRole(manager.role),
-      }));
+      allManagers = ((managersAllData ?? []) as ManagerRow[]).map(mapManagerRow);
     }
 
     const { data: botStatsData, error: botStatsError } = await supabase
