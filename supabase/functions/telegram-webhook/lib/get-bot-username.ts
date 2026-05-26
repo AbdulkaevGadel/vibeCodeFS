@@ -1,4 +1,4 @@
-import { telegramApiBaseUrl } from "./constants.ts"
+import { buildTelegramBotApiUrl } from "../../_shared/telegram/api.ts"
 
 let cachedBotUsername: string | null = null
 
@@ -7,7 +7,7 @@ export async function getBotUsername(botToken: string) {
     return cachedBotUsername
   }
 
-  const response = await fetch(`${telegramApiBaseUrl}/bot${botToken}/getMe`)
+  const response = await fetch(buildTelegramBotApiUrl(botToken, "getMe"))
 
   if (!response.ok) {
     const errorText = await response.text()
