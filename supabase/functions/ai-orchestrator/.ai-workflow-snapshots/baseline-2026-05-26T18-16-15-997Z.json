@@ -1,0 +1,163 @@
+{
+  "label": "baseline",
+  "createdAt": "2026-05-26T18:16:15.997Z",
+  "source": [
+    "supabase/functions/ai-orchestrator/lib/workflow.ts"
+  ],
+  "fixtures": {
+    "intent": [
+      {
+        "text": "Здравствуйте",
+        "result": {
+          "type": "greeting"
+        }
+      },
+      {
+        "text": "Спасибо, помогло",
+        "result": {
+          "type": "thanks"
+        }
+      },
+      {
+        "text": "До свидания",
+        "result": {
+          "type": "farewell"
+        }
+      },
+      {
+        "text": "Позовите оператора",
+        "result": {
+          "type": "manager_request"
+        }
+      },
+      {
+        "text": "Карта не принимается",
+        "result": null
+      }
+    ],
+    "retrievalQueryText": [
+      {
+        "text": "Здравствуйте, карта не принимается",
+        "result": "карта не принимается"
+      },
+      {
+        "text": "Добрый день! как вернуть деньги?",
+        "result": "как вернуть деньги?"
+      },
+      {
+        "text": "Привет",
+        "result": "Привет"
+      },
+      {
+        "text": "Карта не принимается",
+        "result": "Карта не принимается"
+      }
+    ],
+    "contextSnapshot": {
+      "current_message": {
+        "id": "msg-current",
+        "sender_type": "client",
+        "created_at": "2026-05-26T09:00:00.000Z",
+        "text": "Здравствуйте, карта не принимается при оплате заказа",
+        "truncated": false
+      },
+      "history_messages": [
+        {
+          "id": "msg-history-client",
+          "sender_type": "client",
+          "created_at": "2026-05-26T08:58:00.000Z",
+          "text": "Я пытаюсь оплатить заказ",
+          "truncated": false
+        },
+        {
+          "id": "msg-history-ai",
+          "sender_type": "ai",
+          "created_at": "2026-05-26T08:59:00.000Z",
+          "text": "На связи ИИ-помощник службы поддержки.\nУточните, пожалуйста, способ оплаты.",
+          "truncated": false
+        }
+      ],
+      "kb_fragments": [
+        {
+          "chunk_id": "chunk-1",
+          "article_id": "article-1",
+          "chunk_set_id": "set-1",
+          "chunk_index": 0,
+          "similarity_score": 0.82,
+          "article_title": "Карта не принимается",
+          "article_slug": "card-declined",
+          "content_checksum": "checksum-1",
+          "ingestion_pipeline_version": "v1",
+          "text": "Проверьте актуальность реквизитов карты. Если банк отклоняет платеж, попросите клиента попробовать другую карту или способ оплаты.",
+          "truncated": false
+        }
+      ],
+      "limits": {
+        "enabled": true,
+        "builderVersion": "context-builder-v1",
+        "maxHistoryMessages": 8,
+        "maxClientHistoryMessages": 4,
+        "maxAiHistoryMessages": 4,
+        "maxHistoryAgeHours": 24,
+        "maxHistoryMessageChars": 800,
+        "maxKbFragments": 5,
+        "maxKbFragmentChars": 1200,
+        "maxPromptChars": 9000,
+        "maxCurrentMessageChars": 2000
+      },
+      "source_counts": {
+        "retrieved_chunks": 1,
+        "usable_chunks": 1,
+        "history_messages": 2,
+        "client_history_messages": 1,
+        "ai_history_messages": 1
+      }
+    },
+    "promptSnapshot": {
+      "messages": [
+        {
+          "role": "system",
+          "content": "Ты backend-only AI assistant службы поддержки.\nОтвечай только на основе KB fragments.\nЕсли в KB fragments нет достаточной информации, скажи, что данных недостаточно.\nНе придумывай правила, сроки, статусы, цены или обещания.\nНе принимай workflow decisions вроде handoff."
+        },
+        {
+          "role": "user",
+          "content": "Current client message:\nЗдравствуйте, карта не принимается при оплате заказа\n\nRecent client/ai history:\n[client 2026-05-26T08:58:00.000Z] Я пытаюсь оплатить заказ\n[ai 2026-05-26T08:59:00.000Z] На связи ИИ-помощник службы поддержки.\nУточните, пожалуйста, способ оплаты.\n\nKB fragments:\n[fragment chunk_id=chunk-1 article_id=article-1 chunk_index=0]\nПроверьте актуальность реквизитов карты. Если банк отклоняет платеж, попросите клиента попробовать другую карту или способ оплаты."
+        }
+      ],
+      "prompt_version": "phase-9-context-prompt-v1",
+      "builder_version": "context-builder-v1",
+      "estimated_chars": 746
+    },
+    "llmJsonParsing": [
+      {
+        "content": "{\"kind\":\"answer\",\"answer_text\":\"Проверьте данные карты.\"}",
+        "ok": true,
+        "result": {
+          "kind": "answer",
+          "answer_text": "Проверьте данные карты."
+        }
+      },
+      {
+        "content": "{\"kind\":\"insufficient\",\"answer_text\":\"\"}",
+        "ok": true,
+        "result": {
+          "kind": "insufficient"
+        }
+      },
+      {
+        "content": "Ответ ниже:\n{\"kind\":\"answer\",\"answer_text\":\"Попробуйте другую карту.\"}",
+        "ok": true,
+        "result": {
+          "kind": "answer",
+          "answer_text": "Попробуйте другую карту."
+        }
+      },
+      {
+        "content": "not json",
+        "ok": false,
+        "errorName": "UnknownError",
+        "errorMessage": "OrchestratorError: LLM response is not valid JSON: not json"
+      }
+    ]
+  }
+}
