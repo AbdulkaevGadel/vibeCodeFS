@@ -1,0 +1,1753 @@
+import { config } from "./config.ts"
+import {
+  classifyError,
+  EmbeddingProviderHttpError,
+  EmbeddingProviderTimeoutError,
+  getErrorMessage,
+  getFailureErrorMessage,
+  getStageErrorMessage,
+  OrchestratorError,
+  ProviderHttpError,
+  ProviderTimeoutError,
+  RetrievalStageTimeoutError,
+  safeProviderMessage,
+  type ErrorType,
+} from "./errors.ts"
+import type { OrchestratorPayload } from "./payload.ts"
+import { callRest, callRpc } from "./rest.ts"
+import {
+  deliverPublishedMessage,
+  publishAiResponse,
+  sendTypingAction,
+} from "./telegram-delivery.ts"
+import type { ResponseKind, RpcResult } from "./types.ts"
+
+type StaleRunRecoveryResult = {
+  type?: string
+  recovered_count?: number
+  run_ids?: string[]
+  stale_after_minutes?: number
+}
+
+type TriggerMessage = {
+  id: string
+  chat_id: string
+  text: string
+  sender_type: string
+  created_at: string
+}
+
+type RetrievalStatus = "hit" | "miss" | "empty" | "failed"
+type IntentType = "greeting" | "thanks" | "farewell" | "manager_request"
+
+type RetrievalResult = {
+  retrieval_status: RetrievalStatus
+  top_similarity_score: number | null
+  matched_chunks_count: number
+  chunks: RetrievalChunk[]
+  error_type?: ErrorType
+  error_message?: string
+}
+
+type PersistedRetrievalResult = RetrievalResult & RpcResult
+
+type RetrievalChunk = {
+  chunk_id: string
+  article_id: string
+  chunk_index: number
+  similarity_score: number
+  match_source?: "vector" | "fts" | "trigram" | "hybrid" | null
+  vector_similarity_score?: number | null
+  fts_score?: number | null
+  trigram_score?: number | null
+  retrieval_rank?: number | null
+}
+
+type ChatMessageRow = {
+  id: string
+  chat_id: string
+  text: string
+  sender_type: "client" | "manager" | "ai" | "system"
+  created_at: string
+}
+
+type KnowledgeChunkRow = {
+  id: string
+  article_id: string
+  chunk_set_id: string
+  chunk_index: number
+  chunk_text: string
+  content_checksum: string | null
+  embedding_status: string
+  ingestion_pipeline_version: string | null
+  knowledge_chunk_sets?: KnowledgeChunkSetRow | KnowledgeChunkSetRow[]
+  knowledge_base_articles?: KnowledgeArticleRow | KnowledgeArticleRow[]
+}
+
+type KnowledgeChunkSetRow = {
+  status: string
+  is_active: boolean
+  content_checksum: string | null
+  ingestion_pipeline_version: string | null
+}
+
+type KnowledgeArticleRow = {
+  status: string
+  title: string | null
+  slug: string | null
+}
+
+type ContextSnapshot = {
+  current_message: SnapshotMessage
+  history_messages: SnapshotMessage[]
+  kb_fragments: KbFragment[]
+  limits: typeof config.context
+  source_counts: {
+    retrieved_chunks: number
+    usable_chunks: number
+    history_messages: number
+    client_history_messages: number
+    ai_history_messages: number
+  }
+}
+
+type PromptSnapshot = {
+  messages: PromptMessage[]
+  prompt_version: string
+  builder_version: string
+  estimated_chars: number
+}
+
+type SnapshotMessage = {
+  id: string
+  sender_type: "client" | "ai"
+  created_at: string
+  text: string
+  truncated: boolean
+}
+
+type KbFragment = {
+  chunk_id: string
+  article_id: string
+  chunk_set_id: string
+  chunk_index: number
+  similarity_score: number
+  article_title: string | null
+  article_slug: string | null
+  content_checksum: string | null
+  ingestion_pipeline_version: string | null
+  text: string
+  truncated: boolean
+}
+
+type PromptMessage = {
+  role: "system" | "user" | "assistant"
+  content: string
+}
+
+type AiRunStage =
+  | "processing_marked"
+  | "trigger_loaded"
+  | "retrieval_started"
+  | "embedding_started"
+  | "embedding_finished"
+  | "retrieval_rpc_started"
+  | "retrieval_saved"
+  | "failed"
+
+type LlmResponse =
+  | { kind: "answer"; answer_text: string }
+  | { kind: "insufficient" }
+
+type ChatAiRunSummary = {
+  response_kind: "none" | ResponseKind
+  retrieval_status: "not_started" | RetrievalStatus | "skipped"
+  intent_type: IntentType | null
+  completed_at: string
+  created_at: string
+}
+
+type StatusResetBoundary = {
+  created_at: string
+}
+
+type ChatStatusRow = {
+  status: string
+}
+
+type ResponseBranch = {
+  kind: ResponseKind
+  text: string
+}
+
+type IntentMatch = {
+  type: IntentType
+}
+
+export async function processAiRun(
+  payload: OrchestratorPayload,
+  correlationId: string,
+): Promise<Record<string, unknown>> {
+  let runId: string | null = null
+  let processingToken: string | null = null
+  let retrievalResultSaved = false
+  let currentStage: AiRunStage | null = null
+
+  const markStage = async (stage: AiRunStage, stageError: string | null = null) => {
+    currentStage = stage
+
+    if (!runId) {
+      return
+    }
+
+    await updateRunStage(runId, stage, stageError, correlationId)
+  }
+
+  try {
+    validateRetrievalConfig()
+
+    const configSnapshot = {
+      prompt_version: config.promptVersion,
+      retrieval: config.retrieval,
+      context: config.context,
+      llm: {
+        provider: config.llm.provider,
+        model: config.llm.model,
+        endpoint: config.llm.endpoint,
+        requestTimeoutMs: config.llm.requestTimeoutMs,
+        maxProviderRetries: config.llm.maxProviderRetries,
+        maxOutputTokens: config.llm.maxOutputTokens,
+        temperature: config.llm.temperature,
+      },
+      behavior: config.behavior,
+    }
+    const configHash = await hashJson(configSnapshot)
+    const recoveryResult = await recoverStaleAiRuns(payload.chat_id, correlationId)
+
+    const startResult = await callRpc<RpcResult>("start_chat_ai_run", {
+      p_chat_id: payload.chat_id,
+      p_trigger_message_id: payload.trigger_message_id,
+      p_prompt_version: config.promptVersion,
+      p_correlation_id: correlationId,
+      p_config_snapshot: configSnapshot,
+      p_config_hash: configHash,
+    })
+
+    runId = startResult.run_id ?? null
+
+    if (startResult.type !== "started" || !runId) {
+      console.log("ai-orchestrator skipped:", JSON.stringify({
+        correlation_id: correlationId,
+        type: startResult.type,
+        run_id: runId,
+        stale_recovery_type: recoveryResult.type,
+        stale_recovery_error: recoveryResult.error,
+      }))
+
+      return { ok: true, type: startResult.type, run_id: runId }
+    }
+
+    processingToken = crypto.randomUUID()
+
+    const processingResult = await callRpc<RpcResult>("mark_chat_ai_run_processing", {
+      p_run_id: runId,
+      p_processing_token: processingToken,
+    })
+
+    if (processingResult.type !== "processing" && processingResult.type !== "already_processing") {
+      return {
+        ok: true,
+        type: processingResult.type,
+        run_id: runId,
+      }
+    }
+
+    await markStage("processing_marked")
+
+    const triggerMessage = await fetchTriggerMessage(payload.trigger_message_id)
+    await markStage("trigger_loaded")
+
+    const intent = classifyIntent(triggerMessage.text)
+
+    if (intent) {
+      const intentSaveResult = await saveIntentResult(runId, processingToken, intent.type)
+
+      if (intentSaveResult.type !== "saved" && intentSaveResult.type !== "already_saved") {
+        return {
+          ok: true,
+          type: intentSaveResult.type,
+          run_id: runId,
+        }
+      }
+
+      retrievalResultSaved = true
+
+      const branch = await buildIntentResponseBranch(payload.chat_id, intent.type)
+      const publishResult = await publishAiResponse(runId, processingToken, branch.kind, branch.text)
+
+      if (publishResult.type === "published") {
+        await deliverPublishedMessage(publishResult)
+      }
+
+      return {
+        ok: true,
+        type: publishResult.type,
+        status: publishResult.status,
+        run_id: runId,
+        retrieval_status: "skipped",
+        response_kind: publishResult.response_kind ?? branch.kind,
+        response_message_id: publishResult.message_id ?? null,
+        intent_type: intent.type,
+        matched_chunks_count: 0,
+        top_similarity_score: null,
+        context_snapshot_saved: false,
+        prompt_snapshot_saved: false,
+      }
+    }
+
+    const retrievalResult = await runRetrievalWithHardTimeout(triggerMessage, runId, processingToken, markStage)
+
+    if (!isSuccessfulRetrievalSaveType(retrievalResult.type)) {
+      const errorMessage = getRetrievalSaveFailureMessage(retrievalResult.type)
+
+      await markStage("failed", errorMessage)
+
+      try {
+        const failureSaveResult = await saveRetrievalResult(runId, processingToken, {
+          retrieval_status: "failed",
+          top_similarity_score: null,
+          matched_chunks_count: 0,
+          chunks: [],
+          error_type: "system",
+          error_message: errorMessage,
+        })
+
+        if (failureSaveResult.type === "saved" || failureSaveResult.type === "already_saved") {
+          retrievalResultSaved = true
+        }
+      } catch (saveError) {
+        console.error("ai-orchestrator failed to save retrieval save rejection:", getErrorMessage(saveError))
+      }
+
+      const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_final_status: "failed",
+        p_error_message: errorMessage,
+        p_error_type: "system",
+      })
+
+      return {
+        ok: true,
+        type: retrievalResult.type ?? "retrieval_save_failed",
+        status: finishResult.status,
+        run_id: runId,
+        retrieval_status: "failed",
+        error_type: "system",
+        error_message: errorMessage,
+      }
+    }
+
+    retrievalResultSaved = true
+    await markStage("retrieval_saved")
+
+    if (!(await isChatAiEligibleForPublish(payload.chat_id))) {
+      const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_final_status: "ignored",
+        p_error_message: null,
+        p_error_type: null,
+      })
+
+      return {
+        ok: true,
+        type: finishResult.type,
+        status: finishResult.status,
+        run_id: runId,
+        retrieval_status: retrievalResult.retrieval_status,
+      }
+    }
+
+    let contextSnapshot: ContextSnapshot | null = null
+    let promptSnapshot: PromptSnapshot | null = null
+
+    if (retrievalResult.retrieval_status === "hit") {
+      const snapshots = await buildContextAndPrompt(payload.trigger_message_id, retrievalResult)
+      contextSnapshot = snapshots.contextSnapshot
+      promptSnapshot = snapshots.promptSnapshot
+
+      const snapshotResult = await callRpc<RpcResult>("save_chat_ai_context_prompt_snapshot", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_context_snapshot: contextSnapshot,
+        p_prompt_snapshot: promptSnapshot,
+      })
+
+      if (snapshotResult.type !== "saved" && snapshotResult.type !== "already_saved") {
+        return {
+          ok: true,
+          type: snapshotResult.type,
+          run_id: runId,
+        }
+      }
+    }
+
+    if (retrievalResult.retrieval_status === "failed") {
+      const finishResult = await callRpc<RpcResult>("finish_chat_ai_run", {
+        p_run_id: runId,
+        p_processing_token: processingToken,
+        p_final_status: "failed",
+        p_error_message: retrievalResult.error_message ?? "RETRIEVAL_FAILED",
+        p_error_type: retrievalResult.error_type ?? "system",
+      })
+
+      return {
+        ok: true,
+        type: finishResult.type,
+        status: finishResult.status,
+        run_id: runId,
+        retrieval_status: retrievalResult.retrieval_status,
+      }
+    }
+
+    const branch = await decideResponseBranch(
+      payload.chat_id,
+      runId,
+      retrievalResult,
+      promptSnapshot,
+      triggerMessage.text,
+    )
+    const publishResult = await publishAiResponse(runId, processingToken, branch.kind, branch.text)
+
+    if (publishResult.type === "published") {
+      await deliverPublishedMessage(publishResult)
+    }
+
+    return {
+      ok: true,
+      type: publishResult.type,
+      status: publishResult.status,
+      run_id: runId,
+      retrieval_status: retrievalResult.retrieval_status,
+      response_kind: publishResult.response_kind ?? branch.kind,
+      response_message_id: publishResult.message_id ?? null,
+      matched_chunks_count: retrievalResult.matched_chunks_count,
+      top_similarity_score: retrievalResult.top_similarity_score,
+      context_snapshot_saved: contextSnapshot !== null,
+      prompt_snapshot_saved: promptSnapshot !== null,
+    }
+  } catch (error) {
+    console.error("ai-orchestrator error:", getErrorMessage(error))
+
+    if (runId && processingToken) {
+      if (error instanceof RetrievalStageTimeoutError && currentStage) {
+        await updateRunStage(runId, currentStage, "RETRIEVAL_STAGE_TIMEOUT", correlationId)
+      } else {
+        try {
+          await markStage("failed", getStageErrorMessage(error))
+        } catch (stageError) {
+          console.error("ai-orchestrator failed to save failed stage:", getErrorMessage(stageError))
+        }
+      }
+
+      if (!retrievalResultSaved) {
+        try {
+          await saveRetrievalResult(runId, processingToken, {
+            retrieval_status: "failed",
+            top_similarity_score: null,
+            matched_chunks_count: 0,
+            chunks: [],
+            error_type: classifyError(error),
+            error_message: getFailureErrorMessage(error),
+          })
+        } catch (saveError) {
+          console.error("ai-orchestrator failed to save retrieval failure:", getErrorMessage(saveError))
+        }
+      }
+
+      try {
+        await callRpc<RpcResult>("finish_chat_ai_run", {
+          p_run_id: runId,
+          p_processing_token: processingToken,
+          p_final_status: "failed",
+          p_error_message: getFailureErrorMessage(error),
+          p_error_type: classifyError(error),
+        })
+      } catch (finishError) {
+        console.error("ai-orchestrator failed to mark run failed:", getErrorMessage(finishError))
+      }
+    }
+
+    return {
+      ok: false,
+      type: "system_error",
+      current_stage: currentStage,
+      run_id: runId,
+    }
+  }
+}
+
+async function runRetrievalWithHardTimeout(
+  triggerMessage: TriggerMessage,
+  runId: string,
+  processingToken: string,
+  markStage: (stage: AiRunStage, stageError?: string | null) => Promise<void>,
+): Promise<PersistedRetrievalResult> {
+  const controller = new AbortController()
+  const retrievalPromise = runRetrieval(triggerMessage, runId, processingToken, markStage, controller.signal)
+  let timeoutId: number | undefined
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort()
+      reject(new RetrievalStageTimeoutError())
+    }, config.retrieval.stageTimeoutMs)
+  })
+
+  try {
+    return await Promise.race([retrievalPromise, timeoutPromise])
+  } catch (error) {
+    if (controller.signal.aborted || error instanceof RetrievalStageTimeoutError) {
+      throw new RetrievalStageTimeoutError()
+    }
+
+    throw error
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
+
+async function runRetrieval(
+  triggerMessage: TriggerMessage,
+  runId: string,
+  processingToken: string,
+  markStage: (stage: AiRunStage, stageError?: string | null) => Promise<void>,
+  signal: AbortSignal,
+): Promise<PersistedRetrievalResult> {
+  await markStage("retrieval_started")
+
+  const queryText = getRetrievalQueryText(triggerMessage.text)
+  await markStage("embedding_started")
+
+  const queryEmbedding = await fetchEmbedding(queryText, signal)
+  await markStage("embedding_finished")
+  await markStage("retrieval_rpc_started")
+
+  const result = await callRpc<PersistedRetrievalResult>("save_chat_ai_retrieval_from_json_v1", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_query_embedding_json: queryEmbedding,
+    p_query_text: queryText,
+    p_match_threshold: config.retrieval.matchThreshold,
+    p_match_count: config.retrieval.matchCount,
+    p_candidate_count: config.retrieval.candidateCount,
+  }, { signal })
+
+  return normalizePersistedRetrievalResult(result)
+}
+
+async function fetchTriggerMessage(triggerMessageId: string): Promise<TriggerMessage> {
+  const rows = await callRest<TriggerMessage[]>(
+    `/rest/v1/chat_messages?id=eq.${encodeURIComponent(triggerMessageId)}&select=id,chat_id,text,sender_type,created_at&limit=1`,
+  )
+  const message = rows[0]
+
+  if (!message) {
+    throw new OrchestratorError("Trigger message was not found", "validation")
+  }
+
+  if (message.sender_type !== "client") {
+    throw new OrchestratorError("Trigger message is not a client message", "validation")
+  }
+
+  if (!message.text.trim()) {
+    throw new OrchestratorError("Trigger message text is empty", "validation")
+  }
+
+  return message
+}
+
+async function saveRetrievalResult(runId: string, processingToken: string, result: RetrievalResult) {
+  return await callRpc<RpcResult>("save_chat_ai_retrieval_result", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_retrieval_status: result.retrieval_status,
+    p_top_similarity_score: result.top_similarity_score,
+    p_matched_chunks_count: result.matched_chunks_count,
+    p_retrieval_chunks: result.chunks,
+    p_error_message: result.error_message ?? null,
+    p_error_type: result.error_type ?? null,
+  })
+}
+
+async function saveIntentResult(runId: string, processingToken: string, intentType: IntentType) {
+  return await callRpc<RpcResult>("save_chat_ai_intent_result", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_intent_type: intentType,
+  })
+}
+
+async function updateRunStage(
+  runId: string,
+  stage: AiRunStage,
+  stageError: string | null,
+  correlationId: string,
+) {
+  try {
+    const result = await callRpc<RpcResult>("update_chat_ai_run_stage", {
+      p_run_id: runId,
+      p_current_stage: stage,
+      p_stage_error: stageError,
+    })
+
+    if (result.type !== "updated") {
+      console.error("ai-orchestrator stage update skipped:", JSON.stringify({
+        correlation_id: correlationId,
+        run_id: runId,
+        stage,
+        type: result.type,
+      }))
+    }
+  } catch (error) {
+    console.error("ai-orchestrator stage update failed:", JSON.stringify({
+      correlation_id: correlationId,
+      run_id: runId,
+      stage,
+      error: getErrorMessage(error),
+    }))
+  }
+}
+
+async function recoverStaleAiRuns(chatId: string, correlationId: string) {
+  if (!config.staleRunRecovery.enabled) {
+    return { type: "disabled", error: null as string | null }
+  }
+
+  try {
+    const result = await callRpc<StaleRunRecoveryResult>("recover_stale_chat_ai_runs", {
+      p_chat_id: chatId,
+      p_stale_after_minutes: config.staleRunRecovery.staleAfterMinutes,
+      p_limit: config.staleRunRecovery.limit,
+    })
+
+    console.log("ai-orchestrator stale run recovery:", JSON.stringify({
+      correlation_id: correlationId,
+      type: result.type,
+      recovered_count: result.recovered_count ?? 0,
+      run_ids: result.run_ids ?? [],
+      stale_after_minutes: result.stale_after_minutes ?? config.staleRunRecovery.staleAfterMinutes,
+    }))
+
+    return { type: result.type ?? "unknown", error: null as string | null }
+  } catch (error) {
+    const message = getErrorMessage(error)
+
+    console.error("ai-orchestrator stale run recovery failed:", JSON.stringify({
+      correlation_id: correlationId,
+      error: message,
+    }))
+
+    return { type: "failed", error: message }
+  }
+}
+
+async function buildContextAndPrompt(triggerMessageId: string, retrievalResult: RetrievalResult) {
+  const triggerMessage = await fetchTriggerMessage(triggerMessageId)
+  const [historyMessages, kbFragments] = await Promise.all([
+    fetchRecentHistory(triggerMessage),
+    fetchKbFragments(retrievalResult.chunks),
+  ])
+
+  if (kbFragments.length === 0) {
+    throw new OrchestratorError("Retrieval hit has no usable KB fragments", "system")
+  }
+
+  const contextSnapshot = buildContextSnapshot(triggerMessage, historyMessages, kbFragments, retrievalResult)
+  const promptSnapshot = buildPromptSnapshot(contextSnapshot)
+
+  return { contextSnapshot, promptSnapshot }
+}
+
+async function decideResponseBranch(
+  chatId: string,
+  runId: string,
+  retrievalResult: RetrievalResult,
+  promptSnapshot: PromptSnapshot | null,
+  triggerMessageText: string,
+): Promise<{ kind: ResponseKind; text: string }> {
+  if (retrievalResult.retrieval_status === "hit") {
+    if (!promptSnapshot) {
+      throw new OrchestratorError("Prompt snapshot is required for LLM answer", "system")
+    }
+
+    await sendTypingAction(chatId)
+
+    const llmResponse = await callLlmWithRetry(promptSnapshot)
+
+    if (llmResponse.kind === "answer") {
+      const normalizedAnswer = normalizeVisibleText(llmResponse.answer_text)
+
+      if (!normalizedAnswer) {
+        throw new OrchestratorError("LLM answer text is empty", "external")
+      }
+
+      return {
+        kind: "answer",
+        text: await formatAnswerText(chatId, normalizedAnswer, triggerMessageText),
+      }
+    }
+  }
+
+  return await decideBusinessMissBranch(chatId, runId)
+}
+
+async function decideBusinessMissBranch(chatId: string, runId: string): Promise<{ kind: ResponseKind; text: string }> {
+  const previousMissCount = await fetchConsecutiveBusinessMissCount(chatId, runId)
+  const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+
+  if (previousMissCount >= 1) {
+    return {
+      kind: "handoff",
+      text: formatAiPrefixedText(
+        "Я всё ещё не нашёл достаточно точной информации в базе знаний. Передаю чат оператору службы поддержки.",
+        isFirstAiMessage,
+      ),
+    }
+  }
+
+  return {
+    kind: "clarify",
+    text: formatAiPrefixedText(
+      "Я не нашёл достаточно точной информации в базе знаний. Попробуйте, пожалуйста, переформулировать вопрос или добавить детали.",
+      isFirstAiMessage,
+    ),
+  }
+}
+
+async function fetchConsecutiveBusinessMissCount(chatId: string, runId: string) {
+  const resetBoundary = await fetchLatestMissResetBoundary(chatId)
+  const query = [
+    `chat_id=eq.${encodeURIComponent(chatId)}`,
+    `id=neq.${encodeURIComponent(runId)}`,
+    "status=eq.completed",
+    "response_kind=in.(answer,clarify,handoff,intent_reply)",
+    "select=response_kind,retrieval_status,intent_type,completed_at,created_at",
+    "order=completed_at.desc,created_at.desc",
+    "limit=10",
+  ].join("&")
+  const rows = await callRest<ChatAiRunSummary[]>(`/rest/v1/chat_ai_runs?${query}`)
+  let count = 0
+
+  for (const row of rows) {
+    const rowCompletedAt = Date.parse(row.completed_at ?? row.created_at)
+
+    if (resetBoundary && Number.isFinite(rowCompletedAt) && rowCompletedAt <= resetBoundary.getTime()) {
+      break
+    }
+
+    if (row.response_kind === "answer") {
+      break
+    }
+
+    if (
+      (row.response_kind === "clarify" || row.response_kind === "handoff")
+      && row.retrieval_status !== "skipped"
+      && row.intent_type === null
+    ) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+async function fetchLatestMissResetBoundary(chatId: string) {
+  const query = [
+    `chat_id=eq.${encodeURIComponent(chatId)}`,
+    "from_status=eq.waiting_operator",
+    "to_status=in.(open,in_progress)",
+    "select=created_at",
+    "order=created_at.desc",
+    "limit=1",
+  ].join("&")
+  const rows = await callRest<StatusResetBoundary[]>(`/rest/v1/chat_status_history?${query}`)
+  const createdAt = rows[0]?.created_at
+
+  if (!createdAt) {
+    return null
+  }
+
+  const timestamp = Date.parse(createdAt)
+
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null
+}
+
+async function isChatAiEligibleForPublish(chatId: string) {
+  const rows = await callRest<ChatStatusRow[]>(
+    `/rest/v1/chats?id=eq.${encodeURIComponent(chatId)}&select=status&limit=1`,
+  )
+  const status = rows[0]?.status
+
+  return status !== "waiting_operator"
+    && status !== "in_progress"
+    && status !== "resolved"
+    && status !== "closed"
+}
+
+async function isFirstAiMessageInChat(chatId: string) {
+  const rows = await callRest<{ id: string }[]>(
+    `/rest/v1/chat_messages?chat_id=eq.${encodeURIComponent(chatId)}&sender_type=eq.ai&select=id&limit=1`,
+  )
+
+  return rows.length === 0
+}
+
+async function formatAnswerText(chatId: string, answerText: string, triggerMessageText: string) {
+  const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+  const finalAnswerText = addGreetingAcknowledgementIfNeeded(answerText, triggerMessageText)
+
+  return formatAiPrefixedText(finalAnswerText, isFirstAiMessage)
+}
+
+function formatAiPrefixedText(text: string, isFirstAiMessage: boolean) {
+  const prefix = isFirstAiMessage
+    ? "На связи ИИ-помощник службы поддержки."
+    : "ИИ-помощник:"
+
+  return `${prefix}\n${text}`
+}
+
+async function buildIntentResponseBranch(chatId: string, intentType: IntentType): Promise<ResponseBranch> {
+  const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
+
+  if (intentType === "manager_request") {
+    return {
+      kind: "handoff",
+      text: formatAiPrefixedText("Передаю чат оператору службы поддержки.", isFirstAiMessage),
+    }
+  }
+
+  const replyByIntent: Record<Exclude<IntentType, "manager_request">, string> = {
+    greeting: "Здравствуйте. Опишите, пожалуйста, ваш вопрос, и я постараюсь помочь.",
+    thanks: "Пожалуйста. Если появится ещё вопрос, напишите здесь.",
+    farewell: "До свидания. Если понадобится помощь, напишите здесь.",
+  }
+  const reply = replyByIntent[intentType]
+
+  return {
+    kind: "intent_reply",
+    text: formatAiPrefixedText(reply, isFirstAiMessage),
+  }
+}
+
+function classifyIntent(text: string): IntentMatch | null {
+  const normalized = normalizeIntentText(text)
+
+  if (!normalized) {
+    return null
+  }
+
+  if (isManagerRequestIntent(normalized)) {
+    return { type: "manager_request" }
+  }
+
+  if (isGreetingOnlyIntent(normalized)) {
+    return { type: "greeting" }
+  }
+
+  if (isThanksOnlyIntent(normalized)) {
+    return { type: "thanks" }
+  }
+
+  if (isFarewellOnlyIntent(normalized)) {
+    return { type: "farewell" }
+  }
+
+  return null
+}
+
+function normalizeIntentText(text: string) {
+  return text
+    .toLocaleLowerCase("ru-RU")
+    .replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function isManagerRequestIntent(text: string) {
+  return [
+    "позовите оператора",
+    "позови оператора",
+    "позвать оператора",
+    "вызовите оператора",
+    "вызови оператора",
+    "позовите менеджера",
+    "позови менеджера",
+    "вызовите менеджера",
+    "позовите человека",
+    "позови человека",
+    "позовите сотрудника",
+    "нужен оператор",
+    "нужна оператор",
+    "нужен менеджер",
+    "нужна менеджер",
+    "нужен человек",
+    "нужен сотрудник",
+    "хочу к оператору",
+    "хочу к менеджеру",
+    "хочу оператора",
+    "хочу менеджера",
+    "хочу поговорить с оператором",
+    "хочу поговорить с менеджером",
+    "хочу поговорить с человеком",
+    "соедините с оператором",
+    "соедините с менеджером",
+    "соедините с поддержкой",
+    "соедините с человеком",
+    "переведите на оператора",
+    "переведите на менеджера",
+    "переведите в поддержку",
+    "передайте оператору",
+    "передайте менеджеру",
+    "передайте в поддержку",
+    "живой оператор",
+    "служба поддержки",
+  ].some((phrase) => includesIntentPhrase(text, phrase))
+}
+
+function isGreetingOnlyIntent(text: string) {
+  return [
+    "доброе утро",
+    "добрый вечер",
+    "привет",
+    "хай",
+    "здравствуйте",
+    "здраствуйте",
+    "здравствуй",
+    "добрый день",
+    "доброго дня",
+    "доброго времени суток",
+  ].includes(text)
+}
+
+function isThanksOnlyIntent(text: string) {
+  const exactThanks = [
+    "спасибо",
+    "спасибо большое",
+    "большое спасибо",
+    "благодарю",
+    "спс",
+    "спасибо вам",
+    "получилось",
+    "помогло",
+    "сработало",
+    "заработало",
+    "решено",
+    "решилось",
+    "вышло",
+    "работает",
+  ]
+
+  if (exactThanks.includes(text)) {
+    return true
+  }
+
+  const tokens = text.split(" ").filter(Boolean)
+  const thanksTokens = new Set(["спасибо", "спс", "благодарю"])
+
+  if (!tokens.some((token) => thanksTokens.has(token))) {
+    return false
+  }
+
+  const allowedThanksTokens = new Set([
+    "ага",
+    "благодарю",
+    "большое",
+    "вам",
+    "все",
+    "всё",
+    "да",
+    "класс",
+    "ну",
+    "о",
+    "окей",
+    "ок",
+    "отлично",
+    "понятно",
+    "понял",
+    "поняла",
+    "принял",
+    "приняла",
+    "помогло",
+    "получилось",
+    "работает",
+    "решилось",
+    "решено",
+    "сработало",
+    "супер",
+    "спасибо",
+    "спс",
+    "ура",
+    "вышло",
+    "хорошо",
+    "ясно",
+    "заработало",
+  ])
+
+  return tokens.length > 0 && tokens.every((token) => allowedThanksTokens.has(token))
+}
+
+function isFarewellOnlyIntent(text: string) {
+  return [
+    "до свидания",
+    "до свидание",
+    "пока",
+    "всего доброго",
+    "хорошего дня",
+    "хорошего вечера",
+    "спокойной ночи",
+    "до встречи",
+    "увидимся",
+  ].includes(text)
+}
+
+function includesIntentPhrase(text: string, phrase: string) {
+  return ` ${text} `.includes(` ${phrase} `)
+}
+
+function getRetrievalQueryText(text: string) {
+  const trimmed = text.trim()
+  const withoutGreetingPrefix = stripGreetingPrefix(trimmed)
+
+  return withoutGreetingPrefix || trimmed
+}
+
+function stripGreetingPrefix(text: string) {
+  const normalizedInput = normalizeIntentText(text)
+  const greetingPrefixes = [
+    "доброго времени суток",
+    "доброе утро",
+    "добрый вечер",
+    "добрый день",
+    "доброго дня",
+    "здравствуйте",
+    "здравствуй",
+    "привет",
+  ]
+  const matchedPrefix = greetingPrefixes.find((prefix) => {
+    return normalizedInput === prefix || normalizedInput.startsWith(`${prefix} `)
+  })
+
+  if (!matchedPrefix || normalizedInput === matchedPrefix) {
+    return null
+  }
+
+  const patternText = matchedPrefix
+    .replace(/\s+/g, String.raw`\s+`)
+  const prefixPattern = new RegExp(String.raw`^\s*${patternText}[\s,!.:;?-]+`, "iu")
+  const cleaned = text.replace(prefixPattern, "").trim()
+
+  if (!cleaned || normalizeIntentText(cleaned) === normalizeIntentText(text)) {
+    return null
+  }
+
+  return cleaned
+}
+
+function addGreetingAcknowledgementIfNeeded(answerText: string, triggerMessageText: string) {
+  if (!stripGreetingPrefix(triggerMessageText)) {
+    return answerText
+  }
+
+  if (/^\s*(здравствуйте|добрый день|доброе утро|добрый вечер)\b/iu.test(answerText)) {
+    return answerText
+  }
+
+  return `Здравствуйте. ${answerText}`
+}
+
+async function callLlmWithRetry(promptSnapshot: PromptSnapshot): Promise<LlmResponse> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= config.llm.maxProviderRetries; attempt += 1) {
+    try {
+      return await callLlm(promptSnapshot)
+    } catch (error) {
+      lastError = error
+
+      if (!isRetryableProviderError(error) || attempt >= config.llm.maxProviderRetries) {
+        break
+      }
+
+      await delay(500 + attempt * 500)
+    }
+  }
+
+  if (lastError instanceof OrchestratorError) {
+    throw lastError
+  }
+
+  throw new OrchestratorError(`LLM request failed: ${getErrorMessage(lastError)}`, "external")
+}
+
+async function callLlm(promptSnapshot: PromptSnapshot): Promise<LlmResponse> {
+  const token = Deno.env.get("HF_LLM_API_TOKEN")?.trim()
+
+  if (!token) {
+    throw new OrchestratorError("HF_LLM_API_TOKEN is not configured", "validation")
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), config.llm.requestTimeoutMs)
+
+  try {
+    const response = await fetch(config.llm.endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: config.llm.model,
+        messages: strengthenPromptForJson(promptSnapshot.messages),
+        temperature: config.llm.temperature,
+        max_tokens: config.llm.maxOutputTokens,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "supportbot_ai_response",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                kind: {
+                  type: "string",
+                  enum: ["answer", "insufficient"],
+                },
+                answer_text: {
+                  type: "string",
+                },
+              },
+              required: ["kind", "answer_text"],
+            },
+          },
+        },
+      }),
+    })
+
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      throw new ProviderHttpError(response.status, safeProviderMessage(responseText))
+    }
+
+    const parsed = JSON.parse(responseText) as {
+      choices?: Array<{ message?: { content?: unknown } }>
+    }
+    const content = parsed.choices?.[0]?.message?.content
+
+    if (typeof content !== "string") {
+      throw new OrchestratorError("LLM response content is missing", "external")
+    }
+
+    return parseLlmJson(content)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ProviderTimeoutError("LLM request timed out")
+    }
+
+    if (error instanceof ProviderHttpError || error instanceof OrchestratorError) {
+      throw error
+    }
+
+    throw new OrchestratorError(`LLM request failed: ${getErrorMessage(error)}`, "external")
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+function strengthenPromptForJson(messages: PromptMessage[]): PromptMessage[] {
+  const jsonContract = [
+    "Output contract is strict.",
+    "Return only one raw JSON object and nothing else.",
+    "Do not wrap JSON in markdown or code fences.",
+    "Do not add explanations before or after JSON.",
+    "Allowed shapes:",
+    '{"kind":"answer","answer_text":"..."}',
+    '{"kind":"insufficient","answer_text":""}',
+    "For kind=answer, answer_text is required and must be a non-empty Russian support answer.",
+    "For kind=insufficient, answer_text must be an empty string.",
+    "Never return {\"kind\":\"answer\"} without answer_text.",
+    "Use kind=insufficient when KB fragments do not contain enough information.",
+  ].join("\n")
+
+  const [firstMessage, ...restMessages] = messages
+
+  if (!firstMessage || firstMessage.role !== "system") {
+    return [
+      {
+        role: "system",
+        content: jsonContract,
+      },
+      ...messages,
+    ]
+  }
+
+  return [
+    {
+      ...firstMessage,
+      content: `${firstMessage.content}\n\n${jsonContract}`,
+    },
+    ...restMessages,
+  ]
+}
+
+function parseLlmJson(content: string): LlmResponse {
+  let parsed: unknown
+  const jsonText = extractJsonObjectText(content)
+
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch (_error) {
+    throw new OrchestratorError(`LLM response is not valid JSON: ${previewLlmContent(content)}`, "external")
+  }
+
+  if (!isRecord(parsed)) {
+    throw new OrchestratorError(`LLM JSON response is not an object: ${previewLlmContent(content)}`, "external")
+  }
+
+  if (parsed.kind === "insufficient") {
+    return { kind: "insufficient" }
+  }
+
+  if (parsed.kind === "answer" && typeof parsed.answer_text === "string" && parsed.answer_text.trim()) {
+    return {
+      kind: "answer",
+      answer_text: parsed.answer_text,
+    }
+  }
+
+  throw new OrchestratorError(`LLM JSON response does not match contract: ${previewLlmContent(jsonText)}`, "external")
+}
+
+function extractJsonObjectText(content: string) {
+  const trimmed = content.trim()
+  const fencedJsonMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+
+  if (fencedJsonMatch?.[1]) {
+    return fencedJsonMatch[1].trim()
+  }
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed
+  }
+
+  const startIndex = trimmed.indexOf("{")
+  const endIndex = trimmed.lastIndexOf("}")
+
+  if (startIndex >= 0 && endIndex > startIndex) {
+    return trimmed.slice(startIndex, endIndex + 1)
+  }
+
+  return trimmed
+}
+
+function previewLlmContent(content: string) {
+  return safeProviderMessage(content)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300)
+}
+
+async function fetchRecentHistory(triggerMessage: TriggerMessage): Promise<ChatMessageRow[]> {
+  const oldestHistoryDate = new Date(triggerMessage.created_at)
+  oldestHistoryDate.setHours(oldestHistoryDate.getHours() - config.context.maxHistoryAgeHours)
+
+  const query = [
+    `chat_id=eq.${encodeURIComponent(triggerMessage.chat_id)}`,
+    `created_at=gte.${encodeURIComponent(oldestHistoryDate.toISOString())}`,
+    `created_at=lte.${encodeURIComponent(triggerMessage.created_at)}`,
+    `id=neq.${encodeURIComponent(triggerMessage.id)}`,
+    "sender_type=in.(client,ai)",
+    "select=id,chat_id,text,sender_type,created_at",
+    "order=created_at.desc,id.desc",
+    "limit=24",
+  ].join("&")
+
+  const rows = await callRest<ChatMessageRow[]>(`/rest/v1/chat_messages?${query}`)
+  const selected: ChatMessageRow[] = []
+  let clientCount = 0
+  let aiCount = 0
+
+  for (const row of rows) {
+    if (selected.length >= config.context.maxHistoryMessages) {
+      break
+    }
+
+    if (row.sender_type === "client") {
+      if (clientCount >= config.context.maxClientHistoryMessages) {
+        continue
+      }
+
+      clientCount += 1
+      selected.push(row)
+      continue
+    }
+
+    if (row.sender_type === "ai") {
+      if (aiCount >= config.context.maxAiHistoryMessages) {
+        continue
+      }
+
+      aiCount += 1
+      selected.push(row)
+    }
+  }
+
+  return selected.reverse()
+}
+
+async function fetchKbFragments(retrievalChunks: RetrievalChunk[]): Promise<KbFragment[]> {
+  const requestedChunks = retrievalChunks.slice(0, config.context.maxKbFragments)
+  const chunkIds = requestedChunks.map((chunk) => chunk.chunk_id)
+
+  if (chunkIds.length === 0) {
+    return []
+  }
+
+  const query = [
+    `id=in.(${chunkIds.map(encodeURIComponent).join(",")})`,
+    "select=id,article_id,chunk_set_id,chunk_index,chunk_text,content_checksum,embedding_status,ingestion_pipeline_version,knowledge_chunk_sets!inner(status,is_active,content_checksum,ingestion_pipeline_version),knowledge_base_articles!inner(status,title,slug)",
+  ].join("&")
+
+  const rows = await callRest<KnowledgeChunkRow[]>(`/rest/v1/knowledge_chunks?${query}`)
+  const rowsById = new Map(rows.map((row) => [row.id, row]))
+  const fragments: KbFragment[] = []
+
+  for (const retrievalChunk of requestedChunks) {
+    const row = rowsById.get(retrievalChunk.chunk_id)
+
+    if (!row) {
+      continue
+    }
+
+    const chunkSet = firstRelation(row.knowledge_chunk_sets)
+    const article = firstRelation(row.knowledge_base_articles)
+
+    if (!chunkSet || !article) {
+      continue
+    }
+
+    if (
+      chunkSet.is_active !== true
+      || chunkSet.status !== "completed"
+      || row.embedding_status !== "completed"
+      || article.status !== "published"
+    ) {
+      continue
+    }
+
+    const truncatedText = truncateText(row.chunk_text, config.context.maxKbFragmentChars)
+
+    fragments.push({
+      chunk_id: row.id,
+      article_id: row.article_id,
+      chunk_set_id: row.chunk_set_id,
+      chunk_index: row.chunk_index,
+      similarity_score: retrievalChunk.similarity_score,
+      article_title: article.title,
+      article_slug: article.slug,
+      content_checksum: row.content_checksum ?? chunkSet.content_checksum,
+      ingestion_pipeline_version: row.ingestion_pipeline_version ?? chunkSet.ingestion_pipeline_version,
+      text: truncatedText.text,
+      truncated: truncatedText.truncated,
+    })
+  }
+
+  return fragments
+}
+
+function buildContextSnapshot(
+  triggerMessage: TriggerMessage,
+  historyMessages: ChatMessageRow[],
+  kbFragments: KbFragment[],
+  retrievalResult: RetrievalResult,
+): ContextSnapshot {
+  const currentMessageText = truncateText(triggerMessage.text, config.context.maxCurrentMessageChars)
+  const historySnapshot = historyMessages.map((message) => {
+    const text = truncateText(message.text, config.context.maxHistoryMessageChars)
+
+    return {
+      id: message.id,
+      sender_type: message.sender_type as "client" | "ai",
+      created_at: message.created_at,
+      text: text.text,
+      truncated: text.truncated,
+    }
+  })
+
+  return {
+    current_message: {
+      id: triggerMessage.id,
+      sender_type: "client",
+      created_at: triggerMessage.created_at,
+      text: currentMessageText.text,
+      truncated: currentMessageText.truncated,
+    },
+    history_messages: historySnapshot,
+    kb_fragments: fitKbFragmentsToBudget(historySnapshot, kbFragments, currentMessageText.text),
+    limits: config.context,
+    source_counts: {
+      retrieved_chunks: retrievalResult.chunks.length,
+      usable_chunks: kbFragments.length,
+      history_messages: historySnapshot.length,
+      client_history_messages: historySnapshot.filter((message) => message.sender_type === "client").length,
+      ai_history_messages: historySnapshot.filter((message) => message.sender_type === "ai").length,
+    },
+  }
+}
+
+function buildPromptSnapshot(contextSnapshot: ContextSnapshot): PromptSnapshot {
+  const historyText = contextSnapshot.history_messages.length > 0
+    ? contextSnapshot.history_messages.map(formatHistoryMessage).join("\n")
+    : "Нет предыдущего client/ai контекста."
+
+  const kbText = contextSnapshot.kb_fragments.map(formatKbFragment).join("\n\n")
+
+  const messages: PromptMessage[] = [
+    {
+      role: "system",
+      content: [
+        "Ты backend-only AI assistant службы поддержки.",
+        "Отвечай только на основе KB fragments.",
+        "Если в KB fragments нет достаточной информации, скажи, что данных недостаточно.",
+        "Не придумывай правила, сроки, статусы, цены или обещания.",
+        "Не принимай workflow decisions вроде handoff.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "Current client message:",
+        contextSnapshot.current_message.text,
+        "",
+        "Recent client/ai history:",
+        historyText,
+        "",
+        "KB fragments:",
+        kbText,
+      ].join("\n"),
+    },
+  ]
+
+  return {
+    messages,
+    prompt_version: config.promptVersion,
+    builder_version: config.context.builderVersion,
+    estimated_chars: messages.reduce((sum, message) => sum + message.content.length, 0),
+  }
+}
+
+function fitKbFragmentsToBudget(
+  historyMessages: SnapshotMessage[],
+  kbFragments: KbFragment[],
+  currentMessageText: string,
+) {
+  const baseSize = currentMessageText.length
+    + historyMessages.reduce((sum, message) => sum + message.text.length, 0)
+    + 1200
+
+  let totalSize = baseSize
+  const selected: KbFragment[] = []
+
+  for (const fragment of kbFragments) {
+    const nextSize = totalSize + fragment.text.length + 200
+
+    if (nextSize > config.context.maxPromptChars && selected.length > 0) {
+      break
+    }
+
+    selected.push(fragment)
+    totalSize = nextSize
+  }
+
+  return selected
+}
+
+function formatHistoryMessage(message: SnapshotMessage) {
+  const role = message.sender_type === "client" ? "client" : "ai"
+
+  return `[${role} ${message.created_at}] ${message.text}`
+}
+
+function formatKbFragment(fragment: KbFragment) {
+  return [
+    `[fragment chunk_id=${fragment.chunk_id} article_id=${fragment.article_id} chunk_index=${fragment.chunk_index}]`,
+    fragment.text,
+  ].join("\n")
+}
+
+function firstRelation<T>(value: T | T[] | undefined): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null
+  }
+
+  return value ?? null
+}
+
+async function fetchEmbedding(input: string, signal?: AbortSignal) {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= config.retrieval.embeddingMaxProviderRetries; attempt += 1) {
+    try {
+      return await fetchEmbeddingOnce(input, signal)
+    } catch (error) {
+      lastError = error
+
+      if (!isRetryableEmbeddingProviderError(error) || attempt >= config.retrieval.embeddingMaxProviderRetries) {
+        break
+      }
+
+      if (signal?.aborted) {
+        throw new RetrievalStageTimeoutError()
+      }
+
+      await delay(500 + attempt * 500)
+    }
+  }
+
+  if (lastError instanceof OrchestratorError) {
+    throw lastError
+  }
+
+  throw new OrchestratorError(`Hugging Face request failed: ${getErrorMessage(lastError)}`, "external")
+}
+
+async function fetchEmbeddingOnce(input: string, signal?: AbortSignal) {
+  const hfToken = Deno.env.get("HF_API_TOKEN")?.trim()
+
+  if (!hfToken) {
+    throw new OrchestratorError("HF_API_TOKEN is not configured", "validation")
+  }
+
+  const endpoint = getHfEndpoint(config.retrieval.embeddingModel)
+  const controller = new AbortController()
+  const abortFromParent = () => controller.abort()
+  const timeoutId = setTimeout(() => controller.abort(), config.hfRequestTimeoutMs)
+
+  if (signal?.aborted) {
+    throw new RetrievalStageTimeoutError()
+  }
+
+  signal?.addEventListener("abort", abortFromParent, { once: true })
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${hfToken}`,
+      },
+      body: JSON.stringify({
+        inputs: [input],
+        options: {
+          wait_for_model: true,
+        },
+      }),
+    })
+
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      throw new EmbeddingProviderHttpError(response.status, safeProviderMessage(responseText))
+    }
+
+    const parsed = JSON.parse(responseText) as unknown
+    const embeddings = normalizeEmbeddingResponse(parsed)
+    const embedding = embeddings[0]
+
+    if (!isEmbedding(embedding, config.retrieval.embeddingDimension)) {
+      throw new OrchestratorError("Invalid query embedding dimension", "external")
+    }
+
+    return embedding
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new RetrievalStageTimeoutError()
+    }
+
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new EmbeddingProviderTimeoutError()
+    }
+
+    if (error instanceof OrchestratorError) {
+      throw error
+    }
+
+    throw new OrchestratorError(`Hugging Face request failed: ${getErrorMessage(error)}`, "external")
+  } finally {
+    clearTimeout(timeoutId)
+    signal?.removeEventListener("abort", abortFromParent)
+  }
+}
+
+function normalizeEmbeddingResponse(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new OrchestratorError("Hugging Face response is not an array", "external")
+  }
+
+  if (isEmbedding(value, config.retrieval.embeddingDimension)) {
+    return [value]
+  }
+
+  if (value.every((item) => isEmbedding(item, config.retrieval.embeddingDimension))) {
+    return value as number[][]
+  }
+
+  throw new OrchestratorError("Hugging Face response has invalid embedding shape", "external")
+}
+
+function normalizeRetrievalResult(value: RetrievalResult): RetrievalResult {
+  if (!["hit", "miss", "empty", "failed"].includes(value.retrieval_status)) {
+    throw new OrchestratorError("Retrieval RPC returned invalid status", "system")
+  }
+
+  if (!Array.isArray(value.chunks)) {
+    throw new OrchestratorError("Retrieval RPC returned invalid chunks", "system")
+  }
+
+  return {
+    retrieval_status: value.retrieval_status,
+    top_similarity_score: typeof value.top_similarity_score === "number" ? value.top_similarity_score : null,
+    matched_chunks_count: Number.isInteger(value.matched_chunks_count) ? value.matched_chunks_count : 0,
+    chunks: value.chunks,
+    error_type: value.error_type,
+    error_message: value.error_message,
+  }
+}
+
+function normalizePersistedRetrievalResult(value: PersistedRetrievalResult): PersistedRetrievalResult {
+  const normalized = normalizeRetrievalResult(value)
+
+  return {
+    ...normalized,
+    type: value.type,
+    run_id: value.run_id ?? null,
+    status: value.status,
+  }
+}
+
+function isSuccessfulRetrievalSaveType(type: string | undefined) {
+  return type === "saved" || type === "already_saved"
+}
+
+function getRetrievalSaveFailureMessage(type: string | undefined) {
+  switch (type) {
+    case "invalid_retrieval_chunks":
+      return "RETRIEVAL_CHUNKS_REJECTED"
+    case "invalid_retrieval_result":
+      return "RETRIEVAL_RESULT_REJECTED"
+    case "invalid_request":
+      return "RETRIEVAL_SAVE_INVALID_REQUEST"
+    case "owner_mismatch":
+      return "RETRIEVAL_SAVE_OWNER_MISMATCH"
+    case "already_terminal":
+      return "RETRIEVAL_SAVE_ALREADY_TERMINAL"
+    default:
+      return "RETRIEVAL_SAVE_FAILED"
+  }
+}
+
+async function hashJson(value: unknown) {
+  const json = JSON.stringify(value)
+  const data = new TextEncoder().encode(json)
+  const digest = await crypto.subtle.digest("SHA-256", data)
+  const bytes = Array.from(new Uint8Array(digest))
+
+  return bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+function validateRetrievalConfig() {
+  if (config.retrieval.candidateCount < config.retrieval.matchCount * 5) {
+    throw new OrchestratorError("RETRIEVAL_CANDIDATE_COUNT must be at least match_count * 5", "validation")
+  }
+}
+
+function getHfEndpoint(model: string) {
+  const override = Deno.env.get("HF_FEATURE_EXTRACTION_URL")?.trim()
+
+  if (override) {
+    return override
+  }
+
+  return `https://router.huggingface.co/hf-inference/models/${encodeURIComponentModel(model)}/pipeline/feature-extraction`
+}
+
+function encodeURIComponentModel(model: string) {
+  return model.split("/").map((part) => encodeURIComponent(part)).join("/")
+}
+
+function isEmbedding(value: unknown, dimension: number): value is number[] {
+  return Array.isArray(value)
+    && value.length === dimension
+    && value.every((item) => typeof item === "number" && Number.isFinite(item))
+}
+
+function truncateText(value: string, maxChars: number) {
+  if (value.length <= maxChars) {
+    return { text: value, truncated: false }
+  }
+
+  return {
+    text: value.slice(0, Math.max(0, maxChars - 20)).trimEnd() + "\n[truncated]",
+    truncated: true,
+  }
+}
+
+function normalizeVisibleText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 3800)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isRetryableProviderError(error: unknown) {
+  if (error instanceof ProviderTimeoutError) {
+    return true
+  }
+
+  if (error instanceof ProviderHttpError) {
+    return error.status === 429 || error.status >= 500
+  }
+
+  return false
+}
+
+function isRetryableEmbeddingProviderError(error: unknown) {
+  if (error instanceof EmbeddingProviderTimeoutError) {
+    return true
+  }
+
+  if (error instanceof EmbeddingProviderHttpError) {
+    return error.status === 429 || error.status >= 500
+  }
+
+  return false
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
