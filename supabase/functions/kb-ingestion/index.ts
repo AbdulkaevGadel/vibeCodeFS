@@ -1,9 +1,9 @@
-import { config, workerPipelineVersion } from "./config.ts"
-import { getErrorMessage } from "./errors.ts"
-import { readPayload, type RequestPayload } from "./payload.ts"
-import { getExpectedPipelineVersion } from "./rpc.ts"
-import { fingerprintSecret } from "./utils.ts"
-import { processSweep, processWebhook } from "./worker.ts"
+import { config, workerPipelineVersion } from "./lib/config.ts"
+import { getErrorMessage } from "./lib/errors.ts"
+import { readPayload, type RequestPayload } from "./lib/payload.ts"
+import { getExpectedPipelineVersion } from "./lib/rpc.ts"
+import { fingerprintSecret } from "./lib/utils.ts"
+import { processSweep, processWebhook } from "./lib/worker.ts"
 import { jsonResponse } from "../_shared/http/responses.ts"
 
 Deno.serve(async (request) => {

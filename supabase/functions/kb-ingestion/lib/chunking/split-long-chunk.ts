@@ -1,4 +1,4 @@
-import type { ArticleUnit } from "./chunking-types.ts"
+import type { ArticleUnit } from "./types.ts"
 import { formatRetrievalChunk } from "./format-retrieval-chunk.ts"
 import { normalizeUnitText } from "./text-normalization.ts"
 

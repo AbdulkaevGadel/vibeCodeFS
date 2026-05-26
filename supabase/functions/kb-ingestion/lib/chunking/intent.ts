@@ -1,4 +1,4 @@
-import type { ArticleUnit } from "./chunking-types.ts"
+import type { ArticleUnit } from "./types.ts"
 import { isReadyAnswerSection, isWarningSection, uniqueStrings } from "./text-normalization.ts"
 
 export function inferIntent(articleTitle: string, unit: ArticleUnit) {

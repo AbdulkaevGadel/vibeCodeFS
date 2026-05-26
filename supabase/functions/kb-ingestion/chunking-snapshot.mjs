@@ -12,15 +12,14 @@ const normalizedScriptDir = process.platform === "win32" && scriptDir.startsWith
   : scriptDir
 
 const indexPath = path.join(normalizedScriptDir, "index.ts")
-const chunkingModulePath = path.join(normalizedScriptDir, "chunking.ts")
 const chunkingModulePaths = [
-  "chunking-types.ts",
-  "text-normalization.ts",
-  "intent.ts",
-  "format-retrieval-chunk.ts",
-  "split-long-chunk.ts",
-  "article-units.ts",
-  "chunking.ts",
+  "lib/chunking/types.ts",
+  "lib/chunking/text-normalization.ts",
+  "lib/chunking/intent.ts",
+  "lib/chunking/format-retrieval-chunk.ts",
+  "lib/chunking/split-long-chunk.ts",
+  "lib/chunking/article-units.ts",
+  "lib/chunking/index.ts",
 ].map((fileName) => path.join(normalizedScriptDir, fileName))
 const outputDir = path.join(normalizedScriptDir, ".chunking-snapshots")
 const snapshotLabel = readSnapshotLabel(process.argv[2] ?? "baseline")

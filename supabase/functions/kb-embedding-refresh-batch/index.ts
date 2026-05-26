@@ -1,7 +1,7 @@
-import { config } from "./config.ts"
-import { readPayload, type RequestPayload } from "./payload.ts"
-import { runWorker } from "./worker.ts"
-import { getErrorMessage } from "./utils.ts"
+import { config } from "./lib/config.ts"
+import { readPayload, type RequestPayload } from "./lib/payload.ts"
+import { runWorker } from "./lib/worker.ts"
+import { getErrorMessage } from "./lib/utils.ts"
 import { jsonResponse } from "../_shared/http/responses.ts"
 
 Deno.serve(async (request) => {

@@ -1,4 +1,4 @@
-import type { ArticleUnit } from "./chunking-types.ts"
+import type { ArticleUnit } from "./types.ts"
 import { extractKeywords, inferCustomerIntent, inferIntent } from "./intent.ts"
 import { isReadyAnswerSection, isWarningSection, normalizeUnitText } from "./text-normalization.ts"
 

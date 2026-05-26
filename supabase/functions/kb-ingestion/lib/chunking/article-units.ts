@@ -1,4 +1,4 @@
-import type { ArticleUnit, TextBlock } from "./chunking-types.ts"
+import type { ArticleUnit, TextBlock } from "./types.ts"
 import {
   canonicalTitle,
   cleanMarkdownLine,

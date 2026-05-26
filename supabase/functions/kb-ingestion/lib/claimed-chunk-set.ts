@@ -1,4 +1,4 @@
-import { buildRetrievalChunks } from "./chunking.ts"
+import { buildRetrievalChunks } from "./chunking/index.ts"
 import type { IngestionWorkerConfig } from "./config.ts"
 import { buildEmbeddedChunks } from "./embedding-batches.ts"
 import { getErrorMessage, IngestionError } from "./errors.ts"
