@@ -97,6 +97,14 @@ Prefer local modules and `functions/_shared` for decomposition instead of creati
 
 Do not change the deployed function boundary without an approved task.
 
+For Supabase Edge Functions, `index.ts` should stay focused on the HTTP boundary:
+- method/auth guard;
+- reading and validating the payload;
+- selecting the handler/workflow;
+- formatting the HTTP response.
+
+Move long workflows, RPC orchestration, provider calls, parsing/chunking, and state-machine logic into function-local modules next to the owning function when they make `index.ts` hard to read.
+
 Edge Functions must:
 - validate input;
 - never trust incoming data;
@@ -125,6 +133,8 @@ Allowed shared infrastructure examples:
 
 Keep domain-specific database helpers near the owning function first. Move them to a domain-specific shared folder only after real reuse exists.
 
+Prefer function-local modules inside the specific Edge Function folder before introducing shared domain modules. Move code to `functions/_shared` only when multiple functions genuinely reuse it and the shared module does not hide an important domain or database contract.
+
 Do not create `_shared/ai`, `_shared/knowledge-base`, or `_shared/support-domain` until an approved task needs them.
 
 ---
@@ -152,6 +162,8 @@ Allowed:
 - simple local helper functions;
 - focused shared infrastructure helpers;
 - explicit SQL migrations.
+
+If an Edge Function calls multiple RPCs, or the same RPC is used across multiple workflow branches, prefer a function-local `rpc.ts` with explicit RPC names, payload keys, and result types. Do not hide the database contract behind a generic repository or service abstraction.
 
 Forbidden:
 - repository pattern;
@@ -314,6 +326,8 @@ node support-admin/node_modules/typescript/bin/tsc -p supabase/functions/tsconfi
 Task-specific verification may also require focused manual function checks, read-only SQL checks, or Supabase dashboard inspection. Call out those manual steps before they are reached.
 
 Do not introduce Node.js dependencies as a workaround for Deno verification.
+
+When refactoring pure logic that affects user-facing output, retrieval, chunking, ranking, or bot answer text, capture a lightweight before/after verification artifact before changing the logic. Use a snapshot, fixture check, or focused test. If the check only verifies pure logic, it must not call Supabase, external provider APIs, or mutate database state.
 
 ---
 
