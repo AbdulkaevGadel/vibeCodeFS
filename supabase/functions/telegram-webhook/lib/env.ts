@@ -1,13 +1,18 @@
+import {
+  getSupabaseServiceRoleKey as getSharedSupabaseServiceRoleKey,
+  getSupabaseUrl as getSharedSupabaseUrl,
+} from "../../_shared/supabase/env.ts"
+
 export function getBotToken() {
   return Deno.env.get("BOT_TOKEN") ?? null
 }
 
 export function getSupabaseUrl() {
-  return Deno.env.get("SUPABASE_URL") ?? Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") ?? null
+  return getSharedSupabaseUrl()
 }
 
 export function getSupabaseServiceRoleKey() {
-  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? null
+  return getSharedSupabaseServiceRoleKey()
 }
 
 export function getInternalSecret() {

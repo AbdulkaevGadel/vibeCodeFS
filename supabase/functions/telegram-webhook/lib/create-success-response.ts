@@ -1,6 +1,5 @@
+import { jsonResponse } from "../../_shared/http/responses.ts"
+
 export function createSuccessResponse() {
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  })
+  return jsonResponse({ ok: true })
 }

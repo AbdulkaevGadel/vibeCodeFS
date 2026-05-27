@@ -1,11 +1,11 @@
-import { telegramApiBaseUrl } from "./constants.ts"
+import { buildTelegramBotApiUrl } from "../../_shared/telegram/api.ts"
 
 export async function sendTelegramMessage(
   botToken: string,
   chatId: number,
   text: string,
 ) {
-  const response = await fetch(`${telegramApiBaseUrl}/bot${botToken}/sendMessage`, {
+  const response = await fetch(buildTelegramBotApiUrl(botToken, "sendMessage"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
