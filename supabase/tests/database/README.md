@@ -16,6 +16,8 @@ supabase test db
 supabase start
 ```
 
+Подробный Windows-oriented tutorial по Docker Desktop, local Supabase stack и troubleshooting находится в `docs/local-development/supabase-docker.md`.
+
 Запускать эти tests нужно только против local Supabase database. Не запускать их против production project.
 
 ## Границы первого slice
