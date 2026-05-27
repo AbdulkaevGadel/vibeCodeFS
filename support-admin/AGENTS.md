@@ -107,6 +107,17 @@ FSD placement review:
   - `FSD promotion recommended`;
   - `FSD promotion approved and completed`.
 
+## Сохранение текущей frontend-структуры
+
+Перед добавлением или перемещением frontend-кода в `support-admin` агент должен изучить текущую организацию затронутой страницы, widget, feature, entity или shared-slice.
+
+Rules:
+- продолжать текущий стиль FSD-размещения в затронутой зоне;
+- не создавать новый код в `_components` или `_lib`, если ответственность уже соответствует существующему FSD-слою;
+- не создавать новый slice, segment или shared primitive только ради того, чтобы не размещать код в уже существующем ответственном модуле;
+- при работе с уже очищенным кодом сохранять текущий стиль декомпозиции, если задача явно не требует структурного изменения;
+- если структурное изменение нужно, до реализации объяснить причину, целевой layer/slice и затронутые импорты.
+
 FSD public API files:
 - In `support-admin/src/{fsd-pages,shared,entities,features,widgets}/**/index.ts`, keep `index.ts` files as pure public API barrels.
 - Allowed in `index.ts`: `export * from "./model";`, `export { SomeComponent } from "./ui/some-component";`, `export type { SomeType } from "./model";`.

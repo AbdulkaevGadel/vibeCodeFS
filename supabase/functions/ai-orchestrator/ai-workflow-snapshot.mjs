@@ -112,6 +112,7 @@ const report = {
       'Ответ ниже:\n{"kind":"answer","answer_text":"Попробуйте другую карту."}',
       "not json",
     ].map((content) => readLlmParseResult(helpers.parseLlmJson, content)),
+    technicalFallbackEligibility: helpers.readTechnicalFallbackEligibilityFixtures(),
   },
 }
 
@@ -136,6 +137,7 @@ function readSnapshotLabel(value) {
 
 function readAiWorkflowSource() {
   const modulePaths = [
+    "errors.ts",
     "utils.ts",
     "intent/message-text.ts",
     "intent/intent.ts",
@@ -226,6 +228,13 @@ function loadAiWorkflowHelpers(source) {
     "buildContextSnapshot",
     "buildPromptSnapshot",
     "parseLlmJson",
+    "isTemporaryExternalFailure",
+    "RetrievalStageTimeoutError",
+    "ProviderTimeoutError",
+    "ProviderHttpError",
+    "EmbeddingProviderTimeoutError",
+    "EmbeddingProviderHttpError",
+    "OrchestratorError",
   ]) {
     if (typeof context.__aiWorkflowHelpers?.[name] !== "function") {
       throw new Error(`${name} was not loaded from AI workflow source`)
@@ -270,16 +279,6 @@ const config = {
     maxOutputTokens: 500,
   },
 }
-class OrchestratorError extends Error {
-  constructor(message, errorType) {
-    super(message)
-    this.name = "OrchestratorError"
-    this.errorType = errorType
-  }
-}
-function safeProviderMessage(value) {
-  return value.replace(/hf_[A-Za-z0-9_-]+/g, "hf_***").slice(0, 500)
-}
 `
 }
 
@@ -291,6 +290,32 @@ globalThis.__aiWorkflowHelpers = {
   buildContextSnapshot,
   buildPromptSnapshot,
   parseLlmJson,
+  isTemporaryExternalFailure,
+  RetrievalStageTimeoutError,
+  ProviderTimeoutError,
+  ProviderHttpError,
+  EmbeddingProviderTimeoutError,
+  EmbeddingProviderHttpError,
+  OrchestratorError,
+  readTechnicalFallbackEligibilityFixtures() {
+    return [
+      ["retrieval_stage_timeout", new RetrievalStageTimeoutError()],
+      ["llm_timeout", new ProviderTimeoutError("LLM request timed out")],
+      ["llm_429", new ProviderHttpError(429, "rate limited")],
+      ["llm_503", new ProviderHttpError(503, "temporarily unavailable")],
+      ["llm_400", new ProviderHttpError(400, "bad request")],
+      ["embedding_timeout", new EmbeddingProviderTimeoutError()],
+      ["embedding_500", new EmbeddingProviderHttpError(500, "provider down")],
+      ["invalid_embedding_shape", new OrchestratorError("Invalid query embedding dimension", "external")],
+      ["missing_secret", new OrchestratorError("HF_LLM_API_TOKEN is not configured", "validation")],
+      ["system_bug", new Error("Unexpected bug")],
+    ].map(([name, error]) => ({
+      name,
+      eligible: isTemporaryExternalFailure(error),
+      errorName: error.name,
+      message: error.message,
+    }))
+  },
 }
 `
 }

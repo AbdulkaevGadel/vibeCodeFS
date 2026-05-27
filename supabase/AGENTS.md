@@ -105,6 +105,8 @@ For Supabase Edge Functions, `index.ts` should stay focused on the HTTP boundary
 
 Move long workflows, RPC orchestration, provider calls, parsing/chunking, and state-machine logic into function-local modules next to the owning function when they make `index.ts` hard to read.
 
+When adding a new side-effect scenario inside an already decomposed Edge Function, do not put the full implementation into an existing coordinator or handler if the scenario has its own RPC calls, delivery calls, or result mapping. Create a function-local module with a domain-specific name, and keep the coordinator/handler responsible only for selecting and sequencing the scenario.
+
 Edge Functions must:
 - validate input;
 - never trust incoming data;

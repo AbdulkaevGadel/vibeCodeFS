@@ -140,6 +140,19 @@ export async function saveContextPromptSnapshot(
   })
 }
 
+export async function markAiRunExternalError(
+  runId: string,
+  processingToken: string,
+  errorMessage: string,
+) {
+  return await callRpc<RpcResult>("mark_chat_ai_run_external_error", {
+    p_run_id: runId,
+    p_processing_token: processingToken,
+    p_error_message: errorMessage,
+    p_error_type: "external",
+  })
+}
+
 export async function finishAiRun(
   runId: string,
   processingToken: string,

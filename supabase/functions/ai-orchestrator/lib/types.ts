@@ -7,7 +7,7 @@ export type RpcResult = {
   status?: string
 }
 
-export type ResponseKind = "answer" | "clarify" | "handoff" | "intent_reply"
+export type ResponseKind = "answer" | "clarify" | "handoff" | "intent_reply" | "technical_fallback"
 
 export type AiRunStage =
   | "processing_marked"
