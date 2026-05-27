@@ -24,6 +24,27 @@ export function classifyError(error: unknown): ErrorType {
   return "system"
 }
 
+export function isTemporaryExternalFailure(error: unknown) {
+  if (error instanceof RetrievalStageTimeoutError) {
+    return true
+  }
+
+  if (error instanceof ProviderTimeoutError || error instanceof EmbeddingProviderTimeoutError) {
+    return true
+  }
+
+  if (error instanceof ProviderHttpError || error instanceof EmbeddingProviderHttpError) {
+    return error.status === 429 || error.status >= 500
+  }
+
+  if (error instanceof OrchestratorError && error.errorType === "external") {
+    return error.message.startsWith("LLM request failed:")
+      || error.message.startsWith("Hugging Face request failed:")
+  }
+
+  return false
+}
+
 export function safeProviderMessage(value: string) {
   return value.replace(/hf_[A-Za-z0-9_-]+/g, "hf_***").slice(0, 500)
 }

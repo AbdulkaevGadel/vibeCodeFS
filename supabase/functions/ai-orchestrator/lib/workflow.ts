@@ -15,6 +15,7 @@ import {
   updateRunStage,
 } from "./run/rpc.ts"
 import { startProcessingAiRun } from "./run/run-lifecycle.ts"
+import { publishSavedRetrievalTechnicalFallback } from "./run/technical-fallback.ts"
 import { isChatAiEligibleForPublish } from "./response/publish-eligibility.ts"
 import { decideResponseBranch } from "./response/response-branch.ts"
 import {
@@ -127,6 +128,22 @@ export async function processAiRun(
     }
 
     if (retrievalResult.retrieval_status === "failed") {
+      if (retrievalResult.error_type === "external") {
+        const fallbackResult = await publishSavedRetrievalTechnicalFallback(runId, processingToken)
+
+        if (fallbackResult.handled) {
+          return {
+            ok: true,
+            type: fallbackResult.type,
+            status: fallbackResult.status,
+            run_id: runId,
+            retrieval_status: retrievalResult.retrieval_status,
+            response_kind: fallbackResult.response_kind,
+            response_message_id: fallbackResult.message_id,
+          }
+        }
+      }
+
       const finishResult = await finishAiRun(
         runId,
         processingToken,
@@ -171,7 +188,7 @@ export async function processAiRun(
       prompt_snapshot_saved: promptSnapshot !== null,
     }
   } catch (error) {
-    await handleAiRunFailure({
+    const failureResult = await handleAiRunFailure({
       error,
       runId,
       processingToken,
@@ -182,10 +199,8 @@ export async function processAiRun(
     })
 
     return {
-      ok: false,
-      type: "system_error",
+      ...failureResult,
       current_stage: currentStage,
-      run_id: runId,
     }
   }
 }
