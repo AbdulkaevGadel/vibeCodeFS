@@ -15,8 +15,8 @@ export default async function ResetPasswordPage({
   searchParams,
 }: ResetPasswordPageProps) {
   const params = await searchParams;
-  const { user, error } = await getAuthPageUser();
-  const pageData = getResetPasswordPageData(params, user, error);
+  const { user } = await getAuthPageUser();
+  const pageData = getResetPasswordPageData(params, user);
 
   return (
     <AuthShell
@@ -25,7 +25,6 @@ export default async function ResetPasswordPage({
       headerExtra={
         <ResetPasswordHeaderExtra
           hasRecoveryError={pageData.hasRecoveryError}
-          debugItems={pageData.debugItems}
         />
       }
     >

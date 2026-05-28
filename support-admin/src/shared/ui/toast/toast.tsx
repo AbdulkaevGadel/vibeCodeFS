@@ -61,6 +61,8 @@ export function Toast({
   const autoCloseMs = durationMs ?? config.durationMs;
 
   useEffect(() => {
+    // Portal rendering needs a client-only mount pass before document.body is available.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
 
     const timeoutId = window.setTimeout(() => {

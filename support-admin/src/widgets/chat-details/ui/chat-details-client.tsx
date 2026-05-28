@@ -3,11 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportChatSummary } from "@/entities/support-chat";
-import {
-  isAdminManager,
-  isPrivilegedManager,
-  type Manager,
-} from "@/entities/manager";
+import type { Manager } from "@/entities/manager";
 import {
   mergeInsertedMessage,
   mergeUpdatedDeliveryState,
@@ -23,7 +19,10 @@ import { StatusOption } from "./chat-status-selector";
 import { ComposerUnavailable } from "./composer-unavailable";
 import { MessageTimeline } from "./message-timeline";
 import { useChatDetailsRealtime } from "../api/chat-details-realtime";
-import { getComposerAvailability } from "../lib/chat-details-utils";
+import {
+  getChatDetailsViewState,
+  getConfirmDialogViewState,
+} from "../lib/chat-details-view-state";
 import { useChatDetailsActions } from "../model/use-chat-details-actions";
 import { useScrollToBottom } from "../model/use-scroll-to-bottom";
 import { useSelectedChatReadState } from "../model/use-selected-chat-read-state";
@@ -81,6 +80,20 @@ export function ChatDetailsClient({
     setMessages,
   });
 
+  const {
+    canTransferChat,
+    canUseStatusSelector,
+    composerAvailability,
+    isAdmin,
+    isClaimable,
+    visibleStatusOptions,
+  } = getChatDetailsViewState({
+    selectedChat,
+    currentManager,
+    statusOptions,
+  });
+  const confirmDialog = getConfirmDialogViewState(confirmRequest);
+
   const syncMessages = useCallback((nextMessages: ChatMessage[]) => {
     setMessages(nextMessages);
   }, []);
@@ -93,7 +106,7 @@ export function ChatDetailsClient({
         console.warn("Failed to mark realtime message as read:", error);
       });
     }
-  }, []);
+  }, [actions]);
 
   const handleRealtimeDeliveryUpdate = useCallback(
     (updated: Parameters<typeof mergeUpdatedDeliveryState>[1]) => {
@@ -105,6 +118,10 @@ export function ChatDetailsClient({
   const refreshDetails = useCallback(() => {
     router.refresh();
   }, [router]);
+
+  const handleLocalMessage = useCallback((message: ChatMessage) => {
+    setMessages((currentMessages) => normalizeMessages([...currentMessages, message]));
+  }, []);
 
   useSelectedChatReadState({
     chatId: selectedChat.id,
@@ -123,28 +140,6 @@ export function ChatDetailsClient({
   });
 
   useScrollToBottom(messagesEndRef, messages);
-
-  const isResolved = selectedChat.status === "resolved" || selectedChat.status === "closed";
-  const isClaimable = selectedChat.status === "open" || selectedChat.status === "waiting_operator";
-  const canUsePrivilegedRole = isPrivilegedManager(currentManager);
-  const isAssignedToCurrentManager = selectedChat.assignedManagerId === currentManager?.id;
-  const canSupportChangeStatus =
-    currentManager?.role === "support" && isAssignedToCurrentManager && selectedChat.status !== "escalated";
-  const canUseStatusSelector = Boolean(canUsePrivilegedRole || canSupportChangeStatus);
-  const canTransferChat = Boolean(!isResolved && !isClaimable && (canUsePrivilegedRole || isAssignedToCurrentManager));
-  const composerAvailability = getComposerAvailability(selectedChat, currentManager);
-  const visibleStatusOptions = statusOptions.filter((option) => {
-    if (option.value === "waiting_operator") {
-      return Boolean(canUsePrivilegedRole && !isResolved);
-    }
-
-    if (option.value === "open") {
-      return Boolean(canUsePrivilegedRole || canSupportChangeStatus);
-    }
-
-    return true;
-  });
-  const isAdmin = isAdminManager(currentManager);
 
   return (
     <>
@@ -182,9 +177,7 @@ export function ChatDetailsClient({
         <ChatMessageInput
           chatId={selectedChat.id}
           sendManagerMessage={actions.sendManagerMessage}
-          onLocalMessage={(message) => {
-            setMessages((currentMessages) => normalizeMessages([...currentMessages, message]));
-          }}
+          onLocalMessage={handleLocalMessage}
         />
       ) : (
         <ComposerUnavailable reason={composerAvailability.unavailableReason} />
@@ -200,11 +193,11 @@ export function ChatDetailsClient({
       ) : null}
 
       <ConfirmDialog
-        isOpen={confirmRequest !== null}
-        title={confirmRequest?.title ?? ""}
-        description={confirmRequest?.description ?? ""}
-        confirmLabel={confirmRequest?.type === "status" ? "Изменить" : "Удалить"}
-        variant={confirmRequest?.type === "status" ? "default" : "danger"}
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmLabel={confirmDialog.confirmLabel}
+        variant={confirmDialog.variant}
         isPending={isPending}
         onCancel={closeConfirmDialog}
         onConfirm={handleConfirmAction}

@@ -1,15 +1,11 @@
-import { isDebugEnabled } from "@/shared/config/debug";
-import { DebugPanel } from "@/shared/ui/debug-panel";
-import { AuthAlert } from "@/widgets/auth-shell";
+import { AuthAlert } from "../ui";
 
 type ResetPasswordHeaderExtraProps = {
   hasRecoveryError: boolean;
-  debugItems: string[];
 };
 
 export function ResetPasswordHeaderExtra({
   hasRecoveryError,
-  debugItems,
 }: ResetPasswordHeaderExtraProps) {
   return (
     <>
@@ -18,10 +14,6 @@ export function ResetPasswordHeaderExtra({
           Ссылка для сброса пароля недействительна или устарела. Запросите
           новую.
         </AuthAlert>
-      ) : null}
-
-      {isDebugEnabled ? (
-        <DebugPanel title="Recovery Debug" items={debugItems} />
       ) : null}
     </>
   );

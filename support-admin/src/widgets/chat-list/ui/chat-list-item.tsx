@@ -12,10 +12,6 @@ const activeFullNameClassName = "mt-1 truncate text-xs text-[color:rgba(255,255,
 const inactiveFullNameClassName = "support-text-muted mt-1 truncate text-xs";
 const activeSubtitleClassName = "mt-2 truncate text-sm text-[color:rgba(255,255,255,0.82)]";
 const inactiveSubtitleClassName = "support-text-secondary mt-2 truncate text-sm";
-const activeCountClassName =
-  "rounded-full bg-white/12 px-2 py-1 text-xs font-medium text-white";
-const inactiveCountClassName =
-  "support-surface-muted support-text-secondary rounded-full px-2 py-1 text-xs font-medium";
 const activeMetaClassName =
   "mt-4 flex items-center justify-between text-xs text-[color:rgba(255,255,255,0.65)]";
 const inactiveMetaClassName = "support-text-muted mt-4 flex items-center justify-between text-xs";

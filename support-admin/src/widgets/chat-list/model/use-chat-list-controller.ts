@@ -73,6 +73,8 @@ export function useChatListController({
   }, [selectedBotKey]);
 
   useEffect(() => {
+    // Server refreshes and tab-scoped cache must be folded into local paginated state.
+    /* eslint-disable react-hooks/set-state-in-effect */
     const sorted = sortSupportChatsByActivity(chatSummaries);
     const cached = readCachedChatListState(selectedBotUsername);
 
@@ -121,6 +123,7 @@ export function useChatListController({
     setPageInfo(chatInboxPageInfo);
     setLoadMoreError(null);
     setIsLoadingNextPage(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [chatInboxPageInfo, chatSummaries, selectedBotUsername]);
 
   useEffect(() => {

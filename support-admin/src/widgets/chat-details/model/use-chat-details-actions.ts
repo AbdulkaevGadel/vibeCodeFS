@@ -4,7 +4,7 @@ import { useCallback, useState, useTransition, type Dispatch, type SetStateActio
 import type { SupportChatStatus, SupportChatSummary } from "@/entities/support-chat";
 import type { ChatMessage } from "@/entities/chat-message";
 import { useToastState } from "@/shared/ui/toast";
-import { getStatusChangeConfirmation } from "../lib/chat-details-utils";
+import { getStatusChangeConfirmation } from "../lib/chat-details-status-utils";
 import type { ChatDetailsActions } from "./types";
 
 export type ConfirmRequest =

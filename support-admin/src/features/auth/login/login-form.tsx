@@ -8,7 +8,7 @@ import {
   AuthInputField,
   AuthSecondaryLink,
   AuthSubmitButton,
-} from "@/widgets/auth-shell";
+} from "../ui";
 
 const initialState: LoginFormState = {
   error: null,
