@@ -2,13 +2,15 @@
 
 import { useActionState } from "react";
 import {
-  type ResetPasswordFormState,
   submitResetPasswordFormAction,
 } from "./actions";
-import { AuthAlert } from "@/app/auth/_components/auth-alert";
-import { AuthInputField } from "@/app/auth/_components/auth-input-field";
-import { AuthSecondaryLink } from "@/app/auth/_components/auth-secondary-link";
-import { AuthSubmitButton } from "@/app/auth/_components/auth-submit-button";
+import type { ResetPasswordFormState } from "../model";
+import {
+  AuthAlert,
+  AuthInputField,
+  AuthSecondaryLink,
+  AuthSubmitButton,
+} from "@/widgets/auth-shell";
 
 const initialState: ResetPasswordFormState = {
   error: null,

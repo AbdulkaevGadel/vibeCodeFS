@@ -1,6 +1,6 @@
 import { isDebugEnabled } from "@/shared/config/debug";
 import { DebugPanel } from "@/shared/ui/debug-panel";
-import { AuthAlert } from "@/app/auth/_components/auth-alert";
+import { AuthAlert } from "@/widgets/auth-shell";
 
 type ResetPasswordHeaderExtraProps = {
   hasRecoveryError: boolean;

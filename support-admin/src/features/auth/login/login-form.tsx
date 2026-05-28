@@ -1,11 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import { submitLoginFormAction, type LoginFormState } from "./actions";
-import { AuthAlert } from "@/app/auth/_components/auth-alert";
-import { AuthInputField } from "@/app/auth/_components/auth-input-field";
-import { AuthSecondaryLink } from "@/app/auth/_components/auth-secondary-link";
-import { AuthSubmitButton } from "@/app/auth/_components/auth-submit-button";
+import { submitLoginFormAction } from "./actions";
+import type { LoginFormState } from "../model";
+import {
+  AuthAlert,
+  AuthInputField,
+  AuthSecondaryLink,
+  AuthSubmitButton,
+} from "@/widgets/auth-shell";
 
 const initialState: LoginFormState = {
   error: null,

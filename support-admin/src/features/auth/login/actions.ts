@@ -1,6 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { LoginFormState } from "../model";
+import {
+  getLoginLogErrorDetails,
+  mapLoginError,
+  normalizeLoginEmail,
+  validateLoginInput,
+} from "./login-action-utils";
 import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 
 export type LoginActionInput = {
@@ -13,12 +20,6 @@ export type LoginActionResult = {
   error: string | null;
 };
 
-export type LoginFormState = {
-  error: string | null;
-};
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 function createErrorResult(error: string): LoginActionResult {
   return {
     success: false,
@@ -26,45 +27,11 @@ function createErrorResult(error: string): LoginActionResult {
   };
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function validateLoginInput(rawEmail: string, password: string): string | null {
-  const normalizedEmail = normalizeEmail(rawEmail);
-
-  if (!normalizedEmail) {
-    return "Введите email.";
-  }
-
-  if (!emailPattern.test(normalizedEmail)) {
-    return "Введите корректный email.";
-  }
-
-  if (!password.trim()) {
-    return "Введите пароль.";
-  }
-
-  return null;
-}
-
-function mapLoginError(message?: string) {
-  if (!message) {
-    return "Не удалось выполнить вход. Попробуйте позже.";
-  }
-
-  if (message === "Invalid login credentials") {
-    return "Неверный email или пароль.";
-  }
-
-  return "Не удалось выполнить вход. Попробуйте позже.";
-}
-
 export async function loginAction({
   email,
   password,
 }: LoginActionInput): Promise<LoginActionResult> {
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail = normalizeLoginEmail(email);
   const validationError = validateLoginInput(email, password);
 
   if (validationError) {
@@ -92,13 +59,7 @@ export async function loginAction({
     };
   } catch (error) {
     console.error("Login action failed", {
-      error:
-        error instanceof Error
-          ? {
-              message: error.message,
-              name: error.name,
-            }
-          : "Unknown error",
+      error: getLoginLogErrorDetails(error),
     });
 
     return createErrorResult("Не удалось выполнить вход. Попробуйте позже.");

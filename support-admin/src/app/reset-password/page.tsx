@@ -1,8 +1,7 @@
-import { ResetPasswordForm } from "./reset-password-form";
-import { ResetPasswordHeaderExtra } from "./_components/reset-password-header-extra";
 import { getResetPasswordPageData } from "./_lib/get-reset-password-page-data";
-import { AuthShell } from "@/app/auth/_components/auth-shell";
 import { getAuthPageUser } from "@/app/auth/_lib/get-auth-page-user";
+import { ResetPasswordForm, ResetPasswordHeaderExtra } from "@/features/auth";
+import { AuthShell } from "@/widgets/auth-shell";
 
 export const dynamic = "force-dynamic";
 

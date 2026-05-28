@@ -1,6 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { ResetPasswordFormState } from "../model";
+import {
+  getResetPasswordLogErrorDetails,
+  mapResetPasswordError,
+  validateResetPassword,
+} from "./reset-password-action-utils";
 import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 
 export type ResetPasswordActionResult = {
@@ -8,47 +14,10 @@ export type ResetPasswordActionResult = {
   error: string | null;
 };
 
-export type ResetPasswordFormState = {
-  error: string | null;
-};
-
-const minimumPasswordLength = 8;
-
-function validatePassword(password: string) {
-  if (!password.trim()) {
-    return "Введите новый пароль.";
-  }
-
-  if (password.length < minimumPasswordLength) {
-    return `Пароль должен быть не короче ${minimumPasswordLength} символов.`;
-  }
-
-  return null;
-}
-
-function mapResetPasswordError(message?: string) {
-  if (!message) {
-    return "Не удалось обновить пароль. Попробуйте снова.";
-  }
-
-  const normalizedMessage = message.toLowerCase();
-
-  if (
-    normalizedMessage.includes("auth session missing") ||
-    normalizedMessage.includes("session not found") ||
-    normalizedMessage.includes("invalid claim") ||
-    normalizedMessage.includes("jwt")
-  ) {
-    return "Ссылка для сброса пароля недействительна или устарела. Запросите новую.";
-  }
-
-  return "Не удалось обновить пароль. Попробуйте снова.";
-}
-
 export async function resetPasswordAction(
   newPassword: string,
 ): Promise<ResetPasswordActionResult> {
-  const validationError = validatePassword(newPassword);
+  const validationError = validateResetPassword(newPassword);
 
   if (validationError) {
     return {
@@ -76,21 +45,8 @@ export async function resetPasswordAction(
       };
     }
   } catch (error) {
-    const errorDetails =
-      error instanceof Error
-        ? {
-            message: error.message,
-            name: error.name,
-            stack: error.stack ?? "none",
-          }
-        : {
-            message: String(error),
-            name: "Unknown error",
-            stack: "none",
-          };
-
     console.error("Reset password action failed", {
-      error: errorDetails,
+      error: getResetPasswordLogErrorDetails(error),
     });
 
     return {
