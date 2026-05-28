@@ -1,4 +1,4 @@
-import {createSupabaseServerClient} from "@/lib/supabase-server";
+import {createSupabaseServerClient} from "@/shared/api/supabase/server-client";
 import {
   isPrivilegedManager,
   type Manager,

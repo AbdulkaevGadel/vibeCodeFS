@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { isManagerRole, type ManagerRole } from "@/entities/manager";
-import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createSupabaseAdminClient } from "@/shared/api/supabase/admin-client";
 import {
   createErrorResult,
   createRecoveryResult,

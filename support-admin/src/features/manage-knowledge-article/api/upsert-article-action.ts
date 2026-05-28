@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { ArticleStatus } from "@/entities/knowledge-article";
 import { getCurrentManager } from "@/entities/manager/api/current-manager";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 import {
   getKnowledgeArticleActionErrorMessage,
   invokePendingArticleIngestionIfNeeded,

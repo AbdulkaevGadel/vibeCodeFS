@@ -1,6 +1,6 @@
 "use server";
 
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 
 function getActionErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error occurred";

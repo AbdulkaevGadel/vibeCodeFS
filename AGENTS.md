@@ -30,6 +30,30 @@ Important clarification:
 - do not choose weak shortcuts only because they are easier to explain
 - if a production-quality solution needs a slightly more explicit structure, prefer it and explain why
 
+### Safety Over Convenience
+
+Если есть выбор между удобным, коротким или эстетически более приятным решением и более безопасным решением, агент должен выбирать безопасное решение.
+
+Безопасность имеет приоритет над:
+- краткостью импортов;
+- удобством API;
+- визуальной симметрией структуры;
+- "красотой" архитектуры;
+- уменьшением количества файлов;
+- локальной простотой, которая прячет важные runtime boundaries.
+
+Правило особенно важно для:
+- secrets и service-role keys;
+- server/client runtime boundaries;
+- database/RPC/RLS contracts;
+- auth/session flow;
+- Telegram/API integrations;
+- migrations и irreversible changes.
+
+Простота остаётся важной только там, где она не ослабляет безопасность, корректность, maintainability и production-grade reliability.
+
+Если безопасное решение требует более явной структуры, агент должен выбрать её и объяснить trade-off.
+
 ---
 
 ## 3. Critical Rule (VERY IMPORTANT)

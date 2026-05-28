@@ -205,6 +205,8 @@ These rules are permanent for the `support-admin` frontend.
 - Client Components may subscribe to Supabase Realtime only for UI synchronization.
 - Business mutations must stay behind Server Actions / RPC.
 - FSD placement must not move privileged business mutations into Client Components.
+- When choosing between shorter imports, convenient barrels, visually cleaner public APIs, and clearer runtime boundaries, prefer the safer runtime boundary.
+- Do not hide server-only or privileged clients behind broad barrels for convenience.
 - React must not own workflow consistency.
 - Backend / DB remains the source of truth for chat status, assignment, unread state, AI state, and message delivery state.
 - Realtime callbacks must not become orchestration logic.

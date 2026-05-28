@@ -7,7 +7,7 @@ import {
   type SupportChatInboxPage,
 } from "@/entities/support-chat";
 import { getCurrentManagerId } from "@/entities/manager/api/current-manager";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 
 type LoadChatInboxPageInput = {
   botUsername: string | null;

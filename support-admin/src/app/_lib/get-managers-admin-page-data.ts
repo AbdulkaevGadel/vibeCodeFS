@@ -1,6 +1,6 @@
 import { mapManagerRow, type Manager, type ManagerRow } from "@/entities/manager";
 import { getCurrentManager } from "@/entities/manager/api/current-manager";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 
 type ManagersAdminPageData = {
   currentManager: Manager | null;

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isPrivilegedManager } from "@/entities/manager";
 import { getCurrentManager } from "@/entities/manager/api/current-manager";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 import {
   failEmbeddingRefreshBatchStart,
   getBatchActionErrorMessage,
