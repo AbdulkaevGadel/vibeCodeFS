@@ -6,6 +6,7 @@ import {
   setArticleStatusAction,
   upsertArticleAction,
 } from "@/features/manage-knowledge-article";
+import { logoutAction } from "@/features/auth/logout/actions";
 import {
   getArticleEmbeddingStateAction,
   refreshArticleEmbeddingsAction,
@@ -17,7 +18,6 @@ import {
 import { AdminHeader } from "@/widgets/admin-header";
 import type { KnowledgeDetailsActions } from "@/widgets/knowledge-details";
 import type { KnowledgeEmbeddingRefreshPanelActions } from "@/widgets/knowledge-embedding-refresh-panel";
-import { logoutAction } from "../../_actions/logout";
 import { getKnowledgeBaseData } from "../../_lib/get-knowledge-base-data";
 import { PageProps } from "../../_lib/page-types";
 

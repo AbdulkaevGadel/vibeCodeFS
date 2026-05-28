@@ -5,9 +5,9 @@ import {
   deleteUnlinkedAuthUserAction,
   updateManagerAction,
 } from "@/features/manage-managers";
+import { logoutAction } from "@/features/auth/logout/actions";
 import { ManagersAdminPage } from "@/fsd-pages/managers-admin";
 import { AdminHeader } from "@/widgets/admin-header";
-import { logoutAction } from "../../_actions/logout";
 import { getManagersAdminPageData } from "../../_lib/get-managers-admin-page-data";
 
 export const dynamic = "force-dynamic";
