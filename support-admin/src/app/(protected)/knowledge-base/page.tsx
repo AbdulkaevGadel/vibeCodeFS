@@ -14,9 +14,10 @@ import {
   getKnowledgeEmbeddingRefreshBatchStateAction,
   startKnowledgeEmbeddingRefreshBatchAction,
 } from "@/features/refresh-knowledge-embedding-batch";
+import { AdminHeader } from "@/widgets/admin-header";
 import type { KnowledgeDetailsActions } from "@/widgets/knowledge-details";
 import type { KnowledgeEmbeddingRefreshPanelActions } from "@/widgets/knowledge-embedding-refresh-panel";
-import { AdminHeader } from "../../_components/admin-header";
+import { logoutAction } from "../../_actions/logout";
 import { getKnowledgeBaseData } from "../../_lib/get-knowledge-base-data";
 import { PageProps } from "../../_lib/page-types";
 
@@ -61,6 +62,7 @@ export default async function KnowledgeBasePage({ searchParams }: PageProps) {
       renderHeaderShell={(headerProps) => (
         <AdminHeader
           {...headerProps}
+          logoutAction={logoutAction}
         />
       )}
     />

@@ -1,8 +1,9 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
+
 import { isAdminManager, type Manager } from "@/entities/manager";
 import { Button } from "@/shared/ui/button";
-import { logoutAction } from "../_actions/logout";
-import { RefreshButton } from "../refresh-button";
+
+import { RefreshButton } from "./refresh-button";
 
 const headerClassName = "support-panel-strong p-5 sm:p-6";
 const headerLayoutClassName = "flex flex-col gap-5";
@@ -22,6 +23,7 @@ type AdminHeaderProps = {
   navigationLabel: string;
   navigationActive?: boolean;
   managersNavigationActive?: boolean;
+  logoutAction: () => Promise<void>;
   secondaryActions?: ReactNode;
   stats: ReactNode;
   sidePanel?: ReactNode;
@@ -36,6 +38,7 @@ export function AdminHeader({
   navigationLabel,
   navigationActive = false,
   managersNavigationActive = false,
+  logoutAction,
   secondaryActions,
   stats,
   sidePanel,
@@ -100,3 +103,4 @@ export function AdminHeader({
     </header>
   );
 }
+
