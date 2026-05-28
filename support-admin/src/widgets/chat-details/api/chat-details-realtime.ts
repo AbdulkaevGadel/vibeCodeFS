@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient } from "@/shared/api/supabase/browser-client";
 import { mapChatMessage, type ChatMessage, type MessageDeliveryUpdateRow, type MessageSenderType } from "@/entities/chat-message";
 
 type RealtimeMessageRow = {

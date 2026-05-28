@@ -1,4 +1,4 @@
-import type { createSupabaseServerClient } from "@/lib/supabase-server";
+import type { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 import type { Manager } from "@/entities/manager";
 import type {
   KnowledgeArticle,

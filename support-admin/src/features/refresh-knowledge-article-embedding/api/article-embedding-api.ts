@@ -1,7 +1,7 @@
 import "server-only";
 
 import { mapKnowledgeArticleEmbeddingState } from "@/entities/knowledge-article";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 
 type JsonObject = Record<string, unknown>;
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ArticleStatus } from "@/entities/knowledge-article";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 import { getKnowledgeArticleActionErrorMessage } from "./article-ingestion-api";
 import { getSetArticleStatusRpcErrorMessage } from "./article-rpc-error-messages";
 

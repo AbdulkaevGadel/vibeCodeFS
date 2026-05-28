@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 import { isManagerRole, mapManagerRow, type Manager, type ManagerRow } from "@/entities/manager";
 
 export async function getCurrentManagerId(): Promise<string> {

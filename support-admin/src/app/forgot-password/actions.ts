@@ -1,7 +1,7 @@
 "use server";
 
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { getAbsoluteUrl } from "@/lib/site-url";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
+import { getAbsoluteUrl } from "@/shared/config/site-url";
 
 export type ForgotPasswordActionResult = {
   success: boolean;

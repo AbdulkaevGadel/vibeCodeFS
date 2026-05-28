@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef } from "react";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient } from "@/shared/api/supabase/browser-client";
 import { getBotKey, sortSupportChatsByActivity, type SupportChatStatus, type SupportChatSummary } from "@/entities/support-chat";
 import type { MessageSenderType } from "@/entities/chat-message";
 
