@@ -55,8 +55,11 @@ export function useKnowledgeEmbeddingBatchSync({
   const startButtonLabel = isRunning ? "Продолжить" : "Обновить все";
 
   useEffect(() => {
+    // Server refreshes can replace the current batch while the local poller is active.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setBatch(initialBatch);
     setLogBatch((current) => getVisibleLogBatch(initialBatch) ?? current);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [initialBatch]);
 
   useEffect(() => {

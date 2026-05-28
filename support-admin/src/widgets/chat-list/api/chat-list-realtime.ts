@@ -1,6 +1,6 @@
 "use client";
 
-import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef } from "react";
+import { Dispatch, MutableRefObject, SetStateAction, useEffect, useState } from "react";
 import { createSupabaseClient } from "@/shared/api/supabase/browser-client";
 import { getBotKey, sortSupportChatsByActivity, type SupportChatStatus, type SupportChatSummary } from "@/entities/support-chat";
 import type { MessageSenderType } from "@/entities/chat-message";
@@ -86,16 +86,9 @@ export function useChatListRealtime({
   setChats,
   refreshList,
 }: UseChatListRealtimeOptions) {
-  const supabaseRef = useRef<ReturnType<typeof createSupabaseClient> | null>(null);
-
-  if (!supabaseRef.current) {
-    supabaseRef.current = createSupabaseClient();
-  }
+  const [supabase] = useState(() => createSupabaseClient());
 
   useEffect(() => {
-    const supabase = supabaseRef.current;
-    if (!supabase) return;
-
     const channel = supabase
       .channel("support:chat-list:patching")
       .on(
@@ -177,5 +170,5 @@ export function useChatListRealtime({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chatsRef, refreshList, selectedBotKeyRef, selectedChatIdRef, setChats]);
+  }, [chatsRef, refreshList, selectedBotKeyRef, selectedChatIdRef, setChats, supabase]);
 }

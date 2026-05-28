@@ -1,6 +1,6 @@
-import { ForgotPasswordForm } from "./forgot-password-form";
-import { AuthShell } from "@/app/auth/_components/auth-shell";
 import { redirectAuthenticatedUser } from "@/app/auth/_lib/redirect-authenticated-user";
+import { ForgotPasswordForm } from "@/features/auth";
+import { AuthShell } from "@/widgets/auth-shell";
 
 export const dynamic = "force-dynamic";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { createSupabaseClient } from "@/shared/api/supabase/browser-client";
 import { mapChatMessage, type ChatMessage, type MessageDeliveryUpdateRow, type MessageSenderType } from "@/entities/chat-message";
 
@@ -34,9 +34,6 @@ export function useChatDetailsRealtime({
   onUpdateDeliveryState,
   refreshDetails,
 }: UseChatDetailsRealtimeOptions) {
-  const activeChatIdRef = useRef(chatId);
-  activeChatIdRef.current = chatId;
-
   useEffect(() => {
     const supabase = createSupabaseClient();
 
@@ -53,7 +50,7 @@ export function useChatDetailsRealtime({
         (payload) => {
           if (payload.eventType === "INSERT") {
             const insertedRow = payload.new as RealtimeMessageRow;
-            if (insertedRow.chat_id !== activeChatIdRef.current) {
+            if (insertedRow.chat_id !== chatId) {
               return;
             }
 
@@ -64,7 +61,7 @@ export function useChatDetailsRealtime({
 
           if (payload.eventType === "UPDATE") {
             const updatedRow = payload.new as MessageDeliveryUpdateRow;
-            if (updatedRow.chat_id !== activeChatIdRef.current) {
+            if (updatedRow.chat_id !== chatId) {
               return;
             }
 

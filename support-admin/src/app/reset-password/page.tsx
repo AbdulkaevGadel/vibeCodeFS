@@ -1,8 +1,7 @@
-import { ResetPasswordForm } from "./reset-password-form";
-import { ResetPasswordHeaderExtra } from "./_components/reset-password-header-extra";
 import { getResetPasswordPageData } from "./_lib/get-reset-password-page-data";
-import { AuthShell } from "@/app/auth/_components/auth-shell";
 import { getAuthPageUser } from "@/app/auth/_lib/get-auth-page-user";
+import { ResetPasswordForm, ResetPasswordHeaderExtra } from "@/features/auth";
+import { AuthShell } from "@/widgets/auth-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +15,8 @@ export default async function ResetPasswordPage({
   searchParams,
 }: ResetPasswordPageProps) {
   const params = await searchParams;
-  const { user, error } = await getAuthPageUser();
-  const pageData = getResetPasswordPageData(params, user, error);
+  const { user } = await getAuthPageUser();
+  const pageData = getResetPasswordPageData(params, user);
 
   return (
     <AuthShell
@@ -26,7 +25,6 @@ export default async function ResetPasswordPage({
       headerExtra={
         <ResetPasswordHeaderExtra
           hasRecoveryError={pageData.hasRecoveryError}
-          debugItems={pageData.debugItems}
         />
       }
     >
