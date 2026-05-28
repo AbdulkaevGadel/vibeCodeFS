@@ -37,6 +37,8 @@ type KnowledgeArticleRow = {
   slug: string | null
 }
 
+const maxSupplementalKbFragments = 2
+
 export async function fetchRecentHistory(triggerMessage: TriggerMessage): Promise<ChatMessageRow[]> {
   const oldestHistoryDate = new Date(triggerMessage.created_at)
   oldestHistoryDate.setHours(oldestHistoryDate.getHours() - config.context.maxHistoryAgeHours)
@@ -109,38 +111,116 @@ export async function fetchKbFragments(retrievalChunks: RetrievalChunk[]): Promi
       continue
     }
 
-    const chunkSet = firstRelation(row.knowledge_chunk_sets)
-    const article = firstRelation(row.knowledge_base_articles)
+    const fragment = mapKnowledgeChunkRowToFragment(row, retrievalChunk.similarity_score)
 
-    if (!chunkSet || !article) {
-      continue
+    if (fragment) {
+      fragments.push(fragment)
     }
-
-    if (
-      chunkSet.is_active !== true
-      || chunkSet.status !== "completed"
-      || row.embedding_status !== "completed"
-      || article.status !== "published"
-    ) {
-      continue
-    }
-
-    const truncatedText = truncateText(row.chunk_text, config.context.maxKbFragmentChars)
-
-    fragments.push({
-      chunk_id: row.id,
-      article_id: row.article_id,
-      chunk_set_id: row.chunk_set_id,
-      chunk_index: row.chunk_index,
-      similarity_score: retrievalChunk.similarity_score,
-      article_title: article.title,
-      article_slug: article.slug,
-      content_checksum: row.content_checksum ?? chunkSet.content_checksum,
-      ingestion_pipeline_version: row.ingestion_pipeline_version ?? chunkSet.ingestion_pipeline_version,
-      text: truncatedText.text,
-      truncated: truncatedText.truncated,
-    })
   }
 
-  return fragments
+  try {
+    return await withSupplementalActionableFragments(fragments)
+  } catch (error) {
+    console.warn("[ai-orchestrator] Failed to load supplemental KB fragments", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+
+    return fragments
+  }
+}
+
+async function withSupplementalActionableFragments(fragments: KbFragment[]) {
+  if (fragments.length === 0) {
+    return fragments
+  }
+
+  const chunkSetIds = [...new Set(fragments.map((fragment) => fragment.chunk_set_id))]
+
+  if (chunkSetIds.length === 0) {
+    return fragments
+  }
+
+  const query = [
+    `chunk_set_id=in.(${chunkSetIds.map(encodeURIComponent).join(",")})`,
+    "select=id,article_id,chunk_set_id,chunk_index,chunk_text,content_checksum,embedding_status,ingestion_pipeline_version,knowledge_chunk_sets!inner(status,is_active,content_checksum,ingestion_pipeline_version),knowledge_base_articles!inner(status,title,slug)",
+    "order=chunk_index.asc",
+    "limit=100",
+  ].join("&")
+  const rows = await callRest<KnowledgeChunkRow[]>(`/rest/v1/knowledge_chunks?${query}`)
+  const existingChunkIds = new Set(fragments.map((fragment) => fragment.chunk_id))
+  const bestSimilarityByArticleId = new Map<string, number>()
+
+  for (const fragment of fragments) {
+    bestSimilarityByArticleId.set(
+      fragment.article_id,
+      Math.max(bestSimilarityByArticleId.get(fragment.article_id) ?? 0, fragment.similarity_score),
+    )
+  }
+
+  const supplementalFragments = rows
+    .filter((row) => !existingChunkIds.has(row.id) && isActionableSupportChunk(row.chunk_text))
+    .map((row) => mapKnowledgeChunkRowToFragment(row, bestSimilarityByArticleId.get(row.article_id) ?? 0))
+    .filter((fragment): fragment is KbFragment => Boolean(fragment))
+    .sort(compareActionableFragments)
+    .slice(0, maxSupplementalKbFragments)
+
+  return [...fragments, ...supplementalFragments]
+}
+
+function mapKnowledgeChunkRowToFragment(row: KnowledgeChunkRow, similarityScore: number): KbFragment | null {
+  const chunkSet = firstRelation(row.knowledge_chunk_sets)
+  const article = firstRelation(row.knowledge_base_articles)
+
+  if (!chunkSet || !article) {
+    return null
+  }
+
+  if (
+    chunkSet.is_active !== true
+    || chunkSet.status !== "completed"
+    || row.embedding_status !== "completed"
+    || article.status !== "published"
+  ) {
+    return null
+  }
+
+  const truncatedText = truncateText(row.chunk_text, config.context.maxKbFragmentChars)
+
+  return {
+    chunk_id: row.id,
+    article_id: row.article_id,
+    chunk_set_id: row.chunk_set_id,
+    chunk_index: row.chunk_index,
+    similarity_score: similarityScore,
+    article_title: article.title,
+    article_slug: article.slug,
+    content_checksum: row.content_checksum ?? chunkSet.content_checksum,
+    ingestion_pipeline_version: row.ingestion_pipeline_version ?? chunkSet.ingestion_pipeline_version,
+    text: truncatedText.text,
+    truncated: truncatedText.truncated,
+  }
+}
+
+function isActionableSupportChunk(text: string) {
+  return text.includes("Рекомендуемый ответ клиенту")
+    || text.includes("Примеры вопросов")
+    || text.includes("Уточните:")
+}
+
+function compareActionableFragments(left: KbFragment, right: KbFragment) {
+  return actionablePriority(left.text) - actionablePriority(right.text)
+    || right.similarity_score - left.similarity_score
+    || left.chunk_index - right.chunk_index
+}
+
+function actionablePriority(text: string) {
+  if (text.includes("Рекомендуемый ответ клиенту")) {
+    return 0
+  }
+
+  if (text.includes("Примеры вопросов")) {
+    return 1
+  }
+
+  return 2
 }

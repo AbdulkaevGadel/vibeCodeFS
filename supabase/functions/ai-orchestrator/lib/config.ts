@@ -1,5 +1,5 @@
 export const config = {
-  promptVersion: "phase-9-context-prompt-v1",
+  promptVersion: "phase-9-context-prompt-v2",
   retrieval: {
     enabled: true,
     matchThreshold: readNumberEnv("RETRIEVAL_MATCH_THRESHOLD", 0.60, 0, 1),
@@ -13,7 +13,7 @@ export const config = {
   },
   context: {
     enabled: true,
-    builderVersion: "context-builder-v1",
+    builderVersion: "context-builder-v2",
     maxHistoryMessages: 8,
     maxClientHistoryMessages: 4,
     maxAiHistoryMessages: 4,

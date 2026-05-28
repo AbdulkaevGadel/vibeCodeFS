@@ -1,0 +1,346 @@
+{
+  "label": "refund_greeting_followup",
+  "createdAt": "2026-05-28T20:34:20.747Z",
+  "source": [
+    "supabase/functions/ai-orchestrator/lib/errors.ts",
+    "supabase/functions/ai-orchestrator/lib/utils.ts",
+    "supabase/functions/ai-orchestrator/lib/intent/message-text.ts",
+    "supabase/functions/ai-orchestrator/lib/intent/intent.ts",
+    "supabase/functions/ai-orchestrator/lib/context/context-sources.ts",
+    "supabase/functions/ai-orchestrator/lib/context/context-snapshot.ts",
+    "supabase/functions/ai-orchestrator/lib/context/context.ts",
+    "supabase/functions/ai-orchestrator/lib/context/prompt.ts",
+    "supabase/functions/ai-orchestrator/lib/retrieval/embedding-contract.ts",
+    "supabase/functions/ai-orchestrator/lib/retrieval/embedding-provider.ts",
+    "supabase/functions/ai-orchestrator/lib/retrieval/retrieval-rpc.ts",
+    "supabase/functions/ai-orchestrator/lib/retrieval/retrieval-save-result.ts",
+    "supabase/functions/ai-orchestrator/lib/retrieval/retrieval.ts",
+    "supabase/functions/ai-orchestrator/lib/response/llm-contract.ts",
+    "supabase/functions/ai-orchestrator/lib/response/llm-provider.ts",
+    "supabase/functions/ai-orchestrator/lib/response/llm.ts",
+    "supabase/functions/ai-orchestrator/lib/response/response-text.ts"
+  ],
+  "fixtures": {
+    "intent": [
+      {
+        "text": "Здравствуйте",
+        "result": {
+          "type": "greeting"
+        }
+      },
+      {
+        "text": "Спасибо, помогло",
+        "result": {
+          "type": "thanks"
+        }
+      },
+      {
+        "text": "До свидания",
+        "result": {
+          "type": "farewell"
+        }
+      },
+      {
+        "text": "Позовите оператора",
+        "result": {
+          "type": "manager_request"
+        }
+      },
+      {
+        "text": "Карта не принимается",
+        "result": null
+      }
+    ],
+    "retrievalQueryText": [
+      {
+        "text": "Здравствуйте, карта не принимается",
+        "result": "карта не принимается"
+      },
+      {
+        "text": "Добрый день! как вернуть деньги?",
+        "result": "как вернуть деньги?"
+      },
+      {
+        "text": "Привет",
+        "result": "Привет"
+      },
+      {
+        "text": "Карта не принимается",
+        "result": "Карта не принимается"
+      }
+    ],
+    "greetingNormalization": [
+      {
+        "name": "first_message_with_existing_greeting",
+        "result": "Здравствуйте! Мы понимаем, что возникли проблемы со входом."
+      },
+      {
+        "name": "follow_up_strips_template_greeting",
+        "result": "Понимаем вашу ситуацию и хотим помочь разобраться."
+      }
+    ],
+    "contextSnapshot": {
+      "current_message": {
+        "id": "msg-current",
+        "sender_type": "client",
+        "created_at": "2026-05-26T09:00:00.000Z",
+        "text": "Здравствуйте, карта не принимается при оплате заказа",
+        "truncated": false
+      },
+      "history_messages": [
+        {
+          "id": "msg-history-client",
+          "sender_type": "client",
+          "created_at": "2026-05-26T08:58:00.000Z",
+          "text": "Я пытаюсь оплатить заказ",
+          "truncated": false
+        },
+        {
+          "id": "msg-history-ai",
+          "sender_type": "ai",
+          "created_at": "2026-05-26T08:59:00.000Z",
+          "text": "На связи ИИ-помощник службы поддержки.\nУточните, пожалуйста, способ оплаты.",
+          "truncated": false
+        }
+      ],
+      "kb_fragments": [
+        {
+          "chunk_id": "chunk-1",
+          "article_id": "article-1",
+          "chunk_set_id": "set-1",
+          "chunk_index": 0,
+          "similarity_score": 0.82,
+          "article_title": "Карта не принимается",
+          "article_slug": "card-declined",
+          "content_checksum": "checksum-1",
+          "ingestion_pipeline_version": "v1",
+          "text": "Проверьте актуальность реквизитов карты. Если банк отклоняет платеж, попросите клиента попробовать другую карту или способ оплаты.",
+          "truncated": false
+        }
+      ],
+      "limits": {
+        "enabled": true,
+        "builderVersion": "context-builder-v2",
+        "maxHistoryMessages": 8,
+        "maxClientHistoryMessages": 4,
+        "maxAiHistoryMessages": 4,
+        "maxHistoryAgeHours": 24,
+        "maxHistoryMessageChars": 800,
+        "maxKbFragments": 5,
+        "maxKbFragmentChars": 1200,
+        "maxPromptChars": 9000,
+        "maxCurrentMessageChars": 2000
+      },
+      "source_counts": {
+        "retrieved_chunks": 1,
+        "usable_chunks": 1,
+        "history_messages": 2,
+        "client_history_messages": 1,
+        "ai_history_messages": 1
+      }
+    },
+    "promptSnapshot": {
+      "messages": [
+        {
+          "role": "system",
+          "content": "Ты backend-only AI assistant службы поддержки.\nCurrent client message is the primary task. Recent client/ai history is auxiliary context only.\nIf current client message changes topic, follow the current message and do not continue the previous topic.\nОтвечай только на основе KB fragments that are relevant to the current client message.\nUse KB fragments as support policy and turn them into a client-facing Russian support reply.\nDo not answer from recent history when KB fragments for the current message describe another scenario.\nЕсли в KB fragments нет достаточной информации for the current message, скажи, что данных недостаточно.\nНе придумывай правила, сроки, статусы, цены или обещания.\nНе принимай workflow decisions вроде handoff."
+        },
+        {
+          "role": "user",
+          "content": "Current client message:\nЗдравствуйте, карта не принимается при оплате заказа\n\nInstruction:\nAnswer the current client message. Use recent history only to understand context, never to replace the current topic.\n\nRecent client/ai history:\n[client 2026-05-26T08:58:00.000Z] Я пытаюсь оплатить заказ\n[ai 2026-05-26T08:59:00.000Z] На связи ИИ-помощник службы поддержки.\nУточните, пожалуйста, способ оплаты.\n\nKB fragments:\n[fragment chunk_id=chunk-1 article_id=article-1 chunk_index=0]\nПроверьте актуальность реквизитов карты. Если банк отклоняет платеж, попросите клиента попробовать другую карту или способ оплаты."
+        }
+      ],
+      "prompt_version": "phase-9-context-prompt-v2",
+      "builder_version": "context-builder-v2",
+      "estimated_chars": 1350
+    },
+    "refundThemeSwitch": {
+      "contextSnapshot": {
+        "current_message": {
+          "id": "msg-current-refund",
+          "sender_type": "client",
+          "created_at": "2026-05-28T19:55:19.000Z",
+          "text": "Я хочу вернуть деньги!",
+          "truncated": false
+        },
+        "history_messages": [
+          {
+            "id": "msg-history-password-client",
+            "sender_type": "client",
+            "created_at": "2026-05-28T19:54:18.000Z",
+            "text": "Привет, я забыл пароль",
+            "truncated": false
+          },
+          {
+            "id": "msg-history-password-ai",
+            "sender_type": "ai",
+            "created_at": "2026-05-28T19:54:28.000Z",
+            "text": "Попробуйте восстановить пароль через кнопку «Забыли пароль» на странице входа.",
+            "truncated": false
+          }
+        ],
+        "kb_fragments": [
+          {
+            "chunk_id": "refund-chunk-0",
+            "article_id": "refund-article",
+            "chunk_set_id": "refund-set",
+            "chunk_index": 0,
+            "similarity_score": 0.55,
+            "article_title": "Клиент требует возврат средств",
+            "article_slug": "refund-request",
+            "content_checksum": "refund-checksum",
+            "ingestion_pipeline_version": "kb_ingestion_v4",
+            "text": "Статья: Клиент требует возврат средств\nРаздел: Когда использовать\nФразы клиента:\n- хочу вернуть деньги\n- сделайте возврат\nКлючевые слова: деньги, возврат",
+            "truncated": false
+          },
+          {
+            "chunk_id": "refund-chunk-11",
+            "article_id": "refund-article",
+            "chunk_set_id": "refund-set",
+            "chunk_index": 11,
+            "similarity_score": 0.55,
+            "article_title": "Клиент требует возврат средств",
+            "article_slug": "refund-request",
+            "content_checksum": "refund-checksum",
+            "ingestion_pipeline_version": "kb_ingestion_v4",
+            "text": "Статья: Клиент требует возврат средств\nРаздел: Рекомендуемый ответ клиенту\nЗдравствуйте!\nПонимаем вашу ситуацию и хотим помочь разобраться.\nПожалуйста, уточните:\nпо какой причине вы хотите оформить возврат;\nчто именно вас не устроило;\nemail или номер заказа, связанный с оплатой.\nПосле проверки информации мы вернёмся к вам с решением.",
+            "truncated": false
+          }
+        ],
+        "limits": {
+          "enabled": true,
+          "builderVersion": "context-builder-v2",
+          "maxHistoryMessages": 8,
+          "maxClientHistoryMessages": 4,
+          "maxAiHistoryMessages": 4,
+          "maxHistoryAgeHours": 24,
+          "maxHistoryMessageChars": 800,
+          "maxKbFragments": 5,
+          "maxKbFragmentChars": 1200,
+          "maxPromptChars": 9000,
+          "maxCurrentMessageChars": 2000
+        },
+        "source_counts": {
+          "retrieved_chunks": 2,
+          "usable_chunks": 2,
+          "history_messages": 2,
+          "client_history_messages": 1,
+          "ai_history_messages": 1
+        }
+      },
+      "promptSnapshot": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "Ты backend-only AI assistant службы поддержки.\nCurrent client message is the primary task. Recent client/ai history is auxiliary context only.\nIf current client message changes topic, follow the current message and do not continue the previous topic.\nОтвечай только на основе KB fragments that are relevant to the current client message.\nUse KB fragments as support policy and turn them into a client-facing Russian support reply.\nDo not answer from recent history when KB fragments for the current message describe another scenario.\nЕсли в KB fragments нет достаточной информации for the current message, скажи, что данных недостаточно.\nНе придумывай правила, сроки, статусы, цены или обещания.\nНе принимай workflow decisions вроде handoff."
+          },
+          {
+            "role": "user",
+            "content": "Current client message:\nЯ хочу вернуть деньги!\n\nInstruction:\nAnswer the current client message. Use recent history only to understand context, never to replace the current topic.\n\nRecent client/ai history:\n[client 2026-05-28T19:54:18.000Z] Привет, я забыл пароль\n[ai 2026-05-28T19:54:28.000Z] Попробуйте восстановить пароль через кнопку «Забыли пароль» на странице входа.\n\nKB fragments:\n[fragment chunk_id=refund-chunk-0 article_id=refund-article chunk_index=0]\nСтатья: Клиент требует возврат средств\nРаздел: Когда использовать\nФразы клиента:\n- хочу вернуть деньги\n- сделайте возврат\nКлючевые слова: деньги, возврат\n\n[fragment chunk_id=refund-chunk-11 article_id=refund-article chunk_index=11]\nСтатья: Клиент требует возврат средств\nРаздел: Рекомендуемый ответ клиенту\nЗдравствуйте!\nПонимаем вашу ситуацию и хотим помочь разобраться.\nПожалуйста, уточните:\nпо какой причине вы хотите оформить возврат;\nчто именно вас не устроило;\nemail или номер заказа, связанный с оплатой.\nПосле проверки информации мы вернёмся к вам с решением."
+          }
+        ],
+        "prompt_version": "phase-9-context-prompt-v2",
+        "builder_version": "context-builder-v2",
+        "estimated_chars": 1770
+      },
+      "promptChecks": {
+        "currentMessageIsPrimary": true,
+        "historyCannotReplaceTopic": true,
+        "refundAnswerFragmentIncluded": true
+      }
+    },
+    "llmJsonParsing": [
+      {
+        "content": "{\"kind\":\"answer\",\"answer_text\":\"Проверьте данные карты.\"}",
+        "ok": true,
+        "result": {
+          "kind": "answer",
+          "answer_text": "Проверьте данные карты."
+        }
+      },
+      {
+        "content": "{\"kind\":\"insufficient\",\"answer_text\":\"\"}",
+        "ok": true,
+        "result": {
+          "kind": "insufficient"
+        }
+      },
+      {
+        "content": "Ответ ниже:\n{\"kind\":\"answer\",\"answer_text\":\"Попробуйте другую карту.\"}",
+        "ok": true,
+        "result": {
+          "kind": "answer",
+          "answer_text": "Попробуйте другую карту."
+        }
+      },
+      {
+        "content": "not json",
+        "ok": false,
+        "errorName": "UnknownError",
+        "errorMessage": "OrchestratorError: LLM response is not valid JSON: not json"
+      }
+    ],
+    "technicalFallbackEligibility": [
+      {
+        "name": "retrieval_stage_timeout",
+        "eligible": true,
+        "errorName": "RetrievalStageTimeoutError",
+        "message": "RETRIEVAL_STAGE_TIMEOUT"
+      },
+      {
+        "name": "llm_timeout",
+        "eligible": true,
+        "errorName": "ProviderTimeoutError",
+        "message": "LLM request timed out"
+      },
+      {
+        "name": "llm_429",
+        "eligible": true,
+        "errorName": "ProviderHttpError",
+        "message": "LLM provider request failed with status 429: rate limited"
+      },
+      {
+        "name": "llm_503",
+        "eligible": true,
+        "errorName": "ProviderHttpError",
+        "message": "LLM provider request failed with status 503: temporarily unavailable"
+      },
+      {
+        "name": "llm_400",
+        "eligible": false,
+        "errorName": "ProviderHttpError",
+        "message": "LLM provider request failed with status 400: bad request"
+      },
+      {
+        "name": "embedding_timeout",
+        "eligible": true,
+        "errorName": "EmbeddingProviderTimeoutError",
+        "message": "Hugging Face request timed out"
+      },
+      {
+        "name": "embedding_500",
+        "eligible": true,
+        "errorName": "EmbeddingProviderHttpError",
+        "message": "Hugging Face request failed with status 500: provider down"
+      },
+      {
+        "name": "invalid_embedding_shape",
+        "eligible": false,
+        "errorName": "OrchestratorError",
+        "message": "Invalid query embedding dimension"
+      },
+      {
+        "name": "missing_secret",
+        "eligible": false,
+        "errorName": "OrchestratorError",
+        "message": "HF_LLM_API_TOKEN is not configured"
+      },
+      {
+        "name": "system_bug",
+        "eligible": false,
+        "errorName": "Error",
+        "message": "Unexpected bug"
+      }
+    ]
+  }
+}
