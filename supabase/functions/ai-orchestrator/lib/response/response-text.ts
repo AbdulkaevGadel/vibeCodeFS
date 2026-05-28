@@ -3,7 +3,7 @@ import { callRest } from "../rest.ts"
 
 export async function formatAnswerText(chatId: string, answerText: string, triggerMessageText: string) {
   const isFirstAiMessage = await isFirstAiMessageInChat(chatId)
-  const finalAnswerText = addGreetingAcknowledgementIfNeeded(answerText, triggerMessageText)
+  const finalAnswerText = normalizeGreetingAcknowledgement(answerText, triggerMessageText, isFirstAiMessage)
 
   return formatAiPrefixedText(finalAnswerText, isFirstAiMessage)
 }
@@ -30,14 +30,28 @@ function formatAiPrefixedText(text: string, isFirstAiMessage: boolean) {
   return `${prefix}\n${text}`
 }
 
-function addGreetingAcknowledgementIfNeeded(answerText: string, triggerMessageText: string) {
+function normalizeGreetingAcknowledgement(answerText: string, triggerMessageText: string, isFirstAiMessage: boolean) {
+  if (!isFirstAiMessage) {
+    return stripLeadingGreetingSentence(answerText)
+  }
+
   if (!stripGreetingPrefix(triggerMessageText)) {
     return answerText
   }
 
-  if (/^\s*(здравствуйте|добрый день|доброе утро|добрый вечер)\b/iu.test(answerText)) {
+  if (startsWithGreeting(answerText)) {
     return answerText
   }
 
   return `Здравствуйте. ${answerText}`
+}
+
+function startsWithGreeting(text: string) {
+  return /^\s*(здравствуйте|здравствуй|добрый день|доброе утро|добрый вечер)(?:[\s,!.:;?-]|$)/iu.test(text)
+}
+
+function stripLeadingGreetingSentence(text: string) {
+  return text
+    .replace(/^\s*(здравствуйте|здравствуй|добрый день|доброе утро|добрый вечер)[\s,!.:;?-]*/iu, "")
+    .trim()
 }

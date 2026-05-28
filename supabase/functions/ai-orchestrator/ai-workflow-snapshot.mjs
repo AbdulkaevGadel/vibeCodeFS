@@ -58,6 +58,57 @@ const kbFragments = [
     truncated: false,
   },
 ]
+const refundTriggerMessage = {
+  id: "msg-current-refund",
+  chat_id: "chat-2",
+  text: "Я хочу вернуть деньги!",
+  sender_type: "client",
+  created_at: "2026-05-28T19:55:19.000Z",
+}
+const refundHistoryMessages = [
+  {
+    id: "msg-history-password-client",
+    chat_id: "chat-2",
+    text: "Привет, я забыл пароль",
+    sender_type: "client",
+    created_at: "2026-05-28T19:54:18.000Z",
+  },
+  {
+    id: "msg-history-password-ai",
+    chat_id: "chat-2",
+    text: "Попробуйте восстановить пароль через кнопку «Забыли пароль» на странице входа.",
+    sender_type: "ai",
+    created_at: "2026-05-28T19:54:28.000Z",
+  },
+]
+const refundKbFragments = [
+  {
+    chunk_id: "refund-chunk-0",
+    article_id: "refund-article",
+    chunk_set_id: "refund-set",
+    chunk_index: 0,
+    similarity_score: 0.55,
+    article_title: "Клиент требует возврат средств",
+    article_slug: "refund-request",
+    content_checksum: "refund-checksum",
+    ingestion_pipeline_version: "kb_ingestion_v4",
+    text: "Статья: Клиент требует возврат средств\nРаздел: Когда использовать\nФразы клиента:\n- хочу вернуть деньги\n- сделайте возврат\nКлючевые слова: деньги, возврат",
+    truncated: false,
+  },
+  {
+    chunk_id: "refund-chunk-11",
+    article_id: "refund-article",
+    chunk_set_id: "refund-set",
+    chunk_index: 11,
+    similarity_score: 0.55,
+    article_title: "Клиент требует возврат средств",
+    article_slug: "refund-request",
+    content_checksum: "refund-checksum",
+    ingestion_pipeline_version: "kb_ingestion_v4",
+    text: "Статья: Клиент требует возврат средств\nРаздел: Рекомендуемый ответ клиенту\nЗдравствуйте!\nПонимаем вашу ситуацию и хотим помочь разобраться.\nПожалуйста, уточните:\nпо какой причине вы хотите оформить возврат;\nчто именно вас не устроило;\nemail или номер заказа, связанный с оплатой.\nПосле проверки информации мы вернёмся к вам с решением.",
+    truncated: false,
+  },
+]
 const retrievalResult = {
   retrieval_status: "hit",
   top_similarity_score: 0.82,
@@ -71,6 +122,25 @@ const retrievalResult = {
     },
   ],
 }
+const refundRetrievalResult = {
+  retrieval_status: "hit",
+  top_similarity_score: 0.55,
+  matched_chunks_count: 2,
+  chunks: [
+    {
+      chunk_id: "refund-chunk-0",
+      article_id: "refund-article",
+      chunk_index: 0,
+      similarity_score: 0.55,
+    },
+    {
+      chunk_id: "refund-chunk-11",
+      article_id: "refund-article",
+      chunk_index: 11,
+      similarity_score: 0.55,
+    },
+  ],
+}
 
 const contextSnapshot = helpers.buildContextSnapshot(
   triggerMessage,
@@ -79,6 +149,13 @@ const contextSnapshot = helpers.buildContextSnapshot(
   retrievalResult,
 )
 const promptSnapshot = helpers.buildPromptSnapshot(contextSnapshot)
+const refundContextSnapshot = helpers.buildContextSnapshot(
+  refundTriggerMessage,
+  refundHistoryMessages,
+  refundKbFragments,
+  refundRetrievalResult,
+)
+const refundPromptSnapshot = helpers.buildPromptSnapshot(refundContextSnapshot)
 
 const report = {
   label: snapshotLabel,
@@ -104,8 +181,41 @@ const report = {
       text,
       result: helpers.getRetrievalQueryText(text),
     })),
+    greetingNormalization: [
+      {
+        name: "first_message_with_existing_greeting",
+        result: helpers.normalizeGreetingAcknowledgement(
+          "Здравствуйте! Мы понимаем, что возникли проблемы со входом.",
+          "Привет, я забыл пароль",
+          true,
+        ),
+      },
+      {
+        name: "follow_up_strips_template_greeting",
+        result: helpers.normalizeGreetingAcknowledgement(
+          "Здравствуйте! Понимаем вашу ситуацию и хотим помочь разобраться.",
+          "сделайте возврат",
+          false,
+        ),
+      },
+    ],
     contextSnapshot,
     promptSnapshot,
+    refundThemeSwitch: {
+      contextSnapshot: refundContextSnapshot,
+      promptSnapshot: refundPromptSnapshot,
+      promptChecks: {
+        currentMessageIsPrimary: promptSnapshotContains(
+          refundPromptSnapshot,
+          "Current client message is the primary task.",
+        ),
+        historyCannotReplaceTopic: promptSnapshotContains(
+          refundPromptSnapshot,
+          "Use recent history only to understand context, never to replace the current topic.",
+        ),
+        refundAnswerFragmentIncluded: promptSnapshotContains(refundPromptSnapshot, "Рекомендуемый ответ клиенту"),
+      },
+    },
     llmJsonParsing: [
       '{"kind":"answer","answer_text":"Проверьте данные карты."}',
       '{"kind":"insufficient","answer_text":""}',
@@ -153,6 +263,7 @@ function readAiWorkflowSource() {
     "response/llm-contract.ts",
     "response/llm-provider.ts",
     "response/llm.ts",
+    "response/response-text.ts",
   ]
     .map((fileName) => path.join(libDir, fileName))
     .filter((filePath) => fs.existsSync(filePath))
@@ -228,6 +339,7 @@ function loadAiWorkflowHelpers(source) {
     "buildContextSnapshot",
     "buildPromptSnapshot",
     "parseLlmJson",
+    "normalizeGreetingAcknowledgement",
     "isTemporaryExternalFailure",
     "RetrievalStageTimeoutError",
     "ProviderTimeoutError",
@@ -247,7 +359,7 @@ function loadAiWorkflowHelpers(source) {
 function prelude() {
   return `
 const config = {
-  promptVersion: "phase-9-context-prompt-v1",
+  promptVersion: "phase-9-context-prompt-v2",
   retrieval: {
     matchThreshold: 0.60,
     matchCount: 5,
@@ -259,7 +371,7 @@ const config = {
   },
   context: {
     enabled: true,
-    builderVersion: "context-builder-v1",
+    builderVersion: "context-builder-v2",
     maxHistoryMessages: 8,
     maxClientHistoryMessages: 4,
     maxAiHistoryMessages: 4,
@@ -282,6 +394,10 @@ const config = {
 `
 }
 
+function promptSnapshotContains(promptSnapshot, text) {
+  return promptSnapshot.messages.some((message) => message.content.includes(text))
+}
+
 function helperExports() {
   return `
 globalThis.__aiWorkflowHelpers = {
@@ -290,6 +406,7 @@ globalThis.__aiWorkflowHelpers = {
   buildContextSnapshot,
   buildPromptSnapshot,
   parseLlmJson,
+  normalizeGreetingAcknowledgement,
   isTemporaryExternalFailure,
   RetrievalStageTimeoutError,
   ProviderTimeoutError,

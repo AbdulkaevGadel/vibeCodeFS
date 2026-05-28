@@ -280,6 +280,32 @@ Edge Function boundary, validation, logging, and Telegram HTTP response rules li
 
 ---
 
+## 15.1 AI/RAG Rules
+
+For AI/RAG behavior, do not hardcode business intents, synonyms, article-specific phrases, or user wording patches in Edge Function code.
+
+Forbidden:
+- mapping phrases like `не нравится сервис` to `хочу вернуть деньги` in TypeScript;
+- adding one-off synonym expansion inside retrieval query builders;
+- creating hidden intent routers in utility functions;
+- fixing KB coverage gaps by encoding business meaning in code.
+
+Reason:
+- business wording belongs in Knowledge Base content, ingestion, retrieval strategy, or explicit approved configuration;
+- phrase hardcodes do not scale and will miss the next similar wording;
+- hidden mappings make AI behavior difficult to audit and teach incorrectly;
+- retrieval code must stay domain-generic unless an explicit task approves a stable, configurable retrieval feature.
+
+Allowed:
+- generic text normalization, such as trimming, greeting removal, punctuation cleanup, or safe length limits;
+- generic follow-up context strategy when it is not tied to one business scenario;
+- prompt instructions that describe stable AI behavior, such as current-message priority over history;
+- Knowledge Base updates or ingestion improvements that make synonyms searchable through content rather than code.
+
+If a phrase-level issue appears, first check whether the Knowledge Base article, chunking, ingestion metadata, or retrieval strategy should be improved. Do not patch it with a hardcoded phrase map.
+
+---
+
 ## 16. Next.js Rules
 
 ### Rendering
