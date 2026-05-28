@@ -2,26 +2,11 @@ import { createSupabaseServerClient } from "@/shared/api/supabase/server-client"
 import {
   type SupportChatBotOption,
   emptySupportChatInboxPageInfo,
-  supportChatInboxPageLimit,
   type SupportChatInboxPageInfo,
   type SupportChatSummary,
-  mapSupportChatBotStats,
-  mapSupportChatInboxPage,
-  mapSupportChatInboxSummary,
-  type BotStatsRow,
-  type InboxSummaryRow,
 } from "@/entities/support-chat";
-import {
-  mapChatMessage,
-  sortMessagesByCreatedAt,
-  type ChatMessage,
-  type ChatMessageRow,
-} from "@/entities/chat-message";
-import {
-  mapManagerRow,
-  type Manager,
-  type ManagerRow,
-} from "@/entities/manager";
+import type { ChatMessage } from "@/entities/chat-message";
+import type { Manager } from "@/entities/manager";
 import { getCurrentManager } from "@/entities/manager/api/current-manager";
 import { FlashStatus } from "./flash-cookie";
 import {
@@ -32,18 +17,12 @@ import {
   getSingleValue,
   getStatusMessage,
 } from "./page-utils";
-
-function getStatusVariant(status?: FlashStatus) {
-  if (status === "delete-error") {
-    return "error";
-  }
-
-  if (status === "message-deleted" || status === "chat-deleted") {
-    return "success";
-  }
-
-  return null;
-}
+import { loadSupportInboxBotStats } from "./support-inbox-data/bot-stats";
+import { loadSupportInboxPage } from "./support-inbox-data/inbox-page";
+import { loadSupportInboxManagers } from "./support-inbox-data/managers";
+import { loadSelectedSupportChat } from "./support-inbox-data/selected-chat";
+import { loadSelectedSupportChatMessages } from "./support-inbox-data/selected-chat-messages";
+import { getSupportInboxStatusVariant } from "./support-inbox-data/status";
 
 function formatErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -82,104 +61,37 @@ export async function getSupportAdminPageData(
       errorMessage = `Ошибка авторизации: ${formatErrorMessage(error)}`;
     }
 
-    const { data: managersAllData, error: managersAllError } = await supabase
-      .from("managers")
-      .select("id, email, display_name, last_name, role")
-      .order("display_name");
+    allManagers = await loadSupportInboxManagers(supabase);
 
-    if (managersAllError) {
-      console.error("Fetch managers error:", managersAllError);
-    } else {
-      allManagers = ((managersAllData ?? []) as ManagerRow[]).map(mapManagerRow);
-    }
-
-    const { data: botStatsData, error: botStatsError } = await supabase
-      .from("support_admin_bot_stats")
-      .select("bot_username, chat_count, message_count")
-      .order("bot_username");
-
-    if (botStatsError) {
-      console.error("Fetch support admin bot stats error:", botStatsError);
-      errorMessage = errorMessage ?? "Не удалось загрузить статистику inbox.";
-    } else {
-      const botStats = mapSupportChatBotStats((botStatsData ?? []) as BotStatsRow[]);
-      botOptions = botStats.map((stat) => stat.option);
-      selectedBot =
-        botOptions.find((bot) => bot.key === selectedBotParam) ?? botOptions[0] ?? null;
-
-      const selectedBotKey = selectedBot?.key ?? null;
-      const selectedBotStats = selectedBotKey
-        ? botStats.find((stat) => stat.option.key === selectedBotKey) ?? null
-        : null;
-      botFilteredChatCount = selectedBotStats?.chatCount ?? 0;
-      botFilteredMessageCount = selectedBotStats?.messageCount ?? 0;
-    }
+    const botStats = await loadSupportInboxBotStats(supabase, selectedBotParam);
+    botOptions = botStats.botOptions;
+    selectedBot = botStats.selectedBot;
+    botFilteredChatCount = botStats.botFilteredChatCount;
+    botFilteredMessageCount = botStats.botFilteredMessageCount;
+    errorMessage = errorMessage ?? botStats.errorMessage;
 
     if (!errorMessage) {
-      const { data: inboxPageData, error: inboxPageError } = await supabase.rpc(
-        "get_support_admin_chat_inbox_page",
-        {
-          p_limit: supportChatInboxPageLimit,
-          p_cursor_last_message_at: null,
-          p_cursor_created_at: null,
-          p_cursor_chat_id: null,
-          p_bot_username: selectedBot?.value ?? null,
-        },
-      );
-
-      if (inboxPageError) {
-        console.error("Fetch support admin inbox page error:", inboxPageError);
-        errorMessage = "Не удалось загрузить inbox из read model.";
-      } else {
-        const inboxPage = mapSupportChatInboxPage(inboxPageData);
-        chatSummaries = inboxPage.rows;
-        chatInboxPageInfo = inboxPage.pageInfo;
-      }
+      const inboxPage = await loadSupportInboxPage(supabase, selectedBot);
+      chatSummaries = inboxPage.chatSummaries;
+      chatInboxPageInfo = inboxPage.chatInboxPageInfo;
+      errorMessage = inboxPage.errorMessage;
     }
 
     if (selectedChatParam && !errorMessage) {
-      selectedChat = chatSummaries.find((chat) => chat.id === selectedChatParam) ?? null;
-
-      if (!selectedChat) {
-        let selectedChatQuery = supabase
-          .from("support_admin_chat_inbox_summary")
-          .select("*")
-          .eq("id", selectedChatParam)
-          .limit(1);
-
-        if (selectedBot?.value) {
-          selectedChatQuery = selectedChatQuery.eq("bot_username", selectedBot.value);
-        }
-
-        const { data: selectedChatData, error: selectedChatError } = await selectedChatQuery;
-
-        if (selectedChatError) {
-          console.error("Fetch selected chat summary error:", selectedChatError);
-          errorMessage = "Не удалось загрузить выбранный чат.";
-        } else {
-          const row = (selectedChatData ?? [])[0] as InboxSummaryRow | undefined;
-          selectedChat = row ? mapSupportChatInboxSummary(row) : null;
-        }
-      }
+      const selectedChatResult = await loadSelectedSupportChat(
+        supabase,
+        chatSummaries,
+        selectedChatParam,
+        selectedBot,
+      );
+      selectedChat = selectedChatResult.selectedChat;
+      errorMessage = selectedChatResult.errorMessage;
     }
 
     if (selectedChat && !errorMessage) {
-      const { data: chatMessagesData, error: chatMessagesError } = await supabase
-        .from("chat_messages")
-        .select(
-          "id, chat_id, sender_type, manager_id, text, delivery_status, delivery_error, client_message_id, legacy_message_id, created_at",
-        )
-        .eq("chat_id", selectedChat.id)
-        .order("created_at", { ascending: true });
-
-      if (chatMessagesError) {
-        console.error("Fetch selected chat messages error:", chatMessagesError);
-        errorMessage = "Не удалось загрузить сообщения выбранного чата.";
-      } else {
-        selectedChatMessages = sortMessagesByCreatedAt(
-          ((chatMessagesData ?? []) as ChatMessageRow[]).map(mapChatMessage),
-        );
-      }
+      const messagesResult = await loadSelectedSupportChatMessages(supabase, selectedChat.id);
+      selectedChatMessages = messagesResult.selectedChatMessages;
+      errorMessage = messagesResult.errorMessage;
     }
   } catch (error) {
     errorMessage = "Ошибка при загрузке данных.";
@@ -199,7 +111,7 @@ export async function getSupportAdminPageData(
     allManagers,
     currentManager,
     statusMessage: getStatusMessage(flashStatus),
-    statusVariant: getStatusVariant(flashStatus),
+    statusVariant: getSupportInboxStatusVariant(flashStatus),
     errorMessage,
     headerBotLabel: selectedBot?.label || "Нет данных по ботам",
   };

@@ -10,7 +10,7 @@ type StatusAlertProps = {
 
 export function StatusAlert({ message, variant }: StatusAlertProps) {
   useEffect(() => {
-    void fetch("/api/flash", {
+    void fetch("/api/support-admin-flash", {
       method: "DELETE",
       cache: "no-store",
     });
