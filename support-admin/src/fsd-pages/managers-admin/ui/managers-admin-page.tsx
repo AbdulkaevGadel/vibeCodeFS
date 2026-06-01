@@ -44,6 +44,7 @@ export function ManagersAdminPage({
         ) : (
           <ManagersAdminPanel
             managers={managers}
+            currentManager={currentManager}
             actions={actions}
           />
         )}

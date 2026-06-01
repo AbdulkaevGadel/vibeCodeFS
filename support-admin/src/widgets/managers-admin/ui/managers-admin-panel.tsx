@@ -2,13 +2,14 @@
 
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { isManagerRole, type Manager } from "@/entities/manager";
 import type {
   ManagerAccountRecovery,
   ManageManagersActionResult,
 } from "@/features/manage-managers/model";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { useToastState } from "@/shared/ui/toast";
 import type { ManagersAdminPanelProps } from "../model";
+import { useManagerUpdateFlow } from "../model/use-manager-update-flow";
 import { CreateManagerAccountForm } from "./create-manager-account-form";
 import { EditManagerDialog } from "./edit-manager-dialog";
 import { ManagerAdminMessages } from "./manager-admin-messages";
@@ -17,18 +18,13 @@ import { ManagersTable } from "./managers-table";
 
 const panelClassName = "mt-6 grid gap-4";
 
-function readManagerRoleFromForm(formData: FormData) {
-  const role = formData.get("role")?.toString();
-  return isManagerRole(role) ? role : "support";
-}
-
 export function ManagersAdminPanel({
   managers,
+  currentManager,
   actions,
 }: ManagersAdminPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [editingManager, setEditingManager] = useState<Manager | null>(null);
   const [recovery, setRecovery] = useState<ManagerAccountRecovery | null>(null);
   const {
     toast,
@@ -40,7 +36,10 @@ export function ManagersAdminPanel({
   const runAction = (
     action: () => Promise<ManageManagersActionResult>,
     successMessage: string,
-    onSuccess?: () => void,
+    options?: {
+      onSuccess?: () => void;
+      onFailure?: () => void;
+    },
   ) => {
     clearToast();
 
@@ -50,15 +49,22 @@ export function ManagersAdminPanel({
       setRecovery(result.recovery);
 
       if (!result.success) {
+        options?.onFailure?.();
         showToast(result.error ?? "Операция не выполнена.", "error");
         return;
       }
 
       showToast(successMessage, "success");
-      onSuccess?.();
+      options?.onSuccess?.();
       router.refresh();
     });
   };
+
+  const managerUpdateFlow = useManagerUpdateFlow({
+    currentManager,
+    updateManager: actions.updateManager,
+    runAction,
+  });
 
   const handleCreateManagerAccount = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -74,7 +80,7 @@ export function ManagersAdminPanel({
           lastName: formData.get("lastName")?.toString() ?? "",
         }),
       "Менеджер создан с ролью support.",
-      () => form.reset(),
+      { onSuccess: () => form.reset() },
     );
   };
 
@@ -90,29 +96,7 @@ export function ManagersAdminPanel({
           email: recovery.email,
         }),
       "Незавершённый Auth account удалён.",
-      () => setRecovery(null),
-    );
-  };
-
-  const handleUpdateManager = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!editingManager) {
-      return;
-    }
-
-    const formData = new FormData(event.currentTarget);
-    const role = readManagerRoleFromForm(formData);
-
-    runAction(
-      () =>
-        actions.updateManager({
-          managerId: editingManager.id,
-          displayName: formData.get("displayName")?.toString() ?? "",
-          lastName: formData.get("lastName")?.toString() ?? "",
-          role,
-        }),
-      "Менеджер обновлён.",
-      () => setEditingManager(null),
+      { onSuccess: () => setRecovery(null) },
     );
   };
 
@@ -133,13 +117,23 @@ export function ManagersAdminPanel({
       />
       <ManagersTable
         managers={managers}
-        onEdit={setEditingManager}
+        onEdit={managerUpdateFlow.openEditDialog}
       />
       <EditManagerDialog
-        manager={editingManager}
+        manager={managerUpdateFlow.editingManager}
         isPending={isPending}
-        onClose={() => setEditingManager(null)}
-        onSubmit={handleUpdateManager}
+        onClose={managerUpdateFlow.closeEditDialog}
+        onSubmit={managerUpdateFlow.requestManagerUpdate}
+      />
+      <ConfirmDialog
+        isOpen={managerUpdateFlow.isOwnRoleChangeConfirmOpen}
+        title="Подтвердите смену своей роли"
+        description={managerUpdateFlow.pendingOwnRoleChangeDescription}
+        confirmLabel="Сменить роль"
+        cancelLabel="Отменить"
+        isPending={isPending}
+        onCancel={managerUpdateFlow.cancelOwnRoleChange}
+        onConfirm={managerUpdateFlow.confirmOwnRoleChange}
       />
     </div>
   );

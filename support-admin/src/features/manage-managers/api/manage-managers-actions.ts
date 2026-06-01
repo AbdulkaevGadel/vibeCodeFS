@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isManagerRole, type ManagerRole } from "@/entities/manager";
 import { createSupabaseAdminClient } from "@/shared/api/supabase/admin-client";
+import { createSupabaseServerClient } from "@/shared/api/supabase/server-client";
 import {
   createErrorResult,
   createRecoveryResult,
@@ -72,16 +73,17 @@ export async function createManagerAccountAction(
       return createErrorResult(getCreateAuthUserErrorMessage(authError));
     }
 
-    const { error: insertError } = await supabaseAdmin.from("managers").insert({
-      auth_user_id: createdUser.id,
-      email,
-      display_name: displayName,
-      last_name: lastName,
-      role: "support",
+    const supabase = await createSupabaseServerClient();
+    const { error: createManagerError } = await supabase.rpc("create_manager_account_row_v1", {
+      p_auth_user_id: createdUser.id,
+      p_email: email,
+      p_display_name: displayName,
+      p_last_name: lastName,
+      p_role: "support",
     });
 
-    if (insertError) {
-      console.error("Failed to create manager row after auth user creation:", insertError);
+    if (createManagerError) {
+      console.error("Failed to create manager row after auth user creation:", createManagerError);
 
       const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(createdUser.id);
       if (!rollbackError) {
@@ -124,22 +126,24 @@ export async function deleteUnlinkedAuthUserAction(
   try {
     await requireCurrentAdmin();
 
-    const supabaseAdmin = createSupabaseAdminClient();
-    const { data: linkedManager, error: linkedManagerError } = await supabaseAdmin
-      .from("managers")
-      .select("id")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
+    const supabase = await createSupabaseServerClient();
+    const { data: linkedManagerExists, error: linkedManagerError } = await supabase.rpc(
+      "manager_auth_user_link_exists_v1",
+      {
+        p_auth_user_id: authUserId,
+      },
+    );
 
     if (linkedManagerError) {
       console.error("Failed to verify unlinked auth user before recovery delete:", linkedManagerError);
       return createErrorResult("Не удалось проверить связь Auth user и managers.");
     }
 
-    if (linkedManager) {
+    if (linkedManagerExists) {
       return createErrorResult("Auth user уже связан с менеджером. Recovery delete запрещён.");
     }
 
+    const supabaseAdmin = createSupabaseAdminClient();
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
     if (deleteError) {
       console.error("Failed to delete unlinked auth user during recovery:", deleteError);
@@ -179,16 +183,13 @@ export async function updateManagerAction(input: UpdateManagerInput): Promise<Ma
   try {
     await requireCurrentAdmin();
 
-    const supabaseAdmin = createSupabaseAdminClient();
-    const { error } = await supabaseAdmin
-      .from("managers")
-      .update({
-        display_name: displayName,
-        last_name: lastName,
-        role,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", managerId);
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.rpc("update_manager_profile_v1", {
+      p_manager_id: managerId,
+      p_display_name: displayName,
+      p_last_name: lastName,
+      p_role: role,
+    });
 
     if (error) {
       console.error("Failed to update manager:", error);
