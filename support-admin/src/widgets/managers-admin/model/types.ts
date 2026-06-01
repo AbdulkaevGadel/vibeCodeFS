@@ -24,5 +24,6 @@ export type ManagersAdminActions = {
 
 export type ManagersAdminPanelProps = {
   managers: Manager[];
+  currentManager: Manager | null;
   actions: ManagersAdminActions;
 };
